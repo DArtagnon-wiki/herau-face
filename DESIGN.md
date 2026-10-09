@@ -43,31 +43,31 @@ A roguelike deckbuilder in the spirit of Balatro: each term you compose a sigil 
 | Commission | One encounter: a source material (the opponent) to transmute into a target material (the puzzle). Balatro's blind. |
 | Action pool | A source's weighted set of moves; one is rolled and revealed each term. |
 | Flare | A burst of instability from the commission. Ward absorbs part; the rest costs quintessence. |
-| Ward | A sigil's defensive output, from entwines and guard motes. |
+| Ward | A sigil's defensive output, from entwines and guard motes. Ward from every sigil in a term adds up. |
 | Quintessence | The run's life, spent only to stabilize. The run ends when it runs out. |
 | Byproduct | A split lump tethered to the main amalgam; it vanishes when the main amalgam is done. |
 | Required lump | A split lump that must reach a stable state before the commission can finish. |
 | Stable state | Any named substance, such as clay or dross. A lump that reaches one is settled. |
-| Term | One cycle: the commission reveals its action, the player composes and casts a sigil, then the commission acts. |
+| Term | One cycle: the commission reveals its action, the player casts as many sigils as the hand allows, then ends the term and the commission acts. |
 | Currency (name open) | What the workshop takes; earned from commissions in proportion to product made. |
 | Reach, Force, Vector, Ward | A sigil's four outputs: kg it can affect, inertia it can overcome, the from→to change, and defence. |
 | Apparatus (proposed) | Passive run modifiers in limited slots, such as an athanor or alembic. Balatro's jokers. |
 
 ## Core loop
 
-A run is a chain of commissions. Each commission repeats terms until it is done, and every term the commission acts against you.
+A run is a chain of commissions. Each commission repeats terms until it is done. Within a term the player casts as many sigils as the hand allows, and the commission acts only when the term ends.
 
 1. The commission rolls an action from its pool and reveals it.
-2. Draw up to hand size (prototype: 7 runes).
+2. Draw up to hand size (prototype: 6 runes).
 3. Compose a sigil: an anchor plus joined runes, up to the anchor's links. Or spend a discard to redraw.
-4. Read the preview: the sigil's Reach, Force, Vector and Ward against the selected pool.
-5. Cast. The amalgam changes, mote and apparatus effects trigger, and the sigil stays on the table.
-6. The commission acts. Ward absorbs part of any flare and the rest is paid in quintessence; disruptions hit the table.
-7. Played runes go to the discard pile; unplayed ones stay in hand.
+4. Read the preview: the sigil's Reach, Force, Vector and Ward against the selected pool, and what ending the term after it would cost.
+5. Cast. The sigil resolves at once: the amalgam changes, mote and apparatus effects trigger, its Ward adds to the term's, and it stays on the table. If the amalgam now meets the target, the commission is done.
+6. Compose and cast again while runes remain, or end the term.
+7. End the term. The commission acts: the term's Ward absorbs part of any flare and the rest is paid in quintessence; disruptions hit the table. Unplayed runes stay in hand; played runes go to the discard pile.
 
-A commission is done when the main amalgam is in band and every required lump is stable. Rewards scale with the product made, so overkill pays and a poor commission still makes progress. Between commissions the player attaches motes, takes new runes and spends currency at the workshop.
+A commission is done when the main amalgam meets the target and every required lump is stable. Rewards scale with the product made, so overkill pays and a poor commission still makes progress. Between commissions the player attaches motes, takes new runes and spends currency at the workshop.
 
-![Commission loop: reveal and draw, compose, cast, the commission acts, then repeat until done](docs/diagrams/commission-loop.svg)
+![Commission loop: reveal and draw, compose and cast as many sigils as the hand allows, then end the term and mud acts](docs/diagrams/commission-loop.svg)
 
 Running out of quintessence ends the run.
 
@@ -171,12 +171,16 @@ Runes improve by changing what their bowls hold; the deck grows by earning new r
 
 ## Challenge system: transmutation
 
-Each commission is an amalgam to bring to a target constitution. Difficulty comes from how much there is (weight) and how hard each pool is to change (grade). Mud, the first example:
+Each commission is an amalgam to bring to a target constitution. Difficulty comes from how much there is (weight), how hard each pool is to change (grade), and how many elementals must be steered at once. Mud, as prototyped:
 
-| Pool | Weight | Grade |
-| --- | --- | --- |
-| Earth | 5 kg | Medium |
-| Water | 5 kg | Weak |
+| Pool | Weight | Grade | Share |
+| --- | --- | --- | --- |
+| Earth | 18 kg | Medium | 45% |
+| Water | 18 kg | Weak | 45% |
+| Air | 2 kg | Medium | 5% |
+| Fire | 2 kg | Medium | 5% |
+
+**Traces matter.** Real mud holds organics, and where there are organics there is air and fire. With two-element mud, air and fire runes had nothing to do but defend. Traces give every element a job, and they must be steered into narrow bands, not simply removed. At medium grade, one basic circle sigil removes about 1 kg and lands inside the band; a careless second one wipes the trace out. In simulation, traces add about one hand size of difficulty, and air and fire runes are played nearly as often as water and earth.
 
 Change-inertia splits in two: the from→to pair sets yield, and the source pool's grade sets resistance.
 
@@ -186,7 +190,7 @@ Change-inertia splits in two: the from→to pair sets yield, and the source pool
 
 The clay holds two earth pools: the original medium earth and the weak earth made from water, which shows as the step in its edge.
 
-**Targets are proportions plus quantity.** Clay is about 75–85% earth by mass, any grade; steel needs heavy earth. Final quantity matters: more product earns a bigger reward.
+**Targets are proportions plus quantity.** Clay is 75–85% earth, with air and fire each strictly between 1% and 3%, any grade; steel needs heavy earth. Off-spec amalgams take their own names: organic clay when the traces run high, lean clay when they run out. Final quantity matters: more product earns a bigger reward.
 
 **Resistance from the elemental square (proposed).** Classical theory gives each elemental two qualities: Earth is cold and dry, Water cold and wet, Air hot and wet, Fire hot and dry. Flipping one quality is a 1-step change and flipping both is a 2-step change, so water to air is easier than earth to air.
 
@@ -232,12 +236,13 @@ R is the sigil's Reach and F its Force. W is the selected pool's weight in kg an
 
 ## Instability and quintessence
 
-The commission's flares are the main threat. Ward from the sigil absorbs part of each flare and the rest is paid in quintessence; when quintessence runs out, the run is over.
+The commission's flares are the main threat. Ward from the term's sigils absorbs part of each flare and the rest is paid in quintessence; when quintessence runs out, the run is over.
 
 - **Large flares, partial coverage.** Flares should be big enough that Ward rarely covers all of one, so splitting power between progress and defence is a decision nearly every term.
+- **Split the hand.** Several sigils a term let the player divide the hand between progress and defence. A careful player casts about two a term.
 - **Quintessence does one job.** It is spent only to stabilize, so it never competes with upgrades.
-- **Defending has a hidden cost.** A heavily warded sigil moves less material, so the commission takes more terms and faces more actions.
-- **Finer units (proposed).** A stock of about 100, with early flares around 5–10, gives partial coverage room to matter.
+- **Defending has a hidden cost.** A rune spent on Ward moves no material, so the commission takes more terms and faces more actions.
+- **Units.** A stock of 100, with flares of 11–15 rising by 1 a term in the prototype, gives partial coverage room to matter.
 - **Overshoot costs quintessence.** A corrective term faces the commission's next action like any other.
 
 | Situation | Target quintessence cost |
@@ -245,6 +250,8 @@ The commission's flares are the main threat. Ward from the sigil absorbs part of
 | Early commission, starting deck | A little most of the time; rarely nothing or a moderate amount; a lot only with very poor play |
 | Early commission, a few upgrades | Rarely anything |
 | Boss, inadequate deck | Half to three quarters of the stock |
+
+In the prototype, with a 6-rune hand, a careful simulated player usually pays a little against mud (median 5), about one commission in five costs nothing, and one in eight costs more than 15. A player who never defends pays a median of 30. A 5-rune hand proved too punishing once mud held traces: a median of 16, with 7% of commissions lost.
 
 A partial refill after each boss (proposed) keeps a weak deck's slide from feeling like a slow death sentence.
 
@@ -279,7 +286,7 @@ For example, flax might mix unravel, rot and tangle, while mud mixes seep, split
 
 ## Worked example: mud to clay
 
-Two terms of a Water anchor circumscribed by Earth turn mud into 8.6 kg of clay. Clay here is a placeholder target: 75–85% earth by mass, any grade.
+Two terms of a Water anchor circumscribed by Earth bring two-element mud into the earth band. The example predates mud's traces and the prototype's power-5 runes, so it shows only the earth step and the formula at work.
 
 Water to Earth flips wet to dry (1 step), so required Force is 10 × 0.5 (weak water) = 5. The example assumes a Water→Earth yield of 0.6; the new earth arrives as a weak pool beside the medium one.
 
@@ -299,7 +306,7 @@ A run climbs material tiers, each ending in a stubborn boss substance, toward th
 
 | Tier | Example commissions | New pressure |
 | --- | --- | --- |
-| 1. Earthen | Mud to clay; sand to glass | Two elementals; weak and medium grades |
+| 1. Earthen | Mud to clay; sand to glass | Earth and water, with traces of air and fire held in narrow bands |
 | 2. Mineral | Brine to salt; ore to metal | Three elementals; heavy grades |
 | 3. Noble | Tin to silver | Four elementals; narrow bands |
 | 4. Great Work | Lead to gold | Inert grades throughout |
@@ -335,10 +342,12 @@ Circumgician is built on Pixi.js, TypeScript and Vite, and most of its look is g
 | --- | --- |
 | Which measure of table balance: runes, elemental motes, or sides? | The prototype tracks all three; strain counts runes for now |
 | How do symmetry classes map onto bodies and motes? | Open |
+| How many sigils a term, and how big a hand? | Prototype: as many as a 6-rune hand allows; a 5-rune hand was too punishing against mud with traces |
+| What grade are trace elementals? | Prototype: medium, so one basic sigil removes about 1 kg and lands in band |
 | Do links on joined runes ever count? | No, only the anchor's, so starting sigils stay at two or three runes |
 | Floating sigils, the table, or both? | Both: each sigil takes effect, then stays on the table |
 | Should table imbalance itself cause instability? | Yes, on top of the flares a commission rolls |
-| How big are the quintessence stock and flares? | Prototype: a stock of 100, flares of 10–14 |
+| How big are the quintessence stock and flares? | Prototype: a stock of 100, flares of 11–15 |
 | How is quintessence restored? | A partial refill after each boss; small refills from efficient commissions |
 | How does product convert to reward? | Currency in proportion to product made |
 | Are non-target stable states worth anything? | Tracked, not rewarded, in the first cut; decide from playtest data |
