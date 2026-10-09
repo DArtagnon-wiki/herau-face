@@ -1,38 +1,85 @@
-import { elementalKg, normalize, share, transfer } from './alchemy'
+import { ELEMENTALS, elementalKg, normalize, share, transfer } from './alchemy'
 import type { Rng } from './rng'
 import { slumpTarget, type TableEntry } from './table'
-import type { Pool } from './types'
+import type { Elemental, Pool } from './types'
 
 // One commission: mud (the source, the opponent) into clay (the target, the puzzle).
 
+/** Mud: earth and water, with a little air and fire from its organics. */
 export const MUD_START: Pool[] = normalize([
   { elemental: 'earth', grade: 1, kg: 18 },
   { elemental: 'water', grade: 0, kg: 18 },
+  { elemental: 'air', grade: 1, kg: 2 },
+  { elemental: 'fire', grade: 1, kg: 2 },
 ])
 
-/** Clay: 75–85% earth by mass, any grade. */
-export const CLAY_BAND: [number, number] = [0.75, 0.85]
-
-/** Named regions along the earth share. Clay is the target. */
-const REGIONS: { below: number; name: string }[] = [
-  { below: 0.35, name: 'Slurry' },
-  { below: 0.65, name: 'Mud' },
-  { below: CLAY_BAND[0], name: 'Loam' },
-  { below: CLAY_BAND[1], name: 'Clay' },
-  { below: Infinity, name: 'Hardpan' },
-]
-
-const EPS = 1e-9
-export const earthShare = (pools: Pool[]) => share(pools, 'earth')
-export const inBand = (pools: Pool[]) => {
-  const s = earthShare(pools)
-  return s >= CLAY_BAND[0] - EPS && s <= CLAY_BAND[1] + EPS
+/** A share band, as fractions. A min of 0 or a max of 1 leaves that side open. Bounds are strict. */
+export interface Range {
+  min: number
+  max: number
 }
 
-export function substanceName(pools: Pool[]): string {
+export type Target = Record<Elemental, Range>
+
+const ANY: Range = { min: 0, max: 1 }
+
+/** Clay: 75–85% earth, with air and fire each between 1% and 3%. */
+export const CLAY_TARGET: Target = {
+  earth: { min: 0.75, max: 0.85 },
+  water: { ...ANY },
+  air: { min: 0.01, max: 0.03 },
+  fire: { min: 0.01, max: 0.03 },
+}
+
+export const cloneTarget = (t: Target): Target => ({
+  earth: { ...t.earth },
+  water: { ...t.water },
+  air: { ...t.air },
+  fire: { ...t.fire },
+})
+
+export const constrained = (r: Range) => r.min > 0 || r.max < 1
+export const within = (s: number, r: Range) => (r.min <= 0 || s > r.min) && (r.max >= 1 || s < r.max)
+
+export const earthShare = (pools: Pool[]) => share(pools, 'earth')
+export const shares = (pools: Pool[]): Record<Elemental, number> =>
+  Object.fromEntries(ELEMENTALS.map((e) => [e, share(pools, e)])) as Record<Elemental, number>
+
+export function inBand(pools: Pool[], target: Target = CLAY_TARGET): boolean {
+  return ELEMENTALS.every((e) => within(share(pools, e), target[e]))
+}
+
+/**
+ * How far the amalgam is from the target: for each constrained element, the
+ * gap outside its band, in band widths. 0 when every share is in band.
+ */
+export function miss(pools: Pool[], target: Target = CLAY_TARGET): number {
+  let total = 0
+  for (const e of ELEMENTALS) {
+    const r = target[e]
+    if (!constrained(r)) continue
+    const s = share(pools, e)
+    const lo = r.min > 0 ? r.min : 0
+    const hi = r.max < 1 ? r.max : 1
+    const width = Math.max(0.005, hi - lo)
+    total += Math.max(0, lo - s, s - hi) / width
+  }
+  return total
+}
+
+/** The amalgam's name: clay when it meets the target, otherwise a region along the earth share. */
+export function substanceName(pools: Pool[], target: Target = CLAY_TARGET): string {
+  if (inBand(pools, target)) return 'Clay'
   const s = earthShare(pools)
-  if (inBand(pools)) return 'Clay'
-  return REGIONS.find((r) => s < r.below)!.name
+  const band = target.earth
+  if (within(s, band)) {
+    const high = (['air', 'fire'] as const).some((e) => constrained(target[e]) && target[e].max < 1 && share(pools, e) >= target[e].max)
+    return high ? 'Organic clay' : 'Lean clay'
+  }
+  if (s < 0.35) return 'Slurry'
+  if (s < Math.min(0.65, band.min)) return 'Mud'
+  if (band.min > 0 && s <= band.min) return 'Loam'
+  return 'Hardpan'
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +124,7 @@ export function rollIntent(rng: Rng, term: number, pools: Pool[], table: TableEn
   }
 
   if (kind === 'flare') {
-    const flare = Math.max(1, Math.round((rng.int(10, 14) + (term - 1)) * settings.flareScale))
+    const flare = Math.max(1, Math.round((rng.int(11, 15) + (term - 1)) * settings.flareScale))
     return { kind, flare, kg: 0, title: `Flare ${flare}`, detail: 'The mud destabilizes. Ward absorbs it; the rest costs quintessence.' }
   }
   if (kind === 'seep') {

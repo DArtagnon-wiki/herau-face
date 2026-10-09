@@ -1,6 +1,8 @@
+import { normalize } from './alchemy'
+import type { Target } from './commission'
 import { makeRune, reforge, type Forge, type RuneSpec } from './deck'
 import type { GameState } from './game'
-import type { Rune } from './types'
+import type { Pool, Rune } from './types'
 
 // Sandbox edits to a commission in progress. Each returns a new state; the
 // pools, table and quintessence are left alone.
@@ -44,4 +46,14 @@ export const findRune = (state: GameState, id: number): { rune: Rune; at: 'hand'
     if (rune) return { rune, at }
   }
   return undefined
+}
+
+/** Replace the amalgam with a new composition; it also becomes the starting composition for restarts. */
+export function setComposition(state: GameState, pools: Pool[]): GameState {
+  const next = normalize(pools)
+  return { ...state, pools: next, start: next }
+}
+
+export function setTarget(state: GameState, target: Target): GameState {
+  return { ...state, target }
 }

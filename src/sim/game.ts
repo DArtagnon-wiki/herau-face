@@ -1,5 +1,5 @@
-import { totalKg } from './alchemy'
-import { MUD_START, applyIntent, earthShare, inBand, rollIntent, substanceName, type Intent } from './commission'
+import { normalize, totalKg } from './alchemy'
+import { CLAY_TARGET, MUD_START, applyIntent, cloneTarget, inBand, rollIntent, type Intent, type Target } from './commission'
 import { DEFAULT_FORGE, buildDeck, cloneForge, standardDeck, type Forge, type RuneSpec } from './deck'
 import { makeRng, type Rng } from './rng'
 import { canJoin, openLinks, resolve, runesOf, type Resolution } from './sigil'
@@ -15,33 +15,58 @@ export interface Settings {
   stock: number
   handSize: number
   discards: number
+  /** Most sigils a term; 0 means as many as the hand allows. */
+  castsPerTerm: number
 }
 
-export const DEFAULT_SETTINGS: Settings = { strain: true, surplusForce: true, flareScale: 1, stock: 100, handSize: 7, discards: 2 }
+export const DEFAULT_SETTINGS: Settings = {
+  strain: true,
+  surplusForce: true,
+  flareScale: 1,
+  stock: 100,
+  handSize: 6,
+  discards: 2,
+  castsPerTerm: 0,
+}
 
-export interface TermOutcome {
+/** One sigil cast during a term. It resolves at once. */
+export interface CastOutcome {
   term: number
   sigil: Sigil
   resolution: Resolution
+  /** The amalgam right after this cast. */
+  pools: Pool[]
+  finished: boolean
+}
+
+/** What happens when the term ends: the commission acts, and Ward meets the instability. */
+export interface EndOutcome {
   pools: Pool[]
   table: TableEntry[]
-  share: number
-  substance: string
-  finished: boolean
-  intent: Intent
   intentNote: string
   removed?: TableEntry
   flare: number
   strain: number
+  /** Ward gathered over the term's casts. */
   ward: number
   absorbed: number
   paid: number
+}
+
+export interface TermOutcome extends EndOutcome {
+  term: number
+  intent: Intent
+  casts: CastOutcome[]
 }
 
 export interface GameState {
   settings: Settings
   /** The numbers behind bodies and motes; the sandbox can change them. */
   forge: Forge
+  /** The composition this commission must reach. */
+  target: Target
+  /** The composition the amalgam started from. */
+  start: Pool[]
   seed: number
   draw: Rune[]
   hand: Rune[]
@@ -54,6 +79,10 @@ export interface GameState {
   discardsLeft: number
   intent: Intent
   phase: 'compose' | 'won' | 'lost'
+  /** Sigils cast so far this term. */
+  casts: CastOutcome[]
+  /** Ward gathered so far this term. */
+  termWard: number
   history: TermOutcome[]
   nextTableId: number
 }
@@ -97,16 +126,25 @@ export function fairOpening(deck: Rune[], handSize: number): Rune[] {
 export interface Setup {
   forge: Forge
   deck: RuneSpec[]
+  start: Pool[]
+  target: Target
 }
 
-export const standardSetup = (): Setup => ({ forge: cloneForge(DEFAULT_FORGE), deck: standardDeck() })
+export const standardSetup = (): Setup => ({
+  forge: cloneForge(DEFAULT_FORGE),
+  deck: standardDeck(),
+  start: MUD_START.map((p) => ({ ...p })),
+  target: cloneTarget(CLAY_TARGET),
+})
 
 export function newGame(settings: Settings = DEFAULT_SETTINGS, seed = Date.now(), setup: Setup = standardSetup()): GameState {
   const rng = makeRng(seed)
-  const pools = MUD_START
+  const pools = normalize(setup.start)
   let state: GameState = {
     settings,
     forge: setup.forge,
+    target: setup.target,
+    start: pools,
     seed,
     draw: fairOpening(rng.shuffle(buildDeck(setup.deck, setup.forge)), settings.handSize),
     hand: [],
@@ -119,6 +157,8 @@ export function newGame(settings: Settings = DEFAULT_SETTINGS, seed = Date.now()
     discardsLeft: settings.discards,
     intent: rollIntent(rng, 1, pools, [], settings),
     phase: 'compose',
+    casts: [],
+    termWard: 0,
     history: [],
     nextTableId: 1,
   }
@@ -126,8 +166,14 @@ export function newGame(settings: Settings = DEFAULT_SETTINGS, seed = Date.now()
   return { ...state, seed: rng.state() }
 }
 
+/** How many more sigils can be cast this term. */
+export const castsLeft = (state: GameState): number =>
+  state.settings.castsPerTerm > 0 ? Math.max(0, state.settings.castsPerTerm - state.casts.length) : Infinity
+
 /** Why a sigil can't be cast as it stands, or null when it can. */
 export function invalidReason(state: GameState, sigil: Sigil): string | null {
+  if (state.phase !== 'compose') return 'The commission is over.'
+  if (castsLeft(state) <= 0) return 'No more sigils this term.'
   const runes = runesOf(sigil)
   const ids = new Set(runes.map((r) => r.id))
   if (ids.size !== runes.length) return 'A rune can only be placed once.'
@@ -138,80 +184,83 @@ export function invalidReason(state: GameState, sigil: Sigil): string | null {
 
 export { canJoin }
 
-/** Exactly what this term would do, without changing anything. Drives the preview and the cast. */
-export function previewTerm(state: GameState, sigil: Sigil, poolKey?: string): TermOutcome {
-  const resolution = resolve(sigil, state.pools, poolKey, state.settings)
-  const placed: TableEntry = { id: state.nextTableId, term: state.term, sigil }
-  const tableAfterCast = [...state.table, placed]
-  const ward = resolution.outputs.ward
-  const finished = inBand(resolution.pools)
-  const base = {
-    term: state.term,
-    sigil,
-    resolution,
-    intent: state.intent,
-    ward,
-    finished,
-  }
-  if (finished) {
-    return {
-      ...base,
-      pools: resolution.pools,
-      table: tableAfterCast,
-      share: earthShare(resolution.pools),
-      substance: substanceName(resolution.pools),
-      intentNote: 'The clay sets before the mud can act.',
-      flare: 0,
-      strain: 0,
-      absorbed: 0,
-      paid: 0,
-    }
-  }
-  const acted = applyIntent(state.intent, resolution.pools, tableAfterCast)
+/** The end of the term as things stand: the commission acts, and the term's Ward meets it. */
+function endOf(state: Pick<GameState, 'intent' | 'pools' | 'table' | 'termWard' | 'settings'>): EndOutcome {
+  const acted = applyIntent(state.intent, state.pools, state.table)
   const flare = state.intent.flare
   const tableStrain = strain(acted.table, state.settings.strain)
   const incoming = flare + tableStrain
-  const absorbed = Math.min(ward, incoming)
+  const absorbed = Math.min(state.termWard, incoming)
   const paid = Math.round((incoming - absorbed) * 10) / 10
   return {
-    ...base,
     pools: acted.pools,
     table: acted.table,
-    share: earthShare(acted.pools),
-    substance: substanceName(acted.pools),
     intentNote: acted.note,
     removed: acted.removed,
     flare,
     strain: tableStrain,
+    ward: state.termWard,
     absorbed,
     paid,
   }
 }
 
+export const previewEnd = (state: GameState): EndOutcome => endOf(state)
+
+export interface CastPreview {
+  cast: CastOutcome
+  table: TableEntry[]
+  /** What ending the term right after this cast would do; null when the cast finishes the commission. */
+  end: EndOutcome | null
+}
+
+/** Exactly what casting this sigil would do, and what ending the term after it would cost. */
+export function previewCast(state: GameState, sigil: Sigil, poolKey?: string): CastPreview {
+  const resolution = resolve(sigil, state.pools, poolKey, state.settings)
+  const table = [...state.table, { id: state.nextTableId, term: state.term, sigil }]
+  const finished = inBand(resolution.pools, state.target)
+  const cast: CastOutcome = { term: state.term, sigil, resolution, pools: resolution.pools, finished }
+  const end = finished
+    ? null
+    : endOf({ ...state, pools: resolution.pools, table, termWard: state.termWard + resolution.outputs.ward })
+  return { cast, table, end }
+}
+
 export function cast(state: GameState, sigil: Sigil, poolKey?: string): GameState {
-  if (state.phase !== 'compose') return state
   const reason = invalidReason(state, sigil)
   if (reason) throw new Error(reason)
-
-  const outcome = previewTerm(state, sigil, poolKey)
-  const rng = makeRng(state.seed)
+  const p = previewCast(state, sigil, poolKey)
   const used = new Set(runesOf(sigil).map((r) => r.id))
-  const quintessence = Math.max(0, Math.round((state.quintessence - outcome.paid) * 10) / 10)
-
-  let next: GameState = {
+  const next: GameState = {
     ...state,
-    hand: state.hand.filter((g) => !used.has(g.id)),
+    hand: state.hand.filter((r) => !used.has(r.id)),
     discard: [...state.discard, ...runesOf(sigil)],
-    pools: outcome.pools,
-    table: outcome.table,
-    quintessence,
-    spent: Math.round((state.spent + outcome.paid) * 10) / 10,
-    history: [...state.history, outcome],
+    pools: p.cast.pools,
+    table: p.table,
+    termWard: state.termWard + p.cast.resolution.outputs.ward,
+    casts: [...state.casts, p.cast],
     nextTableId: state.nextTableId + 1,
   }
-  if (outcome.finished) return { ...next, phase: 'won', seed: rng.state() }
-  if (quintessence <= 0) return { ...next, phase: 'lost', seed: rng.state() }
+  return p.cast.finished ? { ...next, phase: 'won' } : next
+}
 
+/** End the term: the commission acts, unabsorbed instability costs quintessence, and the next term begins. */
+export function endTerm(state: GameState): GameState {
+  if (state.phase !== 'compose') return state
+  const e = endOf(state)
+  const rng = makeRng(state.seed)
+  const quintessence = Math.max(0, Math.round((state.quintessence - e.paid) * 10) / 10)
+  let next: GameState = {
+    ...state,
+    pools: e.pools,
+    table: e.table,
+    quintessence,
+    spent: Math.round((state.spent + e.paid) * 10) / 10,
+    history: [...state.history, { ...e, term: state.term, intent: state.intent, casts: state.casts }],
+    casts: [],
+    termWard: 0,
+  }
+  if (quintessence <= 0) return { ...next, phase: 'lost', seed: rng.state() }
   const term = state.term + 1
   next = { ...next, term, intent: rollIntent(rng, term, next.pools, next.table, state.settings) }
   next = drawUp(next, rng)
@@ -231,6 +280,15 @@ export function discardRunes(state: GameState, ids: number[]): GameState {
   next = drawUp(next, rng)
   return { ...next, seed: rng.state() }
 }
+
+/** Every sigil cast so far, this term included. */
+export const sigilsPlayed = (state: GameState): Sigil[] => [
+  ...state.history.flatMap((t) => t.casts.map((c) => c.sigil)),
+  ...state.casts.map((c) => c.sigil),
+]
+
+/** Terms used, counting a term in progress that has casts. */
+export const termsUsed = (state: GameState): number => state.history.length + (state.casts.length > 0 ? 1 : 0)
 
 /** Payment for a finished commission: more product earns more. */
 export const payment = (state: GameState) => (state.phase === 'won' ? Math.round(totalKg(state.pools) * 2) : 0)

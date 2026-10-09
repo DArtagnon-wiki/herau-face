@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { normalize, poolKey, stepsBetween } from './alchemy'
-import { applyIntent, inBand, substanceName, type Intent } from './commission'
+import { CLAY_TARGET, applyIntent, inBand, miss, substanceName, type Intent } from './commission'
 import { DEFAULT_FORGE, GUARD_MOTE, LINK_MOTE, REACH_MOTE, cloneForge, elementMote, makeRune, startingDeck } from './deck'
-import { addRune, deckSpecs, editRune, removeRune, setForge } from './sandbox'
-import { cast, discardRunes, fairOpening, invalidReason, newGame, previewTerm } from './game'
+import { addRune, deckSpecs, editRune, removeRune, setComposition, setForge, setTarget } from './sandbox'
+import { DEFAULT_SETTINGS, cast, discardRunes, endTerm, fairOpening, invalidReason, newGame, previewCast, previewEnd, sigilsPlayed, standardSetup } from './game'
 import { REACH_PER_POWER, canJoin, openLinks, outputs, resolve } from './sigil'
 import { imbalance, slumpTarget, strain, type TableEntry } from './table'
 import type { Affinity, Body, JoinKind, Pool, Rune, Sigil } from './types'
@@ -23,10 +23,12 @@ const sigil = (anchor: Rune, ...joins: [JoinKind, Rune][]): Sigil => ({
   anchor,
   joins: joins.map(([kind, r]) => ({ kind, rune: r })),
 })
-const mud = (earth: number, water: number): Pool[] =>
+const mud = (earth: number, water: number, air = 0, fire = 0): Pool[] =>
   normalize([
     { elemental: 'earth', grade: 1, kg: earth },
     { elemental: 'water', grade: 0, kg: water },
+    { elemental: 'air', grade: 1, kg: air },
+    { elemental: 'fire', grade: 1, kg: fire },
   ])
 const kgOf = (pools: Pool[], key: string) => pools.find((p) => poolKey(p) === key)?.kg ?? 0
 
@@ -187,11 +189,31 @@ describe('the table', () => {
 })
 
 describe('mud', () => {
-  it('names the amalgam by its earth share', () => {
-    expect(substanceName(mud(12, 12))).toBe('Mud')
-    expect(substanceName(mud(8, 2))).toBe('Clay')
-    expect(inBand(mud(8, 2))).toBe(true)
-    expect(substanceName(mud(9.5, 0.5))).toBe('Hardpan')
+  it('starts with 5% each of air and fire', () => {
+    const g = newGame(undefined, 1)
+    const total = g.pools.reduce((n, p) => n + p.kg, 0)
+    expect(total).toBe(40)
+    for (const e of ['air', 'fire'] as const) expect(g.pools.find((p) => p.elemental === e)!.kg / total).toBeCloseTo(0.05)
+  })
+
+  it('becomes clay only with earth 75–85% and air and fire each between 1% and 3%', () => {
+    expect(inBand(mud(8, 1.6, 0.2, 0.2))).toBe(true)
+    expect(substanceName(mud(8, 1.6, 0.2, 0.2))).toBe('Clay')
+    expect(substanceName(mud(8, 2))).toBe('Lean clay')
+    expect(substanceName(mud(8, 1, 0.5, 0.5))).toBe('Organic clay')
+    expect(substanceName(mud(12, 12, 1, 1))).toBe('Mud')
+    expect(substanceName(mud(9.5, 0.3, 0.1, 0.1))).toBe('Hardpan')
+  })
+
+  it('treats the band edges as strict', () => {
+    const exact = mud(12, 3.5, 0.25, 0.25) // 16 kg: earth exactly 75%
+    expect(inBand(exact)).toBe(false)
+  })
+
+  it('measures distance to the target in band widths', () => {
+    expect(miss(mud(8, 1.6, 0.2, 0.2))).toBe(0)
+    const start = newGame(undefined, 1).pools
+    expect(miss(start, CLAY_TARGET)).toBeCloseTo(3 + 1 + 1)
   })
 
   it('seeps earth into water and hardens weak water', () => {
@@ -207,10 +229,10 @@ describe('mud', () => {
 })
 
 describe('a commission', () => {
-  it('deals a hand from the 14-rune deck and reveals the first move', () => {
+  it('deals a 6-rune hand from the 14-rune deck and reveals the first move', () => {
     const s = newGame(undefined, 42)
-    expect(s.hand).toHaveLength(7)
-    expect(s.draw).toHaveLength(7)
+    expect(s.hand).toHaveLength(6)
+    expect(s.draw).toHaveLength(8)
     expect(s.quintessence).toBe(100)
     expect(['flare', 'seep', 'harden', 'slump']).toContain(s.intent.kind)
   })
@@ -225,28 +247,51 @@ describe('a commission', () => {
     expect(fairOpening(stacked, 3).slice(0, 3).map((r) => r.affinity)).toEqual(expect.arrayContaining(['water', 'earth']))
   })
 
-  it('casts exactly what the preview promised', () => {
+  it('resolves each cast at once and lets mud act only when the term ends', () => {
     let s = newGame(undefined, 7)
-    const anchor = s.hand.find((h) => h.affinity === 'water')!
-    const other = s.hand.find((h) => h !== anchor)!
-    const sg = sigil(anchor, ['entwine', other])
-    const preview = previewTerm(s, sg)
+    const water = s.hand.find((h) => h.affinity === 'water')!
+    const earth = s.hand.find((h) => h.affinity === 'earth')!
+    const first = sigil(water, ['circumscribe', earth])
+    const p = previewCast(s, first)
+    s = cast(s, first)
+    expect(s.pools).toEqual(p.cast.pools)
+    expect(s.hand).toHaveLength(4)
+    expect(s.term).toBe(1)
+    expect(s.casts).toHaveLength(1)
+    const end = previewEnd(s)
+    expect(end).toEqual(p.end)
     const before = s.quintessence
-    s = cast(s, sg)
-    expect(s.quintessence).toBeCloseTo(before - preview.paid)
-    expect(s.pools).toEqual(preview.pools)
-    expect(s.hand).toHaveLength(7)
+    s = endTerm(s)
+    expect(s.quintessence).toBeCloseTo(before - end.paid)
     expect(s.term).toBe(2)
+    expect(s.hand).toHaveLength(6)
+    expect(s.history[0].casts).toHaveLength(1)
+  })
+
+  it('gathers Ward across a term’s sigils', () => {
+    let s = newGame(undefined, 12)
+    const [a, b, c, d] = s.hand
+    s = cast(s, sigil(a, ['entwine', b]))
+    s = cast(s, sigil(c, ['entwine', d]))
+    expect(s.termWard).toBe(outputs(sigil(a, ['entwine', b])).ward + outputs(sigil(c, ['entwine', d])).ward)
+    expect(previewEnd(s).ward).toBe(s.termWard)
+    expect(sigilsPlayed(s)).toHaveLength(2)
+  })
+
+  it('caps sigils a term when told to', () => {
+    let s = newGame({ ...DEFAULT_SETTINGS, castsPerTerm: 1 }, 13)
+    const [a, b, c] = s.hand
+    s = cast(s, sigil(a))
+    expect(invalidReason(s, sigil(b, ['entwine', c]))).toMatch(/No more sigils/)
   })
 
   it('finishes the moment the amalgam reaches clay, before mud can act', () => {
     let s = newGame(undefined, 3)
     const water = makeRune(s.hand[0].id, { body: 'circle', motes: [elementMote('water')] })
     const earth = makeRune(s.hand[1].id, { body: 'circle', motes: [elementMote('earth')] })
-    s = { ...s, pools: mud(8, 4), hand: [water, earth, ...s.hand.slice(2)] }
+    s = { ...s, pools: mud(8, 4, 0.25, 0.25), hand: [water, earth, ...s.hand.slice(2)] }
     const next = cast(s, sigil(water, ['circumscribe', earth]))
     expect(next.phase).toBe('won')
-    expect(next.history.at(-1)?.paid).toBe(0)
   })
 
   it('refuses runes that are not in hand', () => {
@@ -258,7 +303,7 @@ describe('a commission', () => {
     const s = newGame(undefined, 11)
     const next = discardRunes(s, [s.hand[0].id, s.hand[1].id])
     expect(next.discardsLeft).toBe(1)
-    expect(next.hand).toHaveLength(7)
+    expect(next.hand).toHaveLength(6)
     expect(next.hand.some((h) => h.id === s.hand[0].id)).toBe(false)
   })
 })
@@ -287,7 +332,7 @@ describe('the sandbox', () => {
   it('adds a rune to the hand, edits one anywhere, and removes one', () => {
     let s = newGame(undefined, 23)
     s = addRune(s, { body: 'triangle', motes: [elementMote('water'), LINK_MOTE, LINK_MOTE] })
-    expect(s.hand).toHaveLength(8)
+    expect(s.hand).toHaveLength(7)
     expect(s.hand.at(-1)).toMatchObject({ affinity: 'water', links: 3 })
     const target = s.draw[0]
     s = editRune(s, target.id, { body: 'circle', motes: [elementMote('fire')] })
@@ -299,7 +344,7 @@ describe('the sandbox', () => {
   it('starts the next commission from the edited deck', () => {
     let s = newGame(undefined, 24)
     s = addRune(s, { body: 'crescent', motes: [elementMote('earth'), GUARD_MOTE] })
-    const next = newGame(undefined, 25, { forge: s.forge, deck: deckSpecs(s) })
+    const next = newGame(undefined, 25, { ...standardSetup(), forge: s.forge, deck: deckSpecs(s) })
     expect([...next.hand, ...next.draw]).toHaveLength(15)
   })
 })
@@ -326,5 +371,19 @@ describe('table metrics', () => {
     const m = metricsOf([sigil(twoGems)])
     expect(m.motes).toEqual({ earth: 0, water: 1, air: 0, fire: 1 })
     expect(m.runesBy.fire).toBe(1)
+  })
+})
+
+describe('sandbox compositions', () => {
+  it('replaces the amalgam and keeps it as the starting composition', () => {
+    const s = setComposition(newGame(undefined, 30), mud(10, 10, 1, 0))
+    expect(s.pools.find((p) => p.elemental === 'fire')).toBeUndefined()
+    expect(s.start).toEqual(s.pools)
+  })
+
+  it('changes the target live', () => {
+    let s = newGame(undefined, 31)
+    s = setTarget(s, { earth: { min: 0.4, max: 0.5 }, water: { min: 0, max: 1 }, air: { min: 0, max: 1 }, fire: { min: 0, max: 1 } })
+    expect(inBand(s.pools, s.target)).toBe(true)
   })
 })

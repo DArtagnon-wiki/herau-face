@@ -2,7 +2,7 @@
 // Everything returns markup strings; colors come from CSS custom properties.
 
 import { ELEMENTALS } from '../sim/alchemy'
-import { CLAY_BAND } from '../sim/commission'
+import type { Range } from '../sim/commission'
 import type { TableEntry } from '../sim/table'
 import type { Affinity, Body, Elemental, Grade, Mote, Pool, Rune, Sigil } from '../sim/types'
 
@@ -177,6 +177,8 @@ export interface VesselOptions {
   /** Table entry a slump would knock loose, highlighted. */
   threatenedId?: number
   previewSigil?: Sigil | null
+  /** The earth band to mark on the rim, when the target constrains earth. */
+  band?: Range
 }
 
 export function vesselSvg(pools: Pool[], table: TableEntry[], earth: number, opts: VesselOptions = {}): string {
@@ -203,12 +205,14 @@ export function vesselSvg(pools: Pool[], table: TableEntry[], earth: number, opt
     at += frac
   }
 
-  const b0 = angleAt(CLAY_BAND[0])
-  const b1 = angleAt(CLAY_BAND[1])
-  parts.push(`<path d="${arc(97, b0, b1)}" fill="none" stroke="var(--gilt-bright)" stroke-width="7" stroke-opacity="0.75"/>`)
-  parts.push(`<path d="${wedge(96, b0, b1)}" fill="var(--gilt)" fill-opacity="0.07"/>`)
-  for (const b of [b0, b1]) {
-    parts.push(`<line x1="0" y1="0" x2="${f(Math.cos(b) * 104)}" y2="${f(Math.sin(b) * 104)}" stroke="var(--gilt)" stroke-opacity="0.45" stroke-width="0.8" stroke-dasharray="2 3"/>`)
+  if (opts.band) {
+    const b0 = angleAt(Math.max(0, opts.band.min))
+    const b1 = angleAt(Math.min(1, opts.band.max))
+    parts.push(`<path d="${arc(97, b0, b1)}" fill="none" stroke="var(--gilt-bright)" stroke-width="7" stroke-opacity="0.75"/>`)
+    parts.push(`<path d="${wedge(96, b0, b1)}" fill="var(--gilt)" fill-opacity="0.07"/>`)
+    for (const b of [b0, b1]) {
+      parts.push(`<line x1="0" y1="0" x2="${f(Math.cos(b) * 104)}" y2="${f(Math.sin(b) * 104)}" stroke="var(--gilt)" stroke-opacity="0.45" stroke-width="0.8" stroke-dasharray="2 3"/>`)
+    }
   }
 
   const edge = angleAt(earth)

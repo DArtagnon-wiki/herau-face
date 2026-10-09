@@ -4,7 +4,9 @@ A roguelike deckbuilder of runes and alchemy, built from Circumgician's world. T
 
 ## Prototype: mud to clay
 
-One commission, playable end to end: 36 kg of mud (18 kg medium earth, 18 kg weak water) to bring to clay, 75–85% earth by mass, before quintessence runs out. Read mud's move, compose a sigil from the runes in your hand, and cast against an exact preview.
+One commission, playable end to end: 40 kg of mud (18 kg medium earth, 18 kg weak water, and 2 kg each of medium air and fire from its organics) to bring to clay before quintessence runs out. Clay is 75–85% earth, with air and fire each between 1% and 3%; bounds are strict.
+
+Each term, mud shows its move. You compose and cast sigils from a 6-rune hand, as many as the hand allows; each resolves at once against an exact preview, and its Ward builds up for the term. When you end the term, mud acts: the term's Ward absorbs its flare and the rest costs quintessence. Unplayed runes stay in hand.
 
 ```sh
 npm install
@@ -45,7 +47,7 @@ With the standard deck, runes and gems always agree, because every elemental run
 
 ### Sandbox
 
-The Sandbox panel changes the commission in progress, live: each body's power, links and bowls; the reach and guard mote values; any rune's body and motes, wherever it is in the deck; new runes straight into the hand; and removing runes. Restarting keeps every change, and "Restart with the standard deck" undoes them. The Tuning panel covers the rest: table strain, surplus Force, flare size, quintessence, hand size and discards.
+The Sandbox panel changes the commission in progress, live: the mud's starting composition (kg and grade per element, which resets the amalgam) and the target bands; each body's power, links and bowls; the reach and guard mote values; any rune's body and motes, wherever it is in the deck; new runes straight into the hand; and removing runes. Restarting keeps every change, and "Restart with the standard deck" undoes them. The Tuning panel covers the rest: table strain, surplus Force, flare size, quintessence, hand size, sigils a term and discards.
 
 ### Rules the doc leaves open
 
@@ -65,18 +67,19 @@ The Sandbox panel changes the commission in progress, live: each body's power, l
 | Ward | 1 per point (entwines), plus guard motes |
 | Mud's moves | Flare 60 (+5 a term), seep 20, harden 15, slump 15 |
 | Seep, harden | 0.5 kg of earth back to water; 2 kg of weak water to medium |
-| Flare size | 10–14, +1 a term |
-| Quintessence, hand, discards | 100, 7, 2 |
+| Flare size | 11–15, +1 a term |
+| Quintessence, hand, discards | 100, 6, 2 |
+| Sigils a term | As many as the hand allows |
 
 ### What the simulated player found
 
-400 commissions with the standard deck:
+400 commissions with the standard deck and a player that plays greedily within each term: it keeps casting the best sigil while that beats ending the term.
 
 | Player | Median terms | Spent: none | 1–15 | 16–30 | over 30 |
 | --- | --- | --- | --- | --- | --- |
-| Careful (wards when it pays) | 4 | 12% | 75% | 12% | 2% |
-| Careless (never wards on purpose) | 3 | 5% | 42% | 49% | 5% |
+| Careful (wards when it pays) | 6 | 21% | 70% | 7% | 3% |
+| Careless (never wards on purpose) | 5 | 4% | 17% | 30% | 50% |
 
-A careful player wards instead of transmuting in 1–2 terms a commission. With the doc's capped formula, the careful player wins only 51% of commissions.
+The careful player casts about 2 sigils a term and wins every commission; the careless one loses 2%. With a 5-rune hand the careful player's median cost rises from 5 to 16, it loses 7% of commissions, and the median commission takes 10 terms. Mud's organics add about one hand size of difficulty: without them, a 5-rune hand plays like a 6-rune hand with them. With the doc's capped formula the careful player wins only 68%.
 
-Per commission, the careful player plays about 6 circles, 4.4 crescents and 2.2 triangles (21 sides), and 3.6 water, 4.0 earth, 1.5 air and 1.3 fire gems. Air and fire go mostly into entwines. Relative to the deck, it plays crescents and triangles at about twice the circles' rate, because only they make three-rune sigils. At the end, the table is out of balance by 4.4 runes and 6.2 sides on average; a player who never wards leaves 6.3 and 8.5.
+Organics also put air and fire to work. Per commission the careful player plays about 7.8 water, 7.7 earth, 6.7 air and 6.8 fire gems, where air and fire were almost pure defence before. Tables end out of balance by 2.6 runes and 3.7 sides on average, against 4.4 and 6.2 with two-element mud.

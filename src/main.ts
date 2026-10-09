@@ -1,12 +1,13 @@
 import './ui/style.css'
 import { GRADE_NAMES, poolKey, totalKg } from './sim/alchemy'
-import { CLAY_BAND, earthShare, substanceName } from './sim/commission'
+import { cloneTarget, constrained, inBand, shares, substanceName, within, type Range } from './sim/commission'
 import { BODY_LIST, BODY_NAMES, DEFAULT_FORGE, GEMS, MOTE_OPTIONS, buildDeck, cloneForge, moteEffect, moteFromKey, moteKey, moteName, type Forge, type RuneSpec } from './sim/deck'
-import { addRune, deckSpecs, editRune, findRune, removeRune, setForge } from './sim/sandbox'
-import { DEFAULT_SETTINGS, cast, discardRunes, invalidReason, newGame, payment, previewTerm, standardSetup, type GameState, type Settings, type Setup, type TermOutcome } from './sim/game'
+import { addRune, deckSpecs, editRune, findRune, removeRune, setComposition, setForge, setTarget } from './sim/sandbox'
+import { DEFAULT_SETTINGS, cast, castsLeft, discardRunes, endTerm, invalidReason, newGame, payment, previewCast, previewEnd, sigilsPlayed, standardSetup, termsUsed, type CastOutcome, type CastPreview, type EndOutcome, type GameState, type Settings, type Setup, type TermOutcome } from './sim/game'
 import { REACH_PER_POWER, WARD_PER_POWER, candidatePools, canJoin, openLinks, resolve, type Resolution } from './sim/sigil'
-import { slumpTarget, strain, tally } from './sim/table'
-import type { Body, Elemental, JoinKind, Rune, Sigil } from './sim/types'
+import { slumpTarget, tally } from './sim/table'
+import type { Body, Elemental, Grade, JoinKind, Pool, Rune, Sigil } from './sim/types'
+import type { TableEntry } from './sim/table'
 import { AFFINITY_VAR, bodyIcon, moteColor, runeSvg, sigilSvg, vesselSvg } from './ui/draw'
 import { AFFINITIES, SIDES, balance, metricsOf, type Measure } from './sim/metrics'
 
@@ -70,14 +71,22 @@ const ELEMENT_NAME: Record<string, string> = { earth: 'Earth', water: 'Water', a
 // Helpers
 
 const kg = (n: number) => `${n.toFixed(1)} kg`
-const pct = (n: number) => `${Math.round(n * 100)}%`
 const num = (n: number) => (Math.abs(n - Math.round(n)) < 0.05 ? String(Math.round(n)) : n.toFixed(1))
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 
+/** The forge, deck and compositions a running commission would restart with. */
+const captureSetup = (g: GameState): Setup => ({
+  forge: cloneForge(g.forge),
+  deck: deckSpecs(g),
+  start: g.start.map((p) => ({ ...p })),
+  target: cloneTarget(g.target),
+})
+
 function startGame(seed = Date.now() % 1_000_000) {
-  if (ui.game) ui.setup = { forge: cloneForge(ui.game.forge), deck: deckSpecs(ui.game) }
+  if (ui.game) ui.setup = captureSetup(ui.game)
   ui.seed = seed
-  ui.game = newGame({ ...ui.settings }, seed, { forge: cloneForge(ui.setup.forge), deck: ui.setup.deck })
+  const st = ui.setup
+  ui.game = newGame({ ...ui.settings }, seed, { forge: cloneForge(st.forge), deck: st.deck, start: st.start.map((p) => ({ ...p })), target: cloneTarget(st.target) })
   ui.editing = null
   resetComposer()
 }
@@ -106,6 +115,28 @@ function currentSigil(): Sigil | null {
 }
 
 const linksWord = (n: number) => `${n} link${n === 1 ? '' : 's'}`
+
+const ELEMENT_ORDER: Elemental[] = ['earth', 'water', 'air', 'fire']
+
+/** A share as a percent, with a decimal when it is small. */
+const pctFine = (x: number) => (x < 0.1 ? `${(x * 100).toFixed(1)}%` : `${Math.round(x * 100)}%`)
+
+const rangeText = (r: Range) => {
+  const f = (x: number) => `${+(x * 100).toFixed(1)}`
+  if (r.min > 0 && r.max < 1) return `${f(r.min)}–${f(r.max)}%`
+  if (r.min > 0) return `over ${f(r.min)}%`
+  if (r.max < 1) return `under ${f(r.max)}%`
+  return 'any'
+}
+
+/** The constrained shares, each marked in or out of its band. */
+function shareLine(g: GameState, pools: Pool[]): string {
+  const sh = shares(pools)
+  const parts = ELEMENT_ORDER.filter((e) => constrained(g.target[e])).map(
+    (e) => `<span class="${within(sh[e], g.target[e]) ? 'good' : 'warn'}">${e} <b class="num">${pctFine(sh[e])}</b></span>`,
+  )
+  return parts.join(', ') + (inBand(pools, g.target) ? ' (clay)' : '')
+}
 
 /** The abilities a rune's motes add beyond its element and links. */
 function abilities(r: Rune): string[] {
@@ -150,7 +181,7 @@ function startView(): string {
     <header class="start-head">
       <p class="eyebrow">A commission · prototype</p>
       <h1>Mud to Clay</h1>
-      <p class="lede">Thirty-six kilos of mud, half earth and half water. Bring it to clay, between 75 and 85 percent earth, before your quintessence runs out.</p>
+      <p class="lede">Forty kilos of mud: mostly earth and water, with a little air and fire from its organics. Bring it to clay, 75–85% earth with air and fire each between 1% and 3%, before your quintessence runs out.</p>
     </header>
 
     <section class="panel">
@@ -164,8 +195,8 @@ function startView(): string {
       <h2>How a term works</h2>
       <ol>
         <li><b>Mud shows its move.</b> A flare, a seep back to water, a hardening, or a slump that knocks a sigil off your table.</li>
-        <li><b>Compose a sigil.</b> Tap a rune to make it the anchor: its element is what changes. Then pick a join and tap more runes, up to the anchor’s links.</li>
-        <li><b>Cast.</b> The preview is exact. Then mud acts. Ward absorbs flares; whatever gets past costs quintessence.</li>
+        <li><b>Compose and cast sigils.</b> Tap a rune to make it the anchor: its element is what changes. Pick a join and tap more runes, up to the anchor’s links, then cast. Each sigil resolves at once. Cast as many as your hand allows.</li>
+        <li><b>End the term.</b> Mud acts. The Ward from all of this term’s sigils absorbs its flare; whatever gets past costs quintessence. Unplayed runes stay in hand.</li>
       </ol>
       <h2>Reading a rune</h2>
       <p>The number is its power. The pips are its links: how many runes it can hold as the anchor. Its bowls hold motes, and the motes give it an element and any abilities.</p>
@@ -204,7 +235,8 @@ function tuningView(): string {
       <label class="check"><input type="checkbox" id="tune-surplus" ${s.surplusForce ? 'checked' : ''}> Surplus Force multiplies Reach</label>
       <label>Flare size <select id="tune-flare">${opt(0.75, s.flareScale, '×0.75')}${opt(1, s.flareScale, '×1')}${opt(1.25, s.flareScale, '×1.25')}${opt(1.5, s.flareScale, '×1.5')}</select></label>
       <label>Quintessence <select id="tune-stock">${opt(60, s.stock)}${opt(100, s.stock)}${opt(140, s.stock)}</select></label>
-      <label>Hand size <select id="tune-hand">${opt(6, s.handSize)}${opt(7, s.handSize)}${opt(8, s.handSize)}</select></label>
+      <label>Hand size <select id="tune-hand">${[4, 5, 6, 7, 8].map((v) => opt(v, s.handSize)).join('')}</select></label>
+      <label>Sigils a term <select id="tune-casts">${opt(1, s.castsPerTerm)}${opt(2, s.castsPerTerm)}${opt(3, s.castsPerTerm)}${opt(0, s.castsPerTerm, 'Any number')}</select></label>
       <label>Discards <select id="tune-discards">${opt(1, s.discards)}${opt(2, s.discards)}${opt(3, s.discards)}</select></label>
     </div>
     <p class="fine">Unticking surplus Force uses the design doc’s formula, where Force past the requirement does nothing. ${ui.game ? `Seed ${ui.seed}.` : ''}</p>
@@ -212,9 +244,8 @@ function tuningView(): string {
   </details>`
 }
 
-function intentView(g: GameState, preview: TermOutcome | null): string {
+function intentView(g: GameState, end: EndOutcome): string {
   const i = g.intent
-  const strainNow = preview ? preview.strain : strain(g.table, g.settings.strain)
   const tone = i.kind === 'flare' ? 'fire' : i.kind === 'seep' ? 'water' : i.kind === 'harden' ? 'glass' : 'gilt'
   return `
   <section class="intent tone-${tone}" aria-live="polite">
@@ -225,28 +256,45 @@ function intentView(g: GameState, preview: TermOutcome | null): string {
     </div>
     <div class="intent-side">
       <span class="label">Strain</span>
-      <span class="intent-strain">${strainNow ? `+${strainNow}` : '0'}</span>
+      <span class="intent-strain">${end.strain ? `+${end.strain}` : '0'}</span>
       <span class="label">${g.settings.strain ? 'from the table' : 'off'}</span>
     </div>
+    <p class="intent-term">${g.casts.length ? `${g.casts.length} sigil${g.casts.length === 1 ? '' : 's'} cast this term · Ward <b class="num">${num(g.termWard)}</b>` : 'No sigils cast this term yet'} · ending now ${end.paid > 0 ? `costs <b class="num warn">${num(end.paid)}</b>` : 'costs nothing'}</p>
   </section>`
 }
 
 function lastTermView(g: GameState): string {
   const t = g.history.at(-1)
-  if (!t || g.phase !== 'compose') return ''
-  return `<p class="last-term">${esc(describeTerm(t))}</p>`
+  if (!t || g.phase !== 'compose' || g.casts.length) return ''
+  return `<p class="last-term">${esc(describeEnd(t))}</p>`
 }
 
-function describeTerm(t: TermOutcome): string {
-  const r = t.resolution
+function describeCast(c: CastOutcome): string {
+  const r = c.resolution
   const change =
     r.mode === 'none'
-      ? 'The sigil changed nothing.'
-      : `${kg(r.converted)} of ${GRADE_NAMES[r.source!.grade]} ${r.source!.elemental} became ${kg(r.produced)} of ${r.mode === 'condense' ? GRADE_NAMES[r.target!.grade] + ' ' : ''}${r.target!.elemental}.`
-  if (t.finished) return `Term ${t.term}: ${change} Clay.`
+      ? 'changed nothing'
+      : `${kg(r.converted)} of ${GRADE_NAMES[r.source!.grade]} ${r.source!.elemental} became ${kg(r.produced)} of ${r.mode === 'condense' ? GRADE_NAMES[r.target!.grade] + ' ' : ''}${r.target!.elemental}`
+  const ward = r.outputs.ward ? `, Ward ${num(r.outputs.ward)}` : ''
+  return `${sigilSummary(c.sigil)}: ${change}${ward}.${c.finished ? ' Clay.' : ''}`
+}
+
+function describeEnd(t: TermOutcome): string {
   const incoming = t.flare + t.strain
   const fight = incoming > 0 ? ` ${t.flare ? `Flare ${t.flare}` : ''}${t.flare && t.strain ? ' + ' : ''}${t.strain ? `strain ${t.strain}` : ''}, Ward ${num(t.absorbed)}, paid ${num(t.paid)}.` : ''
-  return `Term ${t.term}: ${change}${t.intentNote ? ' ' + t.intentNote : ''}${fight}`
+  return `Term ${t.term}: ${t.casts.length} sigil${t.casts.length === 1 ? '' : 's'} cast. ${t.intentNote}${fight}`.replace(/\s+/g, ' ').trim()
+}
+
+/** The target's constrained elements, as compact status chips. */
+function targetChips(g: GameState, pools = g.pools): string {
+  const sh = shares(pools)
+  return ELEMENT_ORDER.filter((e) => constrained(g.target[e]))
+    .map((e) => {
+      const r = g.target[e]
+      const ok = within(sh[e], r)
+      return `<span class="tchip ${ok ? 'ok' : ''}" style="--c:${AFFINITY_VAR[e]}"><span class="dot"></span>${ELEMENT_NAME[e]} <b class="num">${pctFine(sh[e])}</b> <span class="num band">${rangeText(r)}</span></span>`
+    })
+    .join('')
 }
 
 function poolsView(g: GameState, sigil: Sigil | null, selected?: string): string {
@@ -265,7 +313,7 @@ function poolsView(g: GameState, sigil: Sigil | null, selected?: string): string
   </div>`
 }
 
-function balanceView(g: GameState, preview: TermOutcome | null): string {
+function balanceView(g: GameState, preview: CastPreview | null): string {
   const t = tally(preview ? preview.table : g.table)
   const bar = (a: Elemental, b: Elemental) => {
     const total = Math.max(1, t[a] + t[b])
@@ -282,12 +330,12 @@ function balanceView(g: GameState, preview: TermOutcome | null): string {
   </div>`
 }
 
-function composerView(g: GameState, sigil: Sigil | null, preview: TermOutcome | null): string {
+function composerView(g: GameState, sigil: Sigil | null, preview: CastPreview | null): string {
   const anchor = sigil?.anchor
   const used = sigil?.joins.length ?? 0
   let stats = `<p class="hint">${ui.discarding ? 'Tap the runes to discard, then confirm.' : 'Tap a rune in your hand to make it the anchor.'}</p>`
   if (sigil && preview) {
-    const r = preview.resolution
+    const r = preview.cast.resolution
     const o = r.outputs
     const route = o.route ? o.route.map((e) => ELEMENT_NAME[e]).join(' → ') : 'Neutral'
     const forceLine = r.mode === 'none' ? num(o.force) : `${num(o.force)} <span class="of">/ ${num(r.required)}</span>`
@@ -296,15 +344,15 @@ function composerView(g: GameState, sigil: Sigil | null, preview: TermOutcome | 
       (r.mode === 'none' ? `<p class="note">${esc(r.note)}</p>` : formulaView(r, g.settings.surplusForce)) +
       (extras.length ? `<p class="motes-note">${extras.join(' · ')}</p>` : '') +
       (r.mode === 'none' ? '' : tipView(g, sigil, r))
-    const after = preview.finished
-      ? `<p class="after win">${pct(preview.share)} earth: clay. This cast finishes the commission.</p>`
-      : `<p class="after">After mud acts: <b>${pct(preview.share)}</b> earth, ${esc(preview.substance)}${preview.share > CLAY_BAND[1] ? ' <span class="warn">(past clay)</span>' : ''}</p>`
-    const incoming = preview.flare + preview.strain
-    const cost = preview.finished
+    const after = preview.cast.finished
+      ? `<p class="after win">This cast makes clay and finishes the commission.</p>`
+      : `<p class="after">After this cast: ${shareLine(g, preview.cast.pools)}</p>`
+    const e = preview.end
+    const cost = !e
       ? ''
-      : incoming > 0
-        ? `<p class="cost">${preview.flare ? `Flare ${preview.flare}` : ''}${preview.flare && preview.strain ? ' + ' : ''}${preview.strain ? `strain ${preview.strain}` : ''} − Ward ${num(preview.absorbed)} → <b class="${preview.paid > 0 ? 'warn' : 'good'}">${preview.paid > 0 ? `pay ${num(preview.paid)}` : 'nothing to pay'}</b></p>`
-        : `<p class="cost">No instability this term.</p>`
+      : e.flare + e.strain > 0
+        ? `<p class="cost">End the term after it: ${e.flare ? `flare ${e.flare}` : ''}${e.flare && e.strain ? ' + ' : ''}${e.strain ? `strain ${e.strain}` : ''} − Ward ${num(e.absorbed)} → <b class="${e.paid > 0 ? 'warn' : 'good'}">${e.paid > 0 ? `pay ${num(e.paid)}` : 'nothing to pay'}</b></p>`
+        : `<p class="cost">End the term after it: no instability.</p>`
     stats = `
       <p class="route">${route}</p>
       <div class="outputs">
@@ -314,8 +362,13 @@ function composerView(g: GameState, sigil: Sigil | null, preview: TermOutcome | 
       </div>
       ${change}${after}${cost}`
   }
+  const castList = g.casts.length
+    ? `<ol class="cast-list">${g.casts.map((c) => `<li>${esc(describeCast(c))}</li>`).join('')}</ol>`
+    : ''
+  const left = castsLeft(g)
   return `
   <section class="composer panel">
+    ${castList ? `<div class="this-term"><p class="label">This term${Number.isFinite(left) ? ` · ${left} sigil${left === 1 ? '' : 's'} left` : ''}</p>${castList}</div>` : ''}
     <div class="composer-top">
       <div class="rune-frame">${sigilSvg(sigil)}${anchor ? `<span class="capacity num">${used} of ${linksWord(anchor.links)} used</span>` : ''}</div>
       <div class="stats">${stats}</div>
@@ -416,7 +469,7 @@ function handView(g: GameState): string {
   </section>`
 }
 
-function actionsView(g: GameState, sigil: Sigil | null, preview: TermOutcome | null): string {
+function actionsView(g: GameState, sigil: Sigil | null, preview: CastPreview | null, end: EndOutcome): string {
   if (ui.discarding) {
     return `<div class="actions">
       <button data-act="discard-cancel">Cancel</button>
@@ -424,11 +477,12 @@ function actionsView(g: GameState, sigil: Sigil | null, preview: TermOutcome | n
     </div>`
   }
   const invalid = sigil ? invalidReason(g, sigil) : 'Choose an anchor.'
-  const castLabel = !preview ? 'Cast' : preview.finished ? 'Cast · finish' : preview.paid > 0 ? `Cast · pay ${num(preview.paid)}` : 'Cast'
-  return `<div class="actions">
+  const castLabel = preview?.cast.finished ? 'Cast · finish' : 'Cast'
+  return `<div class="actions four">
     <button data-act="clear" ${sigil ? '' : 'disabled'}>Clear</button>
     <button data-act="discard-mode" ${g.discardsLeft > 0 && !sigil ? '' : 'disabled'}>Discard <span class="num">(${g.discardsLeft})</span></button>
     <button class="primary" data-act="cast" ${invalid ? 'disabled' : ''}>${castLabel}</button>
+    <button class="end-term" data-act="end-term" ${g.phase === 'compose' ? '' : 'disabled'}>End term<span class="sub num">${end.paid > 0 ? `pay ${num(end.paid)}` : 'no cost'}</span></button>
   </div>`
 }
 
@@ -440,9 +494,9 @@ function endView(g: GameState): string {
     <div class="end-card">
       <p class="eyebrow">${won ? 'Commission complete' : 'Commission failed'}</p>
       <h2 id="end-title">${won ? `${kg(totalKg(g.pools))} of clay` : 'The work came apart'}</h2>
-      <p>${won ? 'The clay is set and paid for.' : `Your quintessence ran out at ${pct(earthShare(g.pools))} earth.`}</p>
+      <p>${won ? 'The clay is set and paid for.' : `Your quintessence ran out at ${shareLine(g, g.pools)}.`}</p>
       <dl class="end-stats">
-        <div><dt>Terms</dt><dd class="num">${g.history.length}</dd></div>
+        <div><dt>Terms</dt><dd class="num">${termsUsed(g)}</dd></div>
         <div><dt>Spent</dt><dd class="num">${num(g.spent)}</dd></div>
         <div><dt>Payment</dt><dd class="num">${won ? payment(g) : '—'}</dd></div>
       </dl>
@@ -503,7 +557,7 @@ const MEASURES: { key: Measure; label: string }[] = [
 const signed = (n: number) => (n > 0 ? `+${n}` : String(n))
 
 function metricsView(g: GameState): string {
-  const sigils = ui.scope === 'table' ? g.table.map((e) => e.sigil) : g.history.map((t) => t.sigil)
+  const sigils = ui.scope === 'table' ? g.table.map((e) => e.sigil) : sigilsPlayed(g)
   const m = metricsOf(sigils)
   const cell = (n: number) => `<td class="num ${n ? '' : 'zero'}">${n}</td>`
   const rows = AFFINITIES.map((a) => {
@@ -537,7 +591,7 @@ function metricsView(g: GameState): string {
       </table>
     </div>
     <p class="fine">Sides count circle 1, crescent ${SIDES.crescent}, triangle ${SIDES.triangle}. Gems counts every gem a rune holds; runes count by the first. Strain uses runes: every 2 points of imbalance past 2 add 1 a term.</p>
-    <div class="row"><button data-act="copy-csv" ${g.history.length ? '' : 'disabled'}>${ui.copied ? 'Copied' : 'Copy the per-term record'}</button></div>
+    <div class="row"><button data-act="copy-csv" ${g.history.length || g.casts.length ? '' : 'disabled'}>${ui.copied ? 'Copied' : 'Copy the per-term record'}</button></div>
     ${ui.csv ? `<textarea class="csv" id="csv-out" readonly rows="6" aria-label="Per-term record as CSV">${esc(ui.csv)}</textarea><p class="fine">Copying was blocked here, so the record is above: select it and copy.</p>` : ''}
   </details>`
 }
@@ -552,16 +606,22 @@ function sigilSummary(sg: Sigil): string {
 function recordCsv(g: GameState): string {
   const els = ['water', 'earth', 'air', 'fire'] as const
   const head = [
-    'term', 'sigil', 'earth_share', 'flare', 'strain', 'ward', 'paid',
+    'term', 'sigils', 'casts', ...els.map((e) => `share_${e}`), 'flare', 'strain', 'ward', 'paid',
     ...els.map((e) => `table_runes_${e}`), ...els.map((e) => `table_gems_${e}`), ...[...els, 'none'].map((e) => `table_sides_${e}`),
     'table_circles', 'table_crescents', 'table_triangles', 'table_imb_runes', 'table_imb_gems', 'table_imb_sides',
     ...els.map((e) => `played_gems_${e}`), 'played_circles', 'played_crescents', 'played_triangles', 'played_sides', 'played_imb_gems', 'played_imb_sides',
   ]
-  const rows = g.history.map((t, i) => {
+  const terms: { term: number; casts: CastOutcome[]; pools: Pool[]; table: TableEntry[]; end?: TermOutcome }[] = g.history.map((t) => ({ term: t.term, casts: t.casts, pools: t.pools, table: t.table, end: t }))
+  if (g.casts.length) terms.push({ term: g.term, casts: g.casts, pools: g.pools, table: g.table })
+  const played: Sigil[] = []
+  const rows = terms.map((t) => {
+    played.push(...t.casts.map((c) => c.sigil))
     const tm = metricsOf(t.table.map((e) => e.sigil))
-    const pm = metricsOf(g.history.slice(0, i + 1).map((x) => x.sigil))
+    const pm = metricsOf(played)
+    const sh = shares(t.pools)
     return [
-      t.term, `"${sigilSummary(t.sigil)}"`, t.share.toFixed(3), t.flare, t.strain, num(t.ward), num(t.paid),
+      t.term, `"${t.casts.map((c) => sigilSummary(c.sigil)).join(' | ')}"`, t.casts.length, ...els.map((e) => sh[e].toFixed(4)),
+      t.end?.flare ?? '', t.end?.strain ?? '', t.end ? num(t.end.ward) : num(g.termWard), t.end ? num(t.end.paid) : '',
       ...els.map((e) => tm.runesBy[e]), ...els.map((e) => tm.motes[e]), ...[...els, 'none' as const].map((e) => tm.sidesBy[e]),
       tm.bodies.circle, tm.bodies.crescent, tm.bodies.triangle, balance(tm, 'runes').total, balance(tm, 'motes').total, balance(tm, 'sides').total,
       ...els.map((e) => pm.motes[e]), pm.bodies.circle, pm.bodies.crescent, pm.bodies.triangle, pm.sides, balance(pm, 'motes').total, balance(pm, 'sides').total,
@@ -626,6 +686,53 @@ function editorView(g: GameState): string {
   </div>`
 }
 
+const GRADES: Grade[] = [0, 1, 2, 3]
+
+function commissionEditor(g: GameState): string {
+  const row = (e: Elemental) => {
+    const pools = g.start.filter((p) => p.elemental === e)
+    const kgSum = pools.reduce((n, p) => n + p.kg, 0)
+    const grade = pools[0]?.grade ?? 0
+    const r = g.target[e]
+    const pctVal = (x: number) => +(x * 100).toFixed(2)
+    return `<tr>
+      <th scope="row" style="color:${AFFINITY_VAR[e]}">${ELEMENT_NAME[e]}</th>
+      <td><input type="number" inputmode="decimal" id="sb-kg-${e}" data-comp="kg" data-el="${e}" min="0" step="0.5" value="${+kgSum.toFixed(2)}" aria-label="${e} kg"></td>
+      <td><select id="sb-grade-${e}" data-comp="grade" data-el="${e}" aria-label="${e} grade">${GRADES.map((gr) => `<option value="${gr}" ${gr === grade ? 'selected' : ''}>${GRADE_NAMES[gr]}</option>`).join('')}</select></td>
+      <td class="range-cell"><input type="number" inputmode="decimal" id="sb-min-${e}" data-comp="min" data-el="${e}" min="0" max="100" step="0.5" value="${pctVal(r.min)}" aria-label="${e} target minimum %"><span>–</span><input type="number" inputmode="decimal" id="sb-max-${e}" data-comp="max" data-el="${e}" min="0" max="100" step="0.5" value="${pctVal(r.max)}" aria-label="${e} target maximum %"></td>
+    </tr>`
+  }
+  const total = g.start.reduce((n, p) => n + p.kg, 0)
+  return `<div class="sb-section">
+    <h3>Commission</h3>
+    <div class="table-wrap">
+      <table class="mtable comp-table">
+        <thead><tr><th></th><th scope="col">Mud, kg</th><th scope="col">Grade</th><th scope="col">Target, %</th></tr></thead>
+        <tbody>${ELEMENT_ORDER.map(row).join('')}</tbody>
+      </table>
+    </div>
+    <p class="fine">The mud starts at <span class="num">${kg(total)}</span>. Changing it resets the amalgam to the new mix; the term, table and quintessence stay. A target of 0–100 accepts any share, and bounds are strict. <button class="link-btn" data-act="sb-reset-commission">Reset mud and clay</button></p>
+  </div>`
+}
+
+/** Read the composition and target fields and apply whichever changed. */
+function applyCommissionEdit(field: string) {
+  const g = ui.game!
+  const val = (id: string) => Number((document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)?.value ?? 0)
+  if (field === 'kg' || field === 'grade') {
+    const pools: Pool[] = ELEMENT_ORDER.map((e) => ({ elemental: e, grade: Math.min(3, Math.max(0, val(`sb-grade-${e}`))) as Grade, kg: Math.max(0, val(`sb-kg-${e}`)) }))
+    ui.game = setComposition(g, pools)
+  } else {
+    const t = cloneTarget(g.target)
+    for (const e of ELEMENT_ORDER) {
+      const min = Math.min(100, Math.max(0, val(`sb-min-${e}`))) / 100
+      const max = Math.min(100, Math.max(0, val(`sb-max-${e}`))) / 100
+      t[e] = { min: Math.min(min, max), max: Math.max(min, max) }
+    }
+    ui.game = setTarget(g, t)
+  }
+}
+
 function sandboxView(g: GameState): string {
   const f = g.forge
   const where = (at: 'hand' | 'draw' | 'discard', title: string) => {
@@ -637,6 +744,7 @@ function sandboxView(g: GameState): string {
   }
   return `<details class="panel sandbox" id="sandbox" data-panel="sandbox" ${ui.open.has('sandbox') ? 'open' : ''}>
     <summary>Sandbox</summary>
+    ${commissionEditor(g)}
     <div class="sb-section">
       <h3>Shapes</h3>
       <div class="shape-table" role="table">
@@ -706,16 +814,22 @@ function historyView(g: GameState): string {
   if (!g.history.length) return ''
   return `<details class="panel history" data-panel="history" ${ui.open.has('history') ? 'open' : ''}>
     <summary>Term history</summary>
-    <ol reversed>${g.history.slice().reverse().map((t) => `<li>${esc(describeTerm(t))}</li>`).join('')}</ol>
+    <ol reversed>${g.history
+      .slice()
+      .reverse()
+      .map((t) => `<li><span class="h-end">${esc(describeEnd(t))}</span>${t.casts.length ? `<ul>${t.casts.map((c) => `<li>${esc(describeCast(c))}</li>`).join('')}</ul>` : ''}</li>`)
+      .join('')}</ol>
   </details>`
 }
 
 function gameView(g: GameState): string {
   const sigil = currentSigil()
-  const preview = sigil && g.phase === 'compose' && !ui.discarding ? previewTerm(g, sigil, ui.poolKey) : null
-  const selected = preview?.resolution.source ? poolKey(preview.resolution.source) : undefined
-  const threatened = g.intent.kind === 'slump' ? (preview ? preview.removed?.id : slumpTarget(g.table)?.id) : undefined
-  const share = earthShare(g.pools)
+  const preview = sigil && g.phase === 'compose' && !ui.discarding && !invalidReason(g, sigil) ? previewCast(g, sigil, ui.poolKey) : null
+  const end = previewEnd(g)
+  const selected = preview?.cast.resolution.source ? poolKey(preview.cast.resolution.source) : undefined
+  const threatened = g.intent.kind === 'slump' ? (preview?.end ? preview.end.removed?.id : slumpTarget(g.table)?.id) : undefined
+  const share = shares(g.pools).earth
+  const name = substanceName(g.pools, g.target)
   const qPct = Math.max(0, Math.min(100, (g.quintessence / g.settings.stock) * 100))
   return `
   <main class="game">
@@ -732,13 +846,14 @@ function gameView(g: GameState): string {
       </div>
     </header>
 
-    ${intentView(g, preview)}
+    ${intentView(g, end)}
 
     <section class="vessel panel">
-      ${vesselSvg(g.pools, g.table, share, { previewShare: preview?.share, selectedKey: selected, threatenedId: threatened, previewSigil: sigil })}
+      ${vesselSvg(g.pools, g.table, share, { previewShare: preview ? shares(preview.cast.pools).earth : undefined, selectedKey: selected, threatenedId: threatened, previewSigil: sigil, band: constrained(g.target.earth) ? g.target.earth : undefined })}
       <div class="vessel-read">
-        <p class="substance ${substanceName(g.pools) === 'Clay' ? 'is-clay' : ''}">${substanceName(g.pools)}</p>
-        <p class="read-line"><span class="num">${pct(share)}</span> earth · target <span class="num">75–85%</span> · <span class="num">${kg(totalKg(g.pools))}</span></p>
+        <p class="substance ${name === 'Clay' ? 'is-clay' : ''}">${name}</p>
+        <p class="read-line"><span class="num">${kg(totalKg(g.pools))}</span> · target ${ELEMENT_ORDER.filter((e) => constrained(g.target[e])).map((e) => `${e} ${rangeText(g.target[e])}`).join(', ')}</p>
+        <div class="tchips">${targetChips(g)}</div>
       </div>
       ${poolsView(g, sigil, selected)}
       ${balanceView(g, preview)}
@@ -749,7 +864,7 @@ function gameView(g: GameState): string {
     ${lastTermView(g)}
     ${composerView(g, sigil, preview)}
     ${handView(g)}
-    ${actionsView(g, sigil, preview)}
+    ${actionsView(g, sigil, preview, end)}
     ${sandboxView(g)}
     ${deckView(g)}
     ${historyView(g)}
@@ -814,6 +929,7 @@ function readTuning() {
   s.stock = n('tune-stock', s.stock)
   s.handSize = n('tune-hand', s.handSize)
   s.discards = n('tune-discards', s.discards)
+  s.castsPerTerm = n('tune-casts', s.castsPerTerm)
 }
 
 root.addEventListener(
@@ -831,6 +947,12 @@ root.addEventListener(
 root.addEventListener('change', (e) => {
   const el = e.target as HTMLElement
   if (el.closest('.tuning')) readTuning()
+  const comp = (el as HTMLInputElement).dataset?.comp
+  if (comp && ui.game) {
+    applyCommissionEdit(comp)
+    render()
+    return
+  }
   const bowl = (el as HTMLSelectElement).dataset?.sbBowl
   if (bowl !== undefined && ui.game) {
     setBowl(Number(bowl), (el as HTMLSelectElement).value)
@@ -881,6 +1003,12 @@ root.addEventListener('click', (e) => {
       }
       break
     }
+    case 'end-term':
+      if (g) {
+        ui.game = endTerm(g)
+        resetComposer()
+      }
+      break
     case 'restart':
       readTuning()
       startGame()
@@ -928,6 +1056,12 @@ root.addEventListener('click', (e) => {
     case 'sb-step':
       if (g) stepForge(el.dataset.target!, Number(el.dataset.delta))
       break
+    case 'sb-reset-commission':
+      if (g) {
+        const std = standardSetup()
+        ui.game = setTarget(setComposition(g, std.start), std.target)
+      }
+      break
     case 'sb-reset-forge':
       if (g) ui.game = setForge(g, cloneForge(DEFAULT_FORGE))
       break
@@ -966,7 +1100,7 @@ root.addEventListener('click', (e) => {
       window.scrollTo({ top: 0 })
       break
     case 'menu':
-      if (g) ui.setup = { forge: cloneForge(g.forge), deck: deckSpecs(g) }
+      if (g) ui.setup = captureSetup(g)
       ui.game = null
       resetComposer()
       window.scrollTo({ top: 0 })
