@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { normalize, poolKey, stepsBetween } from './alchemy'
 import { applyIntent, inBand, substanceName, type Intent } from './commission'
-import { cast, discardGlyphs, newGame, previewTerm, invalidReason } from './game'
+import { cast, discardGlyphs, fairOpening, newGame, previewTerm, invalidReason } from './game'
+import { startingDeck } from './deck'
 import { REACH_PER_VALUE, outputs, resolve } from './rune'
 
 const capped = { surplusForce: false }
@@ -200,6 +201,17 @@ describe('a commission', () => {
     const state = { ...s, hand: [tri, ...s.hand.slice(1)] }
     const four = s.hand.slice(1, 5).map((h) => ['link', h] as [JoinKind, Glyph])
     expect(invalidReason(state, rune(tri, ...four))).toMatch(/holds 3/)
+  })
+
+  it('always opens with at least one water and one earth', () => {
+    for (let seed = 1; seed <= 300; seed++) {
+      const hand = newGame('regular', undefined, seed).hand
+      expect(hand.some((h) => h.affinity === 'water')).toBe(true)
+      expect(hand.some((h) => h.affinity === 'earth')).toBe(true)
+    }
+    const stacked = startingDeck('regular').sort((a, b) => (a.affinity === 'air' ? -1 : 0) - (b.affinity === 'air' ? -1 : 0))
+    const fixed = fairOpening(stacked, 3).slice(0, 3)
+    expect(fixed.map((g) => g.affinity)).toEqual(expect.arrayContaining(['water', 'earth']))
   })
 
   it('spends a discard to redraw', () => {

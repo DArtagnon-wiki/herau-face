@@ -72,6 +72,27 @@ function drawUp(state: GameState, rng: Rng): GameState {
   return { ...state, draw, hand, discard }
 }
 
+/**
+ * Every opening hand holds at least one water and one earth, so the first
+ * term can always work the mud. After that the shuffle is left alone.
+ */
+export function fairOpening(deck: Glyph[], handSize: number): Glyph[] {
+  const out = deck.slice()
+  for (const need of ['water', 'earth'] as const) {
+    if (out.slice(0, handSize).some((g) => g.affinity === need)) continue
+    const from = out.findIndex((g, i) => i >= handSize && g.affinity === need)
+    let to = -1
+    for (let i = Math.min(handSize, out.length) - 1; i >= 0; i--) {
+      if (out[i].affinity !== 'water' && out[i].affinity !== 'earth') {
+        to = i
+        break
+      }
+    }
+    if (from >= 0 && to >= 0) [out[from], out[to]] = [out[to], out[from]]
+  }
+  return out
+}
+
 export function newGame(deckClass: ShapeClass, settings: Settings = DEFAULT_SETTINGS, seed = Date.now()): GameState {
   const rng = makeRng(seed)
   const pools = MUD_START
@@ -79,7 +100,7 @@ export function newGame(deckClass: ShapeClass, settings: Settings = DEFAULT_SETT
     settings,
     deckClass,
     seed,
-    draw: rng.shuffle(startingDeck(deckClass)),
+    draw: fairOpening(rng.shuffle(startingDeck(deckClass)), settings.handSize),
     hand: [],
     discard: [],
     pools,

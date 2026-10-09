@@ -2,7 +2,7 @@ import './ui/style.css'
 import { GRADE_NAMES, poolKey, totalKg } from './sim/alchemy'
 import { CLAY_BAND, earthShare, substanceName } from './sim/commission'
 import { DEFAULT_SETTINGS, cast, discardGlyphs, invalidReason, newGame, payment, previewTerm, type GameState, type Settings, type TermOutcome } from './sim/game'
-import { APTITUDE, candidatePools } from './sim/rune'
+import { APTITUDE, REACH_PER_VALUE, WARD_PER_VALUE, aptitude, candidatePools, resolve, type Resolution } from './sim/rune'
 import { slumpTarget, strain, tally } from './sim/table'
 import type { Elemental, Glyph, JoinKind, Rune, ShapeClass } from './sim/types'
 import { AFFINITY_VAR, glyphSvg, runeSvg, vesselSvg } from './ui/draw'
@@ -126,6 +126,7 @@ function startView(): string {
           </button>`,
         ).join('')}
       </div>
+      <p class="fine">Every deck holds the same 16 elements: 5 water, 4 earth, 3 air, 3 fire and 1 neutral. Only the shuffle changes, and your opening hand always has a water and an earth. Your deck’s apt join (★) gets ×1.5.</p>
       <button class="primary wide" data-act="start">Begin the commission</button>
     </section>
 
@@ -136,9 +137,13 @@ function startView(): string {
         <li><b>Compose a rune.</b> Tap an element to make it the anchor: its element is what changes. Then pick a join and tap more elements.</li>
         <li><b>Cast.</b> The preview is exact. Then mud acts. Ward absorbs flares; whatever gets past costs quintessence.</li>
       </ol>
+      <h2>Reading a card</h2>
+      <p>The number is the element’s value. Smaller shapes hit harder: triangles are 4, squares and pentagons 3, hexagons 2. The side count is how many joins it holds as an anchor. Each join turns the value into something different:</p>
       <dl class="join-key">
+        <div><dt>Anchor</dt><dd>Its element is what changes. Adds its value as Force, and value × 0.2 kg of Reach.</dd></div>
         ${JOINS.map((j) => `<div><dt>${j.label}</dt><dd>${joinHelp(j.kind)}</dd></div>`).join('')}
       </dl>
+      <p><b>Reach × Force.</b> Reach is how many kilos the rune grabs; Force is how hard it pushes. Each change needs some Force (weak water to earth needs 5), and what converts is Reach × Force ÷ that need. They multiply, so give each new element to whichever total is smaller.</p>
       <p class="fine">Cast runes stay on the table. Keep it level, Earth against Air and Water against Fire, or the lopsidedness adds strain every term.</p>
     </section>
     ${tuningView()}
@@ -148,13 +153,13 @@ function startView(): string {
 function joinHelp(kind: JoinKind): string {
   switch (kind) {
     case 'circumscribe':
-      return 'Rings the anchor. Its element is where the change goes, and it adds Force. Force past what the change needs multiplies Reach.'
+      return 'Rings the anchor. Its element is where the change goes. Adds its value as Force.'
     case 'link':
-      return 'Hangs beside the anchor. Adds Reach: how many kilos the rune works.'
+      return 'Hangs beside the anchor. Adds value × 0.2 kg of Reach.'
     case 'entwine':
-      return 'Laces through the anchor. Adds Ward against this term’s flare.'
+      return 'Laces through the anchor. Adds its value as Ward against this term’s flare.'
     case 'inscribe':
-      return 'Sits inside. Same element as the anchor: condenses a pool one grade. Any other: halves Reach for fine work.'
+      return 'Sits inside and adds its value as Force. Same element as the anchor: condenses a pool one grade. Any other: halves Reach, for small precise casts.'
   }
 }
 
@@ -256,10 +261,7 @@ function composerView(g: GameState, rune: Rune | null, preview: TermOutcome | nu
     const o = r.outputs
     const route = o.route ? o.route.map((e) => ELEMENT_NAME[e]).join(' → ') : 'Neutral'
     const forceLine = r.mode === 'none' ? num(o.force) : `${num(o.force)} <span class="of">/ ${num(r.required)}</span>`
-    const change =
-      r.mode === 'none'
-        ? `<p class="note">${esc(r.note)}</p>`
-        : `<p class="change"><span class="num">${kg(r.converted)}</span> ${GRADE_NAMES[r.source!.grade]} ${r.source!.elemental} → <span class="num">${kg(r.produced)}</span> ${r.mode === 'condense' ? GRADE_NAMES[r.target!.grade] + ' ' : ''}${r.target!.elemental}${r.efficiency < 1 ? ` <span class="warn">· Force short, ${pct(r.efficiency)}</span>` : r.efficiency > 1.001 ? ` <span class="good">· Force ×${r.efficiency.toFixed(2)}</span>` : ''}</p>`
+    const change = r.mode === 'none' ? `<p class="note">${esc(r.note)}</p>` : formulaView(r, g.settings.surplusForce) + tipView(g, rune, r)
     const after = preview.finished
       ? `<p class="after win">${pct(preview.share)} earth: clay. This cast finishes the commission.</p>`
       : `<p class="after">After mud acts: <b>${pct(preview.share)}</b> earth, ${esc(preview.substance)}${preview.share > CLAY_BAND[1] ? ' <span class="warn">(past clay)</span>' : ''}</p>`
@@ -297,6 +299,68 @@ function composerView(g: GameState, rune: Rune | null, preview: TermOutcome | nu
   </section>`
 }
 
+/** What a card would add to the rune under the selected join, or as the anchor. */
+function cardHint(h: Glyph): string {
+  if (ui.discarding) return `${h.sides} joins`
+  const anchor = ui.anchorId !== null ? glyphById(ui.anchorId) : undefined
+  if (!anchor) return `${h.value} Force · ${kg(h.value * REACH_PER_VALUE)}`
+  const apt = aptitude(h, ui.mode)
+  const star = apt > 1 ? ' ★' : ''
+  switch (ui.mode) {
+    case 'circumscribe':
+      return `+${num(h.value * apt)} Force${star}`
+    case 'link':
+      return `+${kg(h.value * REACH_PER_VALUE * apt)}${star}`
+    case 'entwine':
+      return `+${num(h.value * WARD_PER_VALUE * apt)} Ward${star}`
+    case 'inscribe':
+      return h.affinity === anchor.affinity && h.affinity !== 'none' ? `+${h.value} Force · condense` : `+${h.value} Force · ½ Reach`
+  }
+}
+
+/** The Reach × Force arithmetic, spelled out. */
+function formulaView(r: Resolution, surplus: boolean): string {
+  const o = r.outputs
+  const src = `${GRADE_NAMES[r.source!.grade]} ${r.source!.elemental}`
+  const tgt = `${r.mode === 'condense' ? GRADE_NAMES[r.target!.grade] + ' ' : ''}${r.target!.elemental}`
+  const capped = o.reach * r.efficiency > r.source!.kg + 1e-9
+  const wasted = !surplus && o.force > r.required
+  return `<p class="formula num">Reach ${kg(o.reach)} <span class="op">×</span> Force ${num(o.force)} <span class="op">÷</span> ${num(r.required)} needed <span class="op">=</span> <b>${kg(r.converted)}</b></p>
+    <p class="change">${src} → <b class="num">${kg(r.produced)}</b> ${tgt}${r.efficiency < 1 ? ' <span class="warn">· Force short</span>' : ''}${capped ? ' <span class="warn">· all there is</span>' : ''}${wasted ? ' <span class="warn">· extra Force wasted</span>' : ''}</p>`
+}
+
+/**
+ * Which join adds more right now. Reach and Force multiply, so the answer
+ * depends on the rune so far: compare the best link and the best
+ * circumscribe (one that keeps the same target) left in hand.
+ */
+function tipView(g: GameState, rune: Rune, r: Resolution): string {
+  if (r.mode !== 'transmute') return ''
+  if (rune.joins.length >= rune.anchor.sides) return ''
+  const target = r.outputs.route!.at(-1)
+  const used = new Set([rune.anchor.id, ...rune.joins.map((j) => j.glyph.id)])
+  const gain = (kind: JoinKind, glyph: Glyph) =>
+    resolve({ anchor: rune.anchor, joins: [...rune.joins, { kind, glyph }] }, g.pools, ui.poolKey, g.settings).converted - r.converted
+  let link: { glyph: Glyph; kg: number } | null = null
+  let circ: { glyph: Glyph; kg: number } | null = null
+  for (const h of g.hand) {
+    if (used.has(h.id)) continue
+    const l = gain('link', h)
+    if (!link || l > link.kg) link = { glyph: h, kg: l }
+    if (h.affinity === target || h.affinity === 'none') {
+      const c = gain('circumscribe', h)
+      if (!circ || c > circ.kg) circ = { glyph: h, kg: c }
+    }
+  }
+  const name = (x: { glyph: Glyph }) => `${ELEMENT_NAME[x.glyph.affinity]} ${x.glyph.value}`
+  const parts = [
+    link && link.kg > 0.005 ? `linking ${name(link)} adds <b class="num">${kg(link.kg)}</b>` : '',
+    circ && circ.kg > 0.005 ? `circumscribing ${name(circ)} adds <b class="num">${kg(circ.kg)}</b>` : '',
+  ].filter(Boolean)
+  if (!parts.length) return ''
+  return `<p class="tip">Next: ${parts.join('; ')}.</p>`
+}
+
 function handView(g: GameState): string {
   return `<section class="hand" aria-label="Hand">
     ${g.hand
@@ -307,7 +371,7 @@ function handView(g: GameState): string {
           <span class="card-value num">${h.value}</span>
           ${glyphSvg(h, 52)}
           <span class="card-name">${ELEMENT_NAME[h.affinity]}</span>
-          <span class="card-sides">${role ?? `${h.sides} joins`}</span>
+          <span class="card-sides">${role ?? cardHint(h)}</span>
         </button>`
       })
       .join('')}
@@ -351,6 +415,39 @@ function endView(g: GameState): string {
       </div>
     </div>
   </div>`
+}
+
+const ORDER = ['water', 'earth', 'air', 'fire', 'none']
+
+function deckView(g: GameState): string {
+  const where = new Map<number, 'hand' | 'draw' | 'discard'>()
+  g.hand.forEach((h) => where.set(h.id, 'hand'))
+  g.draw.forEach((h) => where.set(h.id, 'draw'))
+  g.discard.forEach((h) => where.set(h.id, 'discard'))
+  const all = [...g.hand, ...g.draw, ...g.discard].sort(
+    (a, b) => ORDER.indexOf(a.affinity) - ORDER.indexOf(b.affinity) || a.sides - b.sides || a.id - b.id,
+  )
+  const left = ORDER.map((e) => [e, g.draw.filter((h) => h.affinity === e).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([e, n]) => `<span style="color:${AFFINITY_VAR[e as keyof typeof AFFINITY_VAR]}">${n} ${ELEMENT_NAME[e].toLowerCase()}</span>`)
+    .join(' · ')
+  const label = { hand: 'Hand', draw: 'Draw', discard: 'Discard' }
+  return `<details class="panel deck-panel" data-panel="deck" ${ui.open.has('deck') ? 'open' : ''}>
+    <summary>Deck <span class="summary-note num">· draw ${g.draw.length} · discard ${g.discard.length}</span></summary>
+    <p class="deck-left">${g.draw.length ? `Still to draw: ${left}` : 'The draw pile is empty; the discard reshuffles next.'}</p>
+    <ul class="deck-list">
+      ${all
+        .map((h) => {
+          const at = where.get(h.id)!
+          return `<li class="deck-item at-${at}" style="--c:${AFFINITY_VAR[h.affinity]}">
+            ${glyphSvg(h, 30)}
+            <span class="deck-item-name">${ELEMENT_NAME[h.affinity]} <b class="num">${h.value}</b></span>
+            <span class="deck-item-at">${label[at]}</span>
+          </li>`
+        })
+        .join('')}
+    </ul>
+  </details>`
 }
 
 function historyView(g: GameState): string {
@@ -398,6 +495,7 @@ function gameView(g: GameState): string {
     ${composerView(g, rune, preview)}
     ${handView(g)}
     ${actionsView(g, rune, preview)}
+    ${deckView(g)}
     ${historyView(g)}
     ${tuningView()}
     ${endView(g)}

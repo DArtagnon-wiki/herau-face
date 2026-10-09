@@ -54,7 +54,7 @@ export interface IntentSettings {
   flareScale: number
 }
 
-const SEEP_KG = 1
+const SEEP_KG = 0.5
 const HARDEN_KG = 2
 
 export function rollIntent(rng: Rng, term: number, pools: Pool[], table: TableEntry[], settings: IntentSettings): Intent {
