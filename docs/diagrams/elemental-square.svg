@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 384" role="img" font-size="13">
+  <title>Water to air flips one quality; earth to air flips both</title>
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .edge { stroke: #9b988f; fill: none; stroke-width: 1.25; }
+    .edge-fill { fill: #9b988f; }
+    .ink { fill: #1f1e1b; }
+    .quiet { fill: #5f5e5a; }
+    @media (prefers-color-scheme: dark) {
+      .edge { stroke: #7d7a72; }
+      .edge-fill { fill: #7d7a72; }
+      .ink { fill: #ece9e1; }
+      .quiet { fill: #a9a69d; }
+    }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" class="edge-fill"/>
+    </marker>
+  </defs>
+  <text x="24" y="30" font-size="15" font-weight="600" class="ink">Water to air flips one quality; earth to air flips both</text>
+  <text x="200" y="72" text-anchor="middle" font-size="11.5" font-weight="600" class="quiet">Cold</text>
+  <text x="560" y="72" text-anchor="middle" font-size="11.5" font-weight="600" class="quiet">Hot</text>
+  <text x="48" y="124" font-size="11.5" font-weight="600" class="quiet">Dry</text>
+  <text x="48" y="304" font-size="11.5" font-weight="600" class="quiet">Wet</text>
+  <g class="edge">
+    <path d="M275 120H485" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+    <path d="M275 300H485" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+    <path d="M200 148V272" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+    <path d="M560 148V272" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  </g>
+  <g class="edge" stroke-dasharray="5 4">
+    <path d="M275 148L485 272" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+    <path d="M275 272L485 148" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  </g>
+  <rect x="125" y="92" width="150" height="56" rx="8" class="edge"/>
+  <text x="200" y="116" text-anchor="middle" font-weight="600" class="ink">Earth</text>
+  <text x="200" y="134" text-anchor="middle" font-size="11.5" class="quiet">cold and dry</text>
+  <rect x="485" y="92" width="150" height="56" rx="8" class="edge"/>
+  <text x="560" y="116" text-anchor="middle" font-weight="600" class="ink">Fire</text>
+  <text x="560" y="134" text-anchor="middle" font-size="11.5" class="quiet">hot and dry</text>
+  <rect x="125" y="272" width="150" height="56" rx="8" class="edge"/>
+  <text x="200" y="296" text-anchor="middle" font-weight="600" class="ink">Water</text>
+  <text x="200" y="314" text-anchor="middle" font-size="11.5" class="quiet">cold and wet</text>
+  <rect x="485" y="272" width="150" height="56" rx="8" class="edge"/>
+  <text x="560" y="296" text-anchor="middle" font-weight="600" class="ink">Air</text>
+  <text x="560" y="314" text-anchor="middle" font-size="11.5" class="quiet">hot and wet</text>
+  <text x="380" y="110" text-anchor="middle" font-size="11.5" class="quiet">cold ↔ hot · 1 step</text>
+  <text x="380" y="290" text-anchor="middle" font-size="11.5" class="quiet">cold ↔ hot · 1 step</text>
+  <text x="212" y="214" font-size="11.5" class="quiet">dry ↔ wet · 1 step</text>
+  <text x="572" y="214" font-size="11.5" class="quiet">dry ↔ wet · 1 step</text>
+  <text x="380" y="360" text-anchor="middle" font-size="11.5" class="quiet">Solid: one quality flips (1 step). Dashed: both flip (2 steps, the hard changes).</text>
+</svg>
