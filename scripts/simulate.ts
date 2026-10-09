@@ -10,6 +10,7 @@ import { CLAY_BAND, earthShare } from '../src/sim/commission'
 import { DEFAULT_SETTINGS, cast, discardRunes, newGame, previewTerm, type GameState, type Settings } from '../src/sim/game'
 import { canJoin } from '../src/sim/sigil'
 import { imbalance } from '../src/sim/table'
+import { balance, metricsOf } from '../src/sim/metrics'
 import type { JoinKind, Rune, Sigil } from '../src/sim/types'
 
 const args = process.argv.slice(2)
@@ -120,3 +121,17 @@ const buckets = [
 console.log(`won ${Math.round((100 * won.length) / games)}%  spent median ${pct(spent, 50)}, p90 ${pct(spent, 90)}  terms median ${pct(terms, 50)}, p90 ${pct(terms, 90)}  clay ${avg(won.map((r) => totalKg(r.state.pools)))} kg`)
 console.log(buckets.map(([label, f]) => `${label}: ${Math.round((100 * spent.filter(f).length) / games)}%`).join('  '))
 console.log(`discards used ${avg(runs.map((r) => r.discardsUsed))} · ward-only terms ${avg(runs.map((r) => r.wardOnlyTerms))}`)
+
+// Table metrics at the end of each commission, averaged.
+const played = runs.map((r) => metricsOf(r.state.history.map((t) => t.sigil)))
+const onTable = runs.map((r) => metricsOf(r.state.table.map((e) => e.sigil)))
+const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length)
+const f1 = (n: number) => n.toFixed(1)
+console.log('\nPer commission, played:')
+console.log(`  bodies   circles ${f1(mean(played.map((m) => m.bodies.circle)))} · crescents ${f1(mean(played.map((m) => m.bodies.crescent)))} · triangles ${f1(mean(played.map((m) => m.bodies.triangle)))} · sides ${f1(mean(played.map((m) => m.sides)))}`)
+console.log(`  gems     water ${f1(mean(played.map((m) => m.motes.water)))} · earth ${f1(mean(played.map((m) => m.motes.earth)))} · air ${f1(mean(played.map((m) => m.motes.air)))} · fire ${f1(mean(played.map((m) => m.motes.fire)))}`)
+console.log('Imbalance on the table at the end (Earth − Air, Water − Fire, total):')
+for (const measure of ['runes', 'motes', 'sides'] as const) {
+  const b = onTable.map((m) => balance(m, measure))
+  console.log(`  ${(measure === 'motes' ? 'gems' : measure).padEnd(6)} ${f1(mean(b.map((x) => x.earthAir)))}, ${f1(mean(b.map((x) => x.waterFire)))}, ${f1(mean(b.map((x) => x.total)))}`)
+}

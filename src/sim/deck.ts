@@ -39,7 +39,7 @@ export const cloneForge = (f: Forge): Forge => ({
   values: { ...f.values },
 })
 
-export const GEMS: Record<Elemental, string> = { water: 'Sapphire', earth: 'Topaz', air: 'Emerald', fire: 'Ruby' }
+export const GEMS: Record<Elemental, string> = { water: 'Sapphire', earth: 'Emerald', air: 'Topaz', fire: 'Ruby' }
 
 export const elementMote = (elemental: Elemental): Mote => ({ kind: 'element', elemental })
 export const LINK_MOTE: Mote = { kind: 'link' }

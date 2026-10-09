@@ -303,3 +303,28 @@ describe('the sandbox', () => {
     expect([...next.hand, ...next.draw]).toHaveLength(15)
   })
 })
+
+describe('table metrics', () => {
+  it('counts gems, bodies and sides, by element', async () => {
+    const { metricsOf, balance } = await import('./metrics')
+    const s1 = sigil(rune('water'), ['circumscribe', rune('earth')])
+    const s2 = sigil(rune('water', 'crescent'), ['circumscribe', rune('earth')], ['entwine', triangle()])
+    const m = metricsOf([s1, s2])
+    expect(m.runes).toBe(5)
+    expect(m.motes).toEqual({ earth: 2, water: 2, air: 0, fire: 0 })
+    expect(m.bodies).toEqual({ circle: 3, crescent: 1, triangle: 1 })
+    expect(m.sides).toBe(1 + 1 + 2 + 1 + 3)
+    expect(m.sidesBy.water).toBe(3)
+    expect(m.sidesBy.none).toBe(3)
+    expect(balance(m, 'sides')).toEqual({ earthAir: 2, waterFire: 3, total: 5 })
+    expect(balance(m, 'motes').total).toBe(4)
+  })
+
+  it('counts every gem a rune holds', async () => {
+    const { metricsOf } = await import('./metrics')
+    const twoGems = makeRune(nextId++, { body: 'triangle', motes: [elementMote('fire'), elementMote('water'), LINK_MOTE] })
+    const m = metricsOf([sigil(twoGems)])
+    expect(m.motes).toEqual({ earth: 0, water: 1, air: 0, fire: 1 })
+    expect(m.runesBy.fire).toBe(1)
+  })
+})

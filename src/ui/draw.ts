@@ -234,3 +234,9 @@ export function vesselSvg(pools: Pool[], table: TableEntry[], earth: number, opt
 
   return `<svg class="vessel-svg" viewBox="-164 -164 328 328" role="img" aria-label="The amalgam and the table">${parts.join('')}</svg>`
 }
+
+/** A small outline of a body, for table headers. */
+export function bodyIcon(body: Body, size = 16): string {
+  const r = size * 0.42
+  return `<svg class="body-icon" viewBox="${-size / 2} ${-size / 2} ${size} ${size}" width="${size}" height="${size}" aria-hidden="true"><path d="${bodyPath(body, r)}" fill="none" stroke="var(--ink)" stroke-width="1.3" stroke-linejoin="round"/></svg>`
+}

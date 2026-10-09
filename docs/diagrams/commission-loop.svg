@@ -32,7 +32,7 @@
   <text x="113" y="116" text-anchor="middle" font-weight="600" class="ink">Reveal and draw</text>
   <text x="113" y="134" text-anchor="middle" font-size="11.5" class="quiet">action, then hand</text>
   <rect x="216" y="92" width="150" height="56" rx="8" class="edge"/>
-  <text x="291" y="116" text-anchor="middle" font-weight="600" class="ink">Compose rune</text>
+  <text x="291" y="116" text-anchor="middle" font-weight="600" class="ink">Compose sigil</text>
   <text x="291" y="134" text-anchor="middle" font-size="11.5" class="quiet">anchor plus joins</text>
   <rect x="394" y="92" width="150" height="56" rx="8" class="edge"/>
   <text x="469" y="116" text-anchor="middle" font-weight="600" class="ink">Cast</text>

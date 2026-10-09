@@ -28,7 +28,7 @@ A rune is a body holding motes. The body sets power, links and bowls; the motes 
 
 | Mote | Effect |
 | --- | --- |
-| Basic sapphire, topaz, emerald, ruby | Sets the element: water, earth, air, fire |
+| Basic sapphire, emerald, topaz, ruby | Sets the element: water, earth, air, fire |
 | Link mote | +1 link |
 | Reach mote | The sigil's Reach ×1.5 |
 | Guard mote | +4 Ward |
@@ -36,6 +36,12 @@ A rune is a body holding motes. The body sets power, links and bowls; the motes 
 The standard deck is 14 runes: 8 circles (two of each element), 4 crescents (one of each element, each with a link mote) and 2 elementless triangles (a link, a reach and a guard mote). The opening hand always holds a water and an earth; the rest of the shuffle is random.
 
 **Links** are how many runes the anchor holds, so a circle anchor makes a two-rune sigil and a crescent or triangle anchor makes three. Links on joined runes do nothing until that rune anchors. A first version treated links as connections, so 2-link runes extended any sigil for free; the simulator showed typical hands building five- and six-rune sigils and finishing in one term.
+
+### Table metrics
+
+A Table metrics panel counts what's on the table, or everything played this commission, by element and body: runes, gems (every element mote, so a rune with two gems counts twice) and sides (circle 1, crescent 2, triangle 3). It shows Earth − Air, Water − Fire and total imbalance under each of the three measures; strain still uses runes. "Copy the per-term record" copies a CSV with one row per term: the sigil, what it cost, and every measure on the table and played so far. `npm run simulate` prints the same measures averaged over many commissions.
+
+With the standard deck, runes and gems always agree, because every elemental rune holds exactly one gem; they only diverge with multi-gem runes from the sandbox. Sides weight crescents and triangles more.
 
 ### Sandbox
 
@@ -72,3 +78,5 @@ The Sandbox panel changes the commission in progress, live: each body's power, l
 | Careless (never wards on purpose) | 3 | 5% | 42% | 49% | 5% |
 
 A careful player wards instead of transmuting in 1–2 terms a commission. With the doc's capped formula, the careful player wins only 51% of commissions.
+
+Per commission, the careful player plays about 6 circles, 4.4 crescents and 2.2 triangles (21 sides), and 3.6 water, 4.0 earth, 1.5 air and 1.3 fire gems. Air and fire go mostly into entwines. Relative to the deck, it plays crescents and triangles at about twice the circles' rate, because only they make three-rune sigils. At the end, the table is out of balance by 4.4 runes and 6.2 sides on average; a player who never wards leaves 6.3 and 8.5.

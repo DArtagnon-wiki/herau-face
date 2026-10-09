@@ -7,7 +7,8 @@ import { DEFAULT_SETTINGS, cast, discardRunes, invalidReason, newGame, payment, 
 import { REACH_PER_POWER, WARD_PER_POWER, candidatePools, canJoin, openLinks, resolve, type Resolution } from './sim/sigil'
 import { slumpTarget, strain, tally } from './sim/table'
 import type { Body, Elemental, JoinKind, Rune, Sigil } from './sim/types'
-import { AFFINITY_VAR, moteColor, runeSvg, sigilSvg, vesselSvg } from './ui/draw'
+import { AFFINITY_VAR, bodyIcon, moteColor, runeSvg, sigilSvg, vesselSvg } from './ui/draw'
+import { AFFINITIES, SIDES, balance, metricsOf, type Measure } from './sim/metrics'
 
 // ---------------------------------------------------------------------------
 // State
@@ -30,6 +31,11 @@ interface UI {
   flash: string
   /** Which collapsible panels are open, so re-rendering keeps them open. */
   open: Set<string>
+  /** Table metrics: what is on the table now, or everything played this commission. */
+  scope: 'table' | 'played'
+  /** The per-term record, shown as text when the clipboard refuses it. */
+  csv: string
+  copied: boolean
 }
 
 const ui: UI = {
@@ -45,7 +51,10 @@ const ui: UI = {
   discarding: false,
   marked: new Set(),
   flash: '',
-  open: new Set(['sandbox']),
+  open: new Set(['sandbox', 'metrics']),
+  scope: 'table',
+  csv: '',
+  copied: false,
 }
 
 const JOINS: { kind: JoinKind; label: string; gives: string }[] = [
@@ -484,6 +493,84 @@ function deckView(g: GameState): string {
 }
 
 // ---------------------------------------------------------------------------
+// Table metrics
+
+const MEASURES: { key: Measure; label: string }[] = [
+  { key: 'runes', label: 'Runes' },
+  { key: 'motes', label: 'Gems' },
+  { key: 'sides', label: 'Sides' },
+]
+const signed = (n: number) => (n > 0 ? `+${n}` : String(n))
+
+function metricsView(g: GameState): string {
+  const sigils = ui.scope === 'table' ? g.table.map((e) => e.sigil) : g.history.map((t) => t.sigil)
+  const m = metricsOf(sigils)
+  const cell = (n: number) => `<td class="num ${n ? '' : 'zero'}">${n}</td>`
+  const rows = AFFINITIES.map((a) => {
+    const name = a === 'none' ? 'No element' : ELEMENT_NAME[a]
+    const gems = a === 'none' ? '<td class="zero">–</td>' : cell(m.motes[a])
+    return `<tr><th scope="row" style="color:${AFFINITY_VAR[a]}">${name}</th>${cell(m.runesBy[a])}${gems}${BODY_LIST.map((b) => cell(m.grid[a][b])).join('')}${cell(m.sidesBy[a])}</tr>`
+  }).join('')
+  const gemsTotal = Object.values(m.motes).reduce((x, y) => x + y, 0)
+  const totals = `<tr class="total"><th scope="row">Total</th>${cell(m.runes)}${cell(gemsTotal)}${BODY_LIST.map((b) => cell(m.bodies[b])).join('')}${cell(m.sides)}</tr>`
+  const bal = MEASURES.map((x) => ({ ...x, b: balance(m, x.key) }))
+  return `<details class="panel metrics" data-panel="metrics" ${ui.open.has('metrics') ? 'open' : ''}>
+    <summary>Table metrics <span class="summary-note num">· ${m.sigils} sigil${m.sigils === 1 ? '' : 's'}, ${m.runes} rune${m.runes === 1 ? '' : 's'}</span></summary>
+    <div class="seg two" role="group" aria-label="Count">
+      <button data-act="scope" data-scope="table" class="${ui.scope === 'table' ? 'is-on' : ''}" aria-pressed="${ui.scope === 'table'}">On the table</button>
+      <button data-act="scope" data-scope="played" class="${ui.scope === 'played' ? 'is-on' : ''}" aria-pressed="${ui.scope === 'played'}">Played this commission</button>
+    </div>
+    <div class="table-wrap">
+      <table class="mtable">
+        <thead><tr><th></th><th scope="col">Runes</th><th scope="col">Gems</th>${BODY_LIST.map((b) => `<th scope="col" title="${BODY_NAMES[b]}s">${bodyIcon(b)}<span class="sr">${BODY_NAMES[b]}s</span></th>`).join('')}<th scope="col">Sides</th></tr></thead>
+        <tbody>${rows}${totals}</tbody>
+      </table>
+    </div>
+    <div class="table-wrap">
+      <table class="mtable balance-table">
+        <thead><tr><th></th>${bal.map((x) => `<th scope="col">${x.label}</th>`).join('')}</tr></thead>
+        <tbody>
+          <tr><th scope="row">Earth − Air</th>${bal.map((x) => `<td class="num">${signed(x.b.earthAir)}</td>`).join('')}</tr>
+          <tr><th scope="row">Water − Fire</th>${bal.map((x) => `<td class="num">${signed(x.b.waterFire)}</td>`).join('')}</tr>
+          <tr class="total"><th scope="row">Imbalance</th>${bal.map((x) => `<td class="num">${x.b.total}</td>`).join('')}</tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="fine">Sides count circle 1, crescent ${SIDES.crescent}, triangle ${SIDES.triangle}. Gems counts every gem a rune holds; runes count by the first. Strain uses runes: every 2 points of imbalance past 2 add 1 a term.</p>
+    <div class="row"><button data-act="copy-csv" ${g.history.length ? '' : 'disabled'}>${ui.copied ? 'Copied' : 'Copy the per-term record'}</button></div>
+    ${ui.csv ? `<textarea class="csv" id="csv-out" readonly rows="6" aria-label="Per-term record as CSV">${esc(ui.csv)}</textarea><p class="fine">Copying was blocked here, so the record is above: select it and copy.</p>` : ''}
+  </details>`
+}
+
+function sigilSummary(sg: Sigil): string {
+  const name = (r: Rune) => `${r.affinity === 'none' ? '' : ELEMENT_NAME[r.affinity] + ' '}${BODY_NAMES[r.body].toLowerCase()}`
+  const join: Record<JoinKind, string> = { circumscribe: 'circ', side: 'side', entwine: 'entwine', inscribe: 'insc' }
+  return [name(sg.anchor), ...sg.joins.map((j) => `${join[j.kind]} ${name(j.rune)}`)].join(' + ')
+}
+
+/** One row per term: what was cast, what it cost, and every balance measure after it. */
+function recordCsv(g: GameState): string {
+  const els = ['water', 'earth', 'air', 'fire'] as const
+  const head = [
+    'term', 'sigil', 'earth_share', 'flare', 'strain', 'ward', 'paid',
+    ...els.map((e) => `table_runes_${e}`), ...els.map((e) => `table_gems_${e}`), ...[...els, 'none'].map((e) => `table_sides_${e}`),
+    'table_circles', 'table_crescents', 'table_triangles', 'table_imb_runes', 'table_imb_gems', 'table_imb_sides',
+    ...els.map((e) => `played_gems_${e}`), 'played_circles', 'played_crescents', 'played_triangles', 'played_sides', 'played_imb_gems', 'played_imb_sides',
+  ]
+  const rows = g.history.map((t, i) => {
+    const tm = metricsOf(t.table.map((e) => e.sigil))
+    const pm = metricsOf(g.history.slice(0, i + 1).map((x) => x.sigil))
+    return [
+      t.term, `"${sigilSummary(t.sigil)}"`, t.share.toFixed(3), t.flare, t.strain, num(t.ward), num(t.paid),
+      ...els.map((e) => tm.runesBy[e]), ...els.map((e) => tm.motes[e]), ...[...els, 'none' as const].map((e) => tm.sidesBy[e]),
+      tm.bodies.circle, tm.bodies.crescent, tm.bodies.triangle, balance(tm, 'runes').total, balance(tm, 'motes').total, balance(tm, 'sides').total,
+      ...els.map((e) => pm.motes[e]), pm.bodies.circle, pm.bodies.crescent, pm.bodies.triangle, pm.sides, balance(pm, 'motes').total, balance(pm, 'sides').total,
+    ].join(',')
+  })
+  return [head.join(','), ...rows].join('\n')
+}
+
+// ---------------------------------------------------------------------------
 // Sandbox
 
 const BOUNDS: Record<string, [number, number, number]> = {
@@ -657,6 +744,8 @@ function gameView(g: GameState): string {
       ${balanceView(g, preview)}
     </section>
 
+    ${metricsView(g)}
+
     ${lastTermView(g)}
     ${composerView(g, sigil, preview)}
     ${handView(g)}
@@ -802,6 +891,34 @@ root.addEventListener('click', (e) => {
       startGame(ui.seed)
       window.scrollTo({ top: 0 })
       break
+    case 'scope':
+      ui.scope = el.dataset.scope as 'table' | 'played'
+      break
+    case 'copy-csv': {
+      if (!g) break
+      const csv = recordCsv(g)
+      ui.csv = ''
+      try {
+        navigator.clipboard
+          .writeText(csv)
+          .then(() => {
+            ui.copied = true
+            render()
+            setTimeout(() => {
+              ui.copied = false
+              render()
+            }, 1600)
+          })
+          .catch(() => {
+            ui.csv = csv
+            render()
+            ;(document.getElementById('csv-out') as HTMLTextAreaElement | null)?.select()
+          })
+      } catch {
+        ui.csv = csv
+      }
+      break
+    }
     case 'to-sandbox':
       e.preventDefault()
       ui.open.add('sandbox')
