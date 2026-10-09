@@ -4,7 +4,7 @@ Last updated Oct 9, 2026. Started Oct 7, 2026.
 
 ## Overview
 
-A roguelike deckbuilder in the spirit of Balatro: each term you compose a sigil from the runes in your hand, and each encounter is an alchemical transmutation. Every term makes the work more unstable, and the run ends when you can no longer pay quintessence to hold it together.
+A roguelike deckbuilder in the spirit of Balatro: each term you compose sigils from the runes in your hand until it is spent, and each encounter is an alchemical transmutation. Every term makes the work more unstable, and the run ends when you can no longer pay quintessence to hold it together.
 
 **Design pillars**
 
@@ -27,7 +27,7 @@ A roguelike deckbuilder in the spirit of Balatro: each term you compose a sigil 
 | Power | A rune's strength, set by its body. Each join turns it into Force, Reach or Ward. |
 | Links | How many runes a rune holds when it anchors a sigil. |
 | Sides | A count per body: circle 1, crescent 2, triangle 3. Tracked in the prototype as a candidate balance measure. |
-| Sigil | What the player casts in one term: an anchor plus joined runes, up to the anchor's links. |
+| Sigil | One cast: an anchor plus joined runes, up to the anchor's links. A term can hold several. |
 | Anchor | The rune a sigil is built from; its element is the source of the change. |
 | Join | How a rune attaches to the anchor: circumscribe, side link, entwine or inscribe. Each does something different. |
 | Table (leaning) | The diagram that collects every sigil cast in a commission; balance is measured from it. |
@@ -113,6 +113,17 @@ Leaning: each play is a floating sigil, an anchor plus joined runes up to the an
 | Inscribe | Power as Force; condenses if it matches the anchor's element, otherwise halves Reach for fine control | Precision |
 
 The anchor adds its power as Force and power × 0.2 kg of Reach. Kilos converted = Reach × Force ÷ the Force the change needs, so Force past the requirement multiplies Reach. The original formula capped Force at the requirement; under the cap, the standard deck won only half its commissions against mud in simulation.
+
+**Few, large sigils.** A term lasts until the hand is spent or the player ends it. Reach and Force multiply, so runes are worth more in one sigil than spread across several. The same six power-5 runes, a Water anchor working weak water into earth:
+
+| Six runes cast as | Water moved |
+| --- | --- |
+| Three 2-rune sigils | 6 kg |
+| Two 3-rune sigils | 8 kg |
+| One 5-rune sigil, one rune left over | 9 kg |
+| One 6-rune sigil | 12 kg |
+
+Links therefore compound, and the expected play is one or two high-link sigils a term. A rune left out, or a stray warding sigil made from leftovers, is fine; nothing needs to use up every rune. Traces still suit small sigils, since one basic sigil already moves about 1 kg of a 2 kg trace.
 
 **Rules**
 
@@ -239,7 +250,7 @@ R is the sigil's Reach and F its Force. W is the selected pool's weight in kg an
 The commission's flares are the main threat. Ward from the term's sigils absorbs part of each flare and the rest is paid in quintessence; when quintessence runs out, the run is over.
 
 - **Large flares, partial coverage.** Flares should be big enough that Ward rarely covers all of one, so splitting power between progress and defence is a decision nearly every term.
-- **Split the hand.** Several sigils a term let the player divide the hand between progress and defence. A careful player casts about two a term.
+- **Spend the hand.** The player casts until the hand is spent, or ends the term early. Most runes go into one or two large sigils; a leftover rune waits in hand or makes a small warding sigil. With the starting deck's links, a careful simulated player casts about two a term.
 - **Quintessence does one job.** It is spent only to stabilize, so it never competes with upgrades.
 - **Defending has a hidden cost.** A rune spent on Ward moves no material, so the commission takes more terms and faces more actions.
 - **Units.** A stock of 100, with flares of 11–15 rising by 1 a term in the prototype, gives partial coverage room to matter.
@@ -342,7 +353,7 @@ Circumgician is built on Pixi.js, TypeScript and Vite, and most of its look is g
 | --- | --- |
 | Which measure of table balance: runes, elemental motes, or sides? | The prototype tracks all three; strain counts runes for now |
 | How do symmetry classes map onto bodies and motes? | Open |
-| How many sigils a term, and how big a hand? | Prototype: as many as a 6-rune hand allows; a 5-rune hand was too punishing against mud with traces |
+| How many sigils a term, and how big a hand? | Settled: as many as the hand allows, with one or two high-link sigils expected. Hand size is open: 6 in the prototype, where 5 was too punishing against mud with traces |
 | What grade are trace elementals? | Prototype: medium, so one basic sigil removes about 1 kg and lands in band |
 | Do links on joined runes ever count? | No, only the anchor's, so starting sigils stay at two or three runes |
 | Floating sigils, the table, or both? | Both: each sigil takes effect, then stays on the table |
