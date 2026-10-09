@@ -380,3 +380,5 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--gilt); }
 .range-cell { white-space: nowrap; }
 .range-cell input { width: 44px; }
 .range-cell span { padding-inline: 3px; color: var(--ink-faint); }
+.presets { display: grid; gap: 6px; margin: 4px 0 14px; }
+.presets .fine { margin: 0; }

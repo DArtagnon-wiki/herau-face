@@ -7,6 +7,9 @@ import { DEFAULT_SETTINGS, cast, discardRunes, endTerm, fairOpening, invalidReas
 import { REACH_PER_POWER, canJoin, openLinks, outputs, resolve } from './sigil'
 import { imbalance, slumpTarget, strain, type TableEntry } from './table'
 import type { Affinity, Body, JoinKind, Pool, Rune, Sigil } from './types'
+import { PRESETS, presetByKey } from './presets'
+import { totalKg } from './alchemy'
+import { buildDeck } from './deck'
 
 const capped = { surplusForce: false }
 const R = REACH_PER_POWER
@@ -385,5 +388,34 @@ describe('sandbox compositions', () => {
     let s = newGame(undefined, 31)
     s = setTarget(s, { earth: { min: 0.4, max: 0.5 }, water: { min: 0, max: 1 }, air: { min: 0, max: 1 }, fire: { min: 0, max: 1 } })
     expect(inBand(s.pools, s.target)).toBe(true)
+  })
+})
+
+describe('decks along a run', () => {
+  it('keeps the standard deck size at every point', () => {
+    for (const p of PRESETS) expect(p.setup().deck).toHaveLength(14)
+  })
+
+  it('gives the late deck six-rune anchors', () => {
+    const late = presetByKey('late')!.setup()
+    const deck = buildDeck(late.deck, late.forge)
+    const anchors = deck.filter((r) => r.body === 'triangle' && r.affinity !== 'none')
+    expect(anchors).toHaveLength(4)
+    for (const a of anchors) {
+      expect(a.links).toBe(5)
+      expect(a.reachMult).toBe(DEFAULT_FORGE.values.reach)
+    }
+  })
+
+  it('loops earth through air and fire back to earth at ×40, turning mud into clay in one cast', () => {
+    const late = presetByKey('late')!.setup()
+    const deck = buildDeck(late.deck, late.forge)
+    const find = (e: Affinity, body: Body) => deck.find((r) => r.affinity === e && r.body === body)!
+    const s = sigil(find('earth', 'triangle'), ['circumscribe', find('air', 'circle')], ['circumscribe', find('fire', 'circle')], ['circumscribe', find('earth', 'circle')], ...deck.filter((x) => x.affinity === 'water' && x.body === 'circle').map((x): [JoinKind, Rune] => ['side', x]))
+    const r = resolve(s, late.start)
+    expect(r.yieldFactor).toBe(40)
+    expect(r.produced).toBeCloseTo(r.converted * 40)
+    expect(inBand(r.pools, late.target)).toBe(true)
+    expect(totalKg(r.pools)).toBeGreaterThan(100)
   })
 })

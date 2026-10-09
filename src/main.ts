@@ -10,6 +10,7 @@ import type { Body, Elemental, Grade, JoinKind, Pool, Rune, Sigil } from './sim/
 import type { TableEntry } from './sim/table'
 import { AFFINITY_VAR, bodyIcon, moteColor, runeSvg, sigilSvg, vesselSvg } from './ui/draw'
 import { AFFINITIES, SIDES, balance, metricsOf, type Measure } from './sim/metrics'
+import { PRESETS, presetByKey } from './sim/presets'
 
 // ---------------------------------------------------------------------------
 // State
@@ -19,6 +20,8 @@ interface UI {
   settings: Settings
   /** The forge and deck the next commission starts from. */
   setup: Setup
+  /** The deck along a run the setup was last loaded from. */
+  preset: string
   /** Which rune the sandbox is editing: an id, a new rune, or none. */
   editing: number | 'new' | null
   draft: RuneSpec
@@ -42,6 +45,7 @@ interface UI {
 const ui: UI = {
   game: null,
   setup: standardSetup(),
+  preset: 'opening',
   editing: null,
   draft: { body: 'circle', motes: [{ kind: 'element', elemental: 'water' }] },
   settings: { ...DEFAULT_SETTINGS },
@@ -166,13 +170,33 @@ function deckGroups(setup: Setup): string {
     if (!all.length) return ''
     const spec = setup.forge.bodies[body]
     const distinct = all.filter((r, i) => all.findIndex((x) => JSON.stringify(x.motes) === JSON.stringify(r.motes)) === i)
-    const motes = distinct.map((r) => r.motes.map((m) => moteEffect(m, setup.forge.values)).join(' + ') || 'empty').join(' · ')
+    const effects = (r: Rune) => {
+      const counts = new Map<string, number>()
+      for (const m of r.motes) {
+        const e = moteEffect(m, setup.forge.values)
+        counts.set(e, (counts.get(e) ?? 0) + 1)
+      }
+      return [...counts].map(([e, n]) => (n > 1 && e === '+1 link' ? `+${n} links` : n > 1 ? `${e} ×${n}` : e)).join(' + ') || 'empty'
+    }
+    const motes = distinct.map(effects).join(' · ')
     return `<li class="deck-group">
       <span class="deck-group-runes">${distinct.slice(0, 4).map((r) => runeSvg(r, 40)).join('')}</span>
       <span class="deck-group-name"><b class="num">${all.length}</b> ${BODY_NAMES[body].toLowerCase()}${all.length === 1 ? '' : 's'} <span class="deck-group-spec num">· power ${spec.power} · ${linksWord(spec.links)} · ${spec.bowls} bowl${spec.bowls === 1 ? '' : 's'}</span></span>
       <span class="deck-group-line">${motes}</span>
     </li>`
   }).join('')
+}
+
+/** Decks from points along a run: the opening deck, one mid-run and one late. */
+function presetView(): string {
+  const cur = presetByKey(ui.preset)
+  return `<div class="presets">
+    <span class="label">Deck from a point in the run</span>
+    <div class="seg" role="group" aria-label="Deck from a point in the run">${PRESETS.map(
+      (p) => `<button data-act="preset" data-key="${p.key}" class="${p.key === ui.preset ? 'is-on' : ''}" aria-pressed="${p.key === ui.preset}">${p.name.replace(' deck', '')}</button>`,
+    ).join('')}</div>
+    ${cur ? `<p class="fine">${cur.note}${cur.key === 'late' ? ' Try an earth anchor ringed by air, then fire, then earth: the loop multiplies earth ×40.' : ''}</p>` : ''}
+  </div>`
 }
 
 function startView(): string {
@@ -186,6 +210,7 @@ function startView(): string {
 
     <section class="panel">
       <h2>Your deck</h2>
+      ${presetView()}
       <ul class="deck-groups">${deckGroups(ui.setup)}</ul>
       <p class="fine">Gems set the element: ${Object.entries(GEMS).map(([e, g]) => `${g.toLowerCase()} is ${e}`).join(', ')}. A link mote adds a link, a reach mote multiplies the sigil’s Reach, and a guard mote adds Ward. The deck is the same each time; the shuffle is not, though your opening hand always has a water and an earth. Once you begin, the Sandbox panel can change any of it.</p>
       <button class="primary wide" data-act="start">Begin the commission</button>
@@ -235,7 +260,7 @@ function tuningView(): string {
       <label class="check"><input type="checkbox" id="tune-surplus" ${s.surplusForce ? 'checked' : ''}> Surplus Force multiplies Reach</label>
       <label>Flare size <select id="tune-flare">${opt(0.75, s.flareScale, '×0.75')}${opt(1, s.flareScale, '×1')}${opt(1.25, s.flareScale, '×1.25')}${opt(1.5, s.flareScale, '×1.5')}</select></label>
       <label>Quintessence <select id="tune-stock">${opt(60, s.stock)}${opt(100, s.stock)}${opt(140, s.stock)}</select></label>
-      <label>Hand size <select id="tune-hand">${[4, 5, 6, 7, 8].map((v) => opt(v, s.handSize)).join('')}</select></label>
+      <label>Hand size <select id="tune-hand">${[4, 5, 6, 7, 8, 9, 10].map((v) => opt(v, s.handSize)).join('')}</select></label>
       <label>Sigils a term <select id="tune-casts">${opt(1, s.castsPerTerm)}${opt(2, s.castsPerTerm)}${opt(3, s.castsPerTerm)}${opt(0, s.castsPerTerm, 'Any number')}</select></label>
       <label>Discards <select id="tune-discards">${opt(1, s.discards)}${opt(2, s.discards)}${opt(3, s.discards)}</select></label>
     </div>
@@ -771,6 +796,10 @@ function sandboxView(g: GameState): string {
       ${editorView(g)}
       <p class="fine">New runes join the deck. Restarting keeps every change here. <button class="link-btn" data-act="sb-standard">Restart with the standard deck</button></p>
     </div>
+    <div class="sb-section">
+      <h3>Decks along a run</h3>
+      ${presetView()}
+    </div>
   </details>`
 }
 
@@ -1092,10 +1121,25 @@ root.addEventListener('click', (e) => {
         ui.editing = null
       }
       break
+    case 'preset': {
+      const p = presetByKey(el.dataset.key!)
+      if (!p) break
+      readTuning()
+      ui.preset = p.key
+      ui.settings.handSize = p.handSize
+      ui.setup = p.setup()
+      if (g) {
+        ui.game = null
+        startGame()
+        window.scrollTo({ top: 0 })
+      }
+      break
+    }
     case 'sb-standard':
       readTuning()
       ui.game = null
       ui.setup = standardSetup()
+      ui.preset = 'opening'
       startGame()
       window.scrollTo({ top: 0 })
       break

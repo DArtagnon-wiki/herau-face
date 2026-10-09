@@ -180,6 +180,37 @@ Runes improve by changing what their bowls hold; the deck grows by earning new r
 - **Formulae (proposed).** Consumables that level up a join type, like Balatro's planet cards.
 - **Apparatus (proposed).** Passive modifiers in limited slots, like Balatro's jokers, named for alchemical vessels. Examples: an athanor that adds Force to changes ending in Fire; an alembic that raises Water→Air yield.
 
+## Power arc
+
+By the end of a run the player should crush the commissions that once pushed them: mud to clay in one term, two at most, or played on at leisure to make far more clay than the mud held. The prototype's late-run deck does both.
+
+**Targets**
+
+- A run is 20 or more commissions, and difficulty rises and falls rather than climbing steadily (see Run structure).
+- Late in a run, mud to clay takes one term, two at most.
+- Or the player plays around, generating huge amounts of new mass before finishing.
+
+**Measured in the prototype.** Three decks stand for points along a run. Each keeps the standard 14 runes and upgrades a few, about one upgrade per commission. Simulated, 100 commissions each:
+
+| Deck | Upgrades | Hand | Median terms | Done in 1 term | In 2 or fewer | Quintessence spent (median) | Clay made |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Opening | 0 | 6 | 6 | 0% | 0% | 5 | 35 kg |
+| Mid-run | About 10 | 7 | 3 | 0% | 17% | 0 | 54 kg |
+| Late-run | About 20 | 8 | 1 | 59% | 99% | 0 | 91 kg |
+| Late-run, 10-rune hand | About 20 | 10 | 1 | 91% | 100% | 0 | 106 kg |
+
+Mid-run, each crescent becomes a triangle with two link motes, so it anchors four-rune sigils. Late-run, triangles hold six bowls, and each elemental triangle carries four link motes and a reach mote, so it anchors six-rune sigils.
+
+**Ring chains are the mass engine.** A chain of circumscribes that loops back to the anchor's element multiplies the yields along it: earth → air → fire → earth is 20 × 1 × 2 = ×40. One late sigil, an earth anchor ringed by air, fire and earth with a side link, turned 2.7 kg of earth into 108 kg and finished mud as 145 kg of clay. The new earth dilutes the traces into their band, so one cast fixes everything. A loop needs three rings, so it opens only once an anchor holds three links. A simulated player that held off finishing grew the late deck's clay to 440 kg, 11 times the mud, in a median 7 terms for 2 quintessence.
+
+**Levers**
+
+- **Hand size moves one-term finishes most.** Finishing takes a bulk sigil plus trace fixes, so the right runes must be in hand together. With every rune given four extra links, one-term finishes rose from 42% with a 6-rune hand to 85% with 8 and 96% with 10.
+- **Links open chains, then level off.** Six extra links did no better than four.
+- **Raw power hurts precision.** Power 8 instead of 5 cut one-term finishes from 85% to 52%, because the smallest sigil then overshoots a 2 kg trace. Fine tools must grow with power.
+- **The counter-curve** is later commissions' weight and grade: heavy ×2 and inert ×4 raise the Force every change needs.
+- **Greed is cheap so far.** Flares rising by 1 a term barely tax a long commission. If extra product should carry risk, escalation needs teeth.
+
 ## Challenge system: transmutation
 
 Each commission is an amalgam to bring to a target constitution. Difficulty comes from how much there is (weight), how hard each pool is to change (grade), and how many elementals must be steered at once. Mud, as prototyped:
@@ -313,7 +344,7 @@ Water to Earth flips wet to dry (1 step), so required Force is 10 × 0.5 (weak w
 
 ## Run structure
 
-A run climbs material tiers, each ending in a stubborn boss substance, toward the Great Work: lead into gold. All of this is proposed.
+A run is 20 or more commissions across four material tiers, five or six to a tier, each tier ending in a stubborn boss substance, toward the Great Work: lead into gold. Difficulty rises and falls: each tier climbs to its boss, the next tier opens below that peak, and earlier sources return as easy commissions where a strong deck makes far more product. All of this is proposed.
 
 | Tier | Example commissions | New pressure |
 | --- | --- | --- |
@@ -364,5 +395,6 @@ Circumgician is built on Pixi.js, TypeScript and Vite, and most of its look is g
 | Are non-target stable states worth anything? | Tracked, not rewarded, in the first cut; decide from playtest data |
 | Can a player end a commission early with partial product? | Yes, at reduced reward, so a poor encounter still makes progress |
 | What is condensing's yield? | 2 kg in, 1 kg out per grade |
-| Is routing through chained circumscribes too strong? | Tune step costs once more commissions are playable |
+| Is routing through chained circumscribes too strong? | They are the late-run mass engine: earth → air → fire → earth is ×40. Links gate them; tune step costs and yields if loops arrive too early |
 | Names: working title, the currency? | Open. Settled: a card is a rune; what you cast is a sigil |
+| Does a commission finish the moment it is in band, or when the player seals it? | Prototype: the moment it is in band, so making extra product means working off-spec and landing at the end. A seal action would let players grow product in band while flares keep rising |

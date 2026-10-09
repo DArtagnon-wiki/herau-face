@@ -13,6 +13,10 @@ npm install
 npm run dev        # play locally
 npm test           # rules tests
 npm run simulate   # a simulated player through many commissions
+npm run simulate -- --deck late           # a deck from late in a run (opening, mid, late)
+npm run simulate -- --links 4 --hand 10   # every body +4 links, a 10-rune hand (also --power)
+npm run simulate -- --deck late --farm 250  # grow the clay to 250 kg before finishing
+npm run simulate -- --trace 3             # print the first 3 commissions cast by cast
 npm run build      # dist/index.html, one self-contained page
 ```
 
@@ -47,7 +51,7 @@ With the standard deck, runes and gems always agree, because every elemental run
 
 ### Sandbox
 
-The Sandbox panel changes the commission in progress, live: the mud's starting composition (kg and grade per element, which resets the amalgam) and the target bands; each body's power, links and bowls; the reach and guard mote values; any rune's body and motes, wherever it is in the deck; new runes straight into the hand; and removing runes. Restarting keeps every change, and "Restart with the standard deck" undoes them. The Tuning panel covers the rest: table strain, surplus Force, flare size, quintessence, hand size, sigils a term and discards.
+The Sandbox panel changes the commission in progress, live: the mud's starting composition (kg and grade per element, which resets the amalgam) and the target bands; each body's power, links and bowls; the reach and guard mote values; any rune's body and motes, wherever it is in the deck; new runes straight into the hand; and removing runes. Restarting keeps every change, and "Restart with the standard deck" undoes them. "Decks along a run" loads the opening, mid-run or late-run deck, on the start screen too. The Tuning panel covers the rest: table strain, surplus Force, flare size, quintessence, hand size, sigils a term and discards.
 
 ### Rules the doc leaves open
 
@@ -83,3 +87,29 @@ The Sandbox panel changes the commission in progress, live: the mud's starting c
 The careful player casts about 2 sigils a term and wins every commission; the careless one loses 2%. With a 5-rune hand the careful player's median cost rises from 5 to 16, it loses 7% of commissions, and the median commission takes 10 terms. Mud's organics add about one hand size of difficulty: without them, a 5-rune hand plays like a 6-rune hand with them. With the doc's capped formula the careful player wins only 68%.
 
 Organics also put air and fire to work. Per commission the careful player plays about 7.8 water, 7.7 earth, 6.7 air and 6.8 fire gems, where air and fire were almost pure defence before. Tables end out of balance by 2.6 runes and 3.7 sides on average, against 4.4 and 6.2 with two-element mud.
+
+### Decks along a run
+
+The power arc's target: by the end of a run of 20 or more commissions, mud to clay takes one term, two at most, or the player can play on and make far more clay than the mud held. Three decks stand for points along a run, each keeping the standard deck's 14 runes and upgrading a few, about one upgrade per commission:
+
+- **Opening:** the standard deck, 6-rune hand.
+- **Mid-run** (about 10 upgrades): each crescent becomes a triangle with two link motes, so it anchors four-rune sigils; 7-rune hand.
+- **Late-run** (about 20 upgrades): triangles hold 6 bowls, and each elemental triangle carries four link motes and a reach mote, so it anchors six-rune sigils; 8-rune hand.
+
+| Deck | Hand | Median terms | Done in 1 term | In 2 or fewer | Median spent | Clay made |
+| --- | --- | --- | --- | --- | --- | --- |
+| Opening | 6 | 6 | 0% | 0% | 5 | 35 kg |
+| Mid-run | 7 | 3 | 0% | 17% | 0 | 54 kg |
+| Late-run | 8 | 1 | 59% | 99% | 0 | 91 kg |
+| Late-run | 10 | 1 | 91% | 100% | 0 | 106 kg |
+
+**Ring chains are the mass engine.** Earth → air → fire → earth multiplies converted earth by 20 × 1 × 2 = 40. One late sigil, an earth anchor ringed by air, fire and earth with a side link, turned 2.7 kg of earth into 108 kg and finished mud as 145 kg of clay. The new earth dilutes the traces into their band, so one cast fixes everything. A loop needs three rings, so it opens only once an anchor holds three links; the opening deck can't make one. A player that holds off finishing (`--farm`) grew the late deck's clay to 440 kg, 11 times the mud, in a median 7 terms for 2 quintessence.
+
+**What moves the arc,** with every body given extra links (`--links`):
+
+- **Hand size most.** Finishing takes a bulk sigil plus trace fixes, so the right runes must be in hand together. With 4 extra links, one-term finishes went from 42% with a 6-rune hand to 85% with 8 and 96% with 10.
+- **Links open chains,** then level off: 6 extra links did no better than 4.
+- **Raw power hurts precision.** Power 8 instead of 5 cut one-term finishes from 85% to 52%, because the smallest sigil then overshoots a 2 kg trace.
+
+The simulated player plans each term for big hands and high-link anchors: it tries the best sigil of every anchor and size, plus every ring chain of two or three, plays the rest of the term out greedily from each, and starts with the one that ends best. The opening deck still uses the exhaustive greedy player, so its numbers match those above.
+
