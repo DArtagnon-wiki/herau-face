@@ -10,61 +10,71 @@ import {
   stepsBetween,
   transfer,
 } from './alchemy'
-import type { Elemental, Glyph, Grade, JoinKind, Pool, Rune, ShapeClass } from './types'
+import type { Elemental, Grade, Pool, Rune, Sigil } from './types'
 
-/** Each class joins one way especially well. */
-export const APTITUDE: Record<ShapeClass, JoinKind> = {
-  regular: 'entwine',
-  isosceles: 'link',
-  scalene: 'circumscribe',
-}
-export const APT_BONUS = 1.5
-export const REACH_PER_VALUE = 0.2
-export const WARD_PER_VALUE = 1.0
+export const REACH_PER_POWER = 0.2
+export const WARD_PER_POWER = 1
 
-export const aptitude = (g: Glyph, kind: JoinKind) => (APTITUDE[g.shape] === kind ? APT_BONUS : 1)
+export const runesOf = (s: Sigil): Rune[] => [s.anchor, ...s.joins.map((j) => j.rune)]
+
+/**
+ * Links are how many runes the anchor holds. A circle anchor makes a
+ * two-rune sigil; a crescent or a triangle, with a link mote, makes three.
+ * Links on joined runes do nothing; they matter when that rune anchors.
+ */
+export const openLinks = (s: Sigil): number => s.anchor.links - s.joins.length
+
+/** Whether one more rune can join the sigil. */
+export const canJoin = (s: Sigil, _rune?: Rune): boolean => openLinks(s) > 0
 
 export interface Outputs {
   reach: number
   force: number
   ward: number
-  /** True when an inscribed element shares the anchor's affinity. */
+  /** Product of the sigil's reach motes. */
+  reachMult: number
+  /** Ward from guard motes, included in ward. */
+  guard: number
+  /** True when an inscribed rune shares the anchor's affinity. */
   condense: boolean
   /** Number of off-affinity inscribes; each halves Reach. */
   fine: number
-  /** Anchor affinity, then each new circumscribed affinity in order. Null for a neutral anchor. */
+  /** Anchor affinity, then each new circumscribed affinity in order. Null for an elementless anchor. */
   route: Elemental[] | null
 }
 
-export function outputs(rune: Rune): Outputs {
-  const { anchor, joins } = rune
-  let reach = anchor.value * REACH_PER_VALUE
-  let force = anchor.value
+export function outputs(sigil: Sigil): Outputs {
+  const { anchor, joins } = sigil
+  let reach = anchor.power * REACH_PER_POWER
+  let force = anchor.power
   let ward = 0
   let condense = false
   let fine = 0
-  for (const { kind, glyph } of joins) {
-    const apt = aptitude(glyph, kind)
-    if (kind === 'circumscribe') force += glyph.value * apt
-    else if (kind === 'link') reach += glyph.value * REACH_PER_VALUE * apt
-    else if (kind === 'entwine') ward += glyph.value * WARD_PER_VALUE * apt
+  for (const { kind, rune } of joins) {
+    if (kind === 'circumscribe') force += rune.power
+    else if (kind === 'side') reach += rune.power * REACH_PER_POWER
+    else if (kind === 'entwine') ward += rune.power * WARD_PER_POWER
     else {
-      force += glyph.value
-      if (anchor.affinity !== 'none' && glyph.affinity === anchor.affinity) condense = true
+      force += rune.power
+      if (anchor.affinity !== 'none' && rune.affinity === anchor.affinity) condense = true
       else fine += 1
     }
   }
-  reach *= 0.5 ** fine
+  const all = runesOf(sigil)
+  const reachMult = all.reduce((m, r) => m * r.reachMult, 1)
+  const guard = all.reduce((g, r) => g + r.guard, 0)
+  reach *= 0.5 ** fine * reachMult
+  ward += guard
 
   let route: Elemental[] | null = null
   if (anchor.affinity !== 'none') {
     route = [anchor.affinity]
     for (const j of joins) {
-      if (j.kind !== 'circumscribe' || j.glyph.affinity === 'none') continue
-      if (j.glyph.affinity !== route[route.length - 1]) route.push(j.glyph.affinity)
+      if (j.kind !== 'circumscribe' || j.rune.affinity === 'none') continue
+      if (j.rune.affinity !== route[route.length - 1]) route.push(j.rune.affinity)
     }
   }
-  return { reach, force, ward, condense, fine, route }
+  return { reach, force, ward, reachMult, guard, condense, fine, route }
 }
 
 export interface Resolution {
@@ -96,10 +106,10 @@ const none = (out: Outputs, pools: Pool[], note: string, source?: Pool): Resolut
 })
 
 /** Pools the anchor can work on, cheapest first. */
-export function candidatePools(rune: Rune, pools: Pool[]): Pool[] {
-  const aff = rune.anchor.affinity
+export function candidatePools(sigil: Sigil, pools: Pool[]): Pool[] {
+  const aff = sigil.anchor.affinity
   if (aff === 'none') return []
-  const out = outputs(rune)
+  const out = outputs(sigil)
   return pools
     .filter((p) => p.elemental === aff && (!out.condense || p.grade < MAX_PLAYER_GRADE))
     .sort((a, b) => a.grade - b.grade)
@@ -115,12 +125,12 @@ export interface ResolveOptions {
 }
 
 /** Work out exactly what casting this rune does to the amalgam. */
-export function resolve(rune: Rune, pools: Pool[], selectedKey?: string, opts: ResolveOptions = { surplusForce: true }): Resolution {
-  const out = outputs(rune)
-  const aff = rune.anchor.affinity
-  if (aff === 'none') return none(out, pools, 'A neutral anchor changes nothing. Its joins still ward.')
+export function resolve(sigil: Sigil, pools: Pool[], selectedKey?: string, opts: ResolveOptions = { surplusForce: true }): Resolution {
+  const out = outputs(sigil)
+  const aff = sigil.anchor.affinity
+  if (aff === 'none') return none(out, pools, 'An elementless anchor changes nothing. Its Ward still counts.')
 
-  const candidates = candidatePools(rune, pools)
+  const candidates = candidatePools(sigil, pools)
   const source = candidates.find((p) => poolKey(p) === selectedKey) ?? candidates[0]
   if (!source) {
     if (out.condense && pools.some((p) => p.elemental === aff))
@@ -138,13 +148,13 @@ export function resolve(rune: Rune, pools: Pool[], selectedKey?: string, opts: R
   } else {
     const route = out.route!
     if (route.length < 2) {
-      const circled = rune.joins.some((j) => j.kind === 'circumscribe' && j.glyph.affinity !== 'none')
+      const circled = sigil.joins.some((j) => j.kind === 'circumscribe' && j.rune.affinity !== 'none')
       return none(
         out,
         pools,
         circled
           ? `The ring matches the anchor. Inscribe ${aff} to condense instead.`
-          : 'Circumscribe an element to set where the change goes.',
+          : 'Circumscribe a rune to set where the change goes.',
         source,
       )
     }

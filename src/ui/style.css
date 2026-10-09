@@ -17,6 +17,8 @@
   --air: #1fd6a0;
   --fire: #ff4f72;
   --glass: #d8d0f0;
+  --opal: #efe4ff;
+  --bowl: rgba(9, 5, 20, 0.85);
   --warn: #ff8fa4;
   --good: #7ff0c8;
   --font-display: 'Cinzel', 'Trajan Pro', Georgia, serif;
@@ -106,21 +108,6 @@ button.wide { width: 100%; }
 .start-head h1 { font-size: clamp(34px, 9vw, 48px); letter-spacing: 0.04em; color: var(--gilt-bright); }
 .lede { font-size: 20px; color: var(--ink-soft); max-width: 34em; }
 .start .panel { display: flex; flex-direction: column; gap: 12px; }
-.decks { display: grid; gap: 10px; }
-.deck {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-areas: 'glyphs name' 'glyphs line';
-  column-gap: 12px;
-  row-gap: 2px;
-  text-align: left;
-  padding: 12px;
-}
-.deck.is-on { border-color: var(--gilt-bright); background: rgba(217, 184, 114, 0.12); }
-.deck-glyphs { grid-area: glyphs; display: grid; grid-template-columns: repeat(2, 30px); gap: 2px; align-self: center; }
-.deck-glyphs svg { width: 30px; height: 30px; }
-.deck-name { grid-area: name; font-size: 15px; color: var(--gilt-bright); }
-.deck-line { grid-area: line; font-family: var(--font-text); font-size: 16px; font-weight: 500; letter-spacing: 0; color: var(--ink-soft); }
 .rules ol { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; }
 .join-key { margin: 0; display: grid; gap: 8px; }
 .join-key div { display: grid; gap: 1px; }
@@ -290,12 +277,69 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--gilt); }
 .tip { font-size: 15px; color: var(--gilt-bright); font-style: italic; }
 .summary-note { font-family: var(--font-text); font-size: 15px; letter-spacing: 0; color: var(--ink-faint); text-transform: none; }
 .deck-left { margin-top: 8px; font-size: 16px; color: var(--ink-soft); }
-.deck-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
-.deck-item { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 6px; padding: 3px 8px 3px 4px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--c) 30%, transparent); font-size: 15px; }
-.deck-item .glyph { width: 30px; height: 30px; }
+.deck-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px; }
+.deck-item { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 6px; padding: 3px 8px 3px 4px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--c) 30%, transparent); font-size: 15px; }
+.deck-item .glyph { width: 34px; height: 34px; }
 .deck-item-at { font-family: var(--font-display); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); }
 .deck-item.at-hand { background: rgba(217, 184, 114, 0.12); }
 .deck-item.at-hand .deck-item-at { color: var(--gilt-bright); }
 .deck-item.at-discard { opacity: 0.5; }
 .start .panel > h2 + p, .rules > p { font-size: 17px; }
 .tip b, .formula b, .change b { white-space: nowrap; }
+
+/* Runes: link pips, deck groups ------------------------------------------- */
+.pips { position: absolute; top: 8px; right: 7px; display: flex; gap: 3px; }
+.pip { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--gilt-bright); }
+.card .glyph { width: 56px; height: 56px; }
+.card.blocked { opacity: 0.45; }
+.card-sides { text-wrap: balance; line-height: 1.15; text-align: center; }
+.motes-note { font-size: 15px; color: var(--ink-soft); }
+.deck-groups { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.deck-group { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: 'runes name' 'runes line'; column-gap: 12px; row-gap: 2px; align-items: center; }
+.deck-group-runes { grid-area: runes; display: grid; grid-template-columns: repeat(2, 40px); gap: 0; }
+.deck-group-name { grid-area: name; font-family: var(--font-display); font-size: 14px; color: var(--gilt-bright); letter-spacing: 0.04em; }
+.deck-group-spec { font-family: var(--font-text); font-size: 15px; letter-spacing: 0; color: var(--ink-soft); }
+.deck-group-line { grid-area: line; font-size: 16px; color: var(--ink-soft); }
+.deck-item-text { display: grid; gap: 2px; min-width: 0; }
+.deck-item-motes { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 14px; color: var(--ink-faint); }
+.mote-chip { display: inline-flex; align-items: center; gap: 4px; }
+.mote-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+/* Sandbox ------------------------------------------------------------------ */
+.jump {
+  align-self: center;
+  font-family: var(--font-display); font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--gilt-bright); text-decoration: none;
+  border: 1px solid var(--panel-edge); border-radius: 999px; padding: 6px 10px;
+}
+.sandbox { border-color: var(--gilt); }
+.sandbox[open] { display: grid; gap: 4px; }
+.sb-section { display: grid; gap: 10px; padding-top: 12px; }
+.sb-section + .sb-section { border-top: 1px solid var(--panel-edge); margin-top: 8px; }
+.sb-section h3 { margin: 0; font-family: var(--font-display); font-size: 13px; letter-spacing: 0.1em; color: var(--gilt-bright); font-weight: 600; }
+.shape-table { display: grid; gap: 6px; }
+.shape-row { display: grid; grid-template-columns: minmax(0, 1.3fr) repeat(3, minmax(0, 1fr)); align-items: center; gap: 6px; }
+.shape-row.head .label { text-align: center; }
+.shape-name { display: flex; align-items: center; gap: 4px; font-size: 16px; min-width: 0; }
+.shape-name .glyph { width: 30px; height: 30px; flex: none; }
+.stepper { display: inline-grid; grid-template-columns: 30px minmax(22px, auto) 30px; align-items: center; justify-items: center; border: 1px solid var(--panel-edge); border-radius: 8px; overflow: hidden; }
+.stepper button { padding: 6px 0; width: 30px; border: 0; border-radius: 0; background: rgba(239, 232, 255, 0.06); font-size: 15px; }
+.stepper b { font-family: var(--font-display); font-size: 14px; padding-inline: 2px; }
+.mote-values { display: flex; flex-wrap: wrap; gap: 10px 18px; }
+.mv { display: inline-flex; align-items: center; gap: 6px; font-size: 16px; }
+.link-btn { padding: 0; border: 0; background: none; color: var(--gilt-bright); font-family: var(--font-text); font-size: 15px; font-weight: 600; letter-spacing: 0; text-decoration: underline; text-underline-offset: 2px; }
+.picker-group { display: grid; gap: 4px; }
+.picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.pick { padding: 2px; width: 42px; height: 42px; display: grid; place-items: center; }
+.pick .glyph { width: 34px; height: 34px; }
+.pick.new { width: auto; padding-inline: 12px; }
+.pick.is-on { border-color: var(--gilt-bright); background: rgba(217, 184, 114, 0.18); }
+.editor { display: grid; gap: 10px; padding: 12px; border-radius: var(--radius); border: 1px solid var(--panel-edge); background: rgba(9, 5, 20, 0.45); }
+.editor-head { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; align-items: center; }
+.editor-title { font-family: var(--font-display); font-size: 15px; color: var(--gilt-bright); letter-spacing: 0.04em; }
+.editor-line { font-size: 15px; color: var(--ink-soft); }
+.seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.seg button.is-on { border-color: var(--gilt-bright); background: rgba(217, 184, 114, 0.16); }
+.bowls { display: grid; gap: 8px; }
+.bowl-pick { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 8px; }
+.bowl-pick select { width: 100%; min-width: 0; }

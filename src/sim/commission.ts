@@ -6,8 +6,8 @@ import type { Pool } from './types'
 // One commission: mud (the source, the opponent) into clay (the target, the puzzle).
 
 export const MUD_START: Pool[] = normalize([
-  { elemental: 'earth', grade: 1, kg: 24 },
-  { elemental: 'water', grade: 0, kg: 24 },
+  { elemental: 'earth', grade: 1, kg: 18 },
+  { elemental: 'water', grade: 0, kg: 18 },
 ])
 
 /** Clay: 75–85% earth by mass, any grade. */

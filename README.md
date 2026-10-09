@@ -4,7 +4,7 @@ A roguelike deckbuilder of runes and alchemy, built from Circumgician's world. T
 
 ## Prototype: mud to clay
 
-One commission, playable end to end: 24 kg of mud (12 kg medium earth, 12 kg weak water) to bring to clay, 75–85% earth by mass, before quintessence runs out. Pick a starting deck (Regular, Isosceles or Scalene), read mud's move, compose a rune from your hand, and cast against an exact preview.
+One commission, playable end to end: 36 kg of mud (18 kg medium earth, 18 kg weak water) to bring to clay, 75–85% earth by mass, before quintessence runs out. Read mud's move, compose a sigil from the runes in your hand, and cast against an exact preview.
 
 ```sh
 npm install
@@ -16,38 +16,59 @@ npm run build      # dist/index.html, one self-contained page
 
 The rules are pure TypeScript in `src/sim`, with no UI dependencies, so the simulator and tests drive the same code the page does. The page is plain DOM and SVG in `src/ui` and `src/main.ts`.
 
-### Choices the doc leaves open
+### Runes and motes
 
-- **Floating runes and the rune table, both.** Each cast rune takes effect, then stays in a slot around the amalgam.
-- **Table imbalance adds strain.** Elements on the table are tallied Earth against Air and Water against Fire. Every 2 points of imbalance past the first 2 add 1 instability a term. Tuning can turn this off.
-- **Surplus Force multiplies Reach.** This departs from the doc's formula, which caps Force at the requirement. Under the cap, circumscribing does nothing once a change is cheap enough, so the scalene deck's aptitude is wasted on mud (see below). Tuning can switch back to the cap.
-- **Inscribe.** An inscribed element of the anchor's own element condenses the selected pool. Any other inscribed element halves Reach, which is how you make a small, precise cast near the band.
-- **Reach × Force.** Kilos converted = Reach × Force ÷ the Force the change needs, so the two multiply. The preview spells this out, cards show what they'd add under the selected join, and a tip compares the best link and best circumscribe left in hand.
-- **Slump** knocks loose the table rune whose loss leaves the table most lopsided. Entwined runes hold.
+A rune is a body holding motes. The body sets power, links and bowls; the motes in its bowls give the element and any abilities.
+
+| Body | Power | Links | Bowls |
+| --- | --- | --- | --- |
+| Circle | 5 | 1 | 1 |
+| Crescent | 5 | 1 | 2 |
+| Triangle | 5 | 1 | 3 |
+
+| Mote | Effect |
+| --- | --- |
+| Basic sapphire, topaz, emerald, ruby | Sets the element: water, earth, air, fire |
+| Link mote | +1 link |
+| Reach mote | The sigil's Reach ×1.5 |
+| Guard mote | +4 Ward |
+
+The standard deck is 14 runes: 8 circles (two of each element), 4 crescents (one of each element, each with a link mote) and 2 elementless triangles (a link, a reach and a guard mote). The opening hand always holds a water and an earth; the rest of the shuffle is random.
+
+**Links** are how many runes the anchor holds, so a circle anchor makes a two-rune sigil and a crescent or triangle anchor makes three. Links on joined runes do nothing until that rune anchors. A first version treated links as connections, so 2-link runes extended any sigil for free; the simulator showed typical hands building five- and six-rune sigils and finishing in one term.
+
+### Sandbox
+
+The Sandbox panel changes the commission in progress, live: each body's power, links and bowls; the reach and guard mote values; any rune's body and motes, wherever it is in the deck; new runes straight into the hand; and removing runes. Restarting keeps every change, and "Restart with the standard deck" undoes them. The Tuning panel covers the rest: table strain, surplus Force, flare size, quintessence, hand size and discards.
+
+### Rules the doc leaves open
+
+- **Floating sigils and the table, both.** Each cast sigil takes effect, then stays in a slot around the amalgam.
+- **Table imbalance adds strain.** Runes on the table are tallied Earth against Air and Water against Fire. Every 2 points of imbalance past the first 2 add 1 instability a term.
+- **Surplus Force multiplies Reach.** This departs from the doc's formula, which caps Force at the requirement. Under the cap, the standard deck wins only half its commissions against mud (see below).
+- **Reach × Force.** Kilos converted = Reach × Force ÷ the Force the change needs. The preview spells this out, runes show what they'd add under the selected join, and a tip compares the best side link and best circumscribe left in hand.
+- **Inscribe.** An inscribed rune of the anchor's own element condenses the selected pool. Any other halves Reach, for small precise casts.
+- **Slump** knocks loose the table sigil whose loss leaves the table most lopsided. Entwined sigils hold.
 
 ### Numbers
 
 | Constant | Value |
 | --- | --- |
-| Element value by side count | 3 sides: 4 · 4 sides: 3 · 5 sides: 3 · 6 sides: 2 |
-| Reach | 0.2 kg per point of value (anchor and links) |
+| Reach | 0.2 kg per point of power (anchor and side links) |
 | Force | 1 per point (anchor, circumscribes, inscribes) |
-| Ward | 1 per point (entwines) |
-| Class aptitude | ×1.5 on the apt join |
+| Ward | 1 per point (entwines), plus guard motes |
 | Mud's moves | Flare 60 (+5 a term), seep 20, harden 15, slump 15 |
 | Seep, harden | 0.5 kg of earth back to water; 2 kg of weak water to medium |
 | Flare size | 10–14, +1 a term |
 | Quintessence, hand, discards | 100, 7, 2 |
-| Starting deck | 5 water, 4 earth, 3 air, 3 fire, 1 neutral; shuffled, with at least one water and one earth in the opening hand |
 
 ### What the simulated player found
 
-400 commissions per starting deck, with a player that thinks one term ahead:
+400 commissions with the standard deck:
 
-| Deck | Median terms | Spent: none | 1–15 | 16–30 | over 30 |
+| Player | Median terms | Spent: none | 1–15 | 16–30 | over 30 |
 | --- | --- | --- | --- | --- | --- |
-| Regular | 5 | 29% | 71% | 1% | 0% |
-| Isosceles | 4 | 26% | 61% | 9% | 5% |
-| Scalene | 4 | 23% | 64% | 10% | 4% |
+| Careful (wards when it pays) | 4 | 12% | 75% | 12% | 2% |
+| Careless (never wards on purpose) | 3 | 5% | 42% | 49% | 5% |
 
-That matches the doc's early-commission target: usually a little quintessence, rarely none or a moderate amount. With the doc's capped formula instead, the scalene deck spends a median of 30 and loses 15% of commissions.
+A careful player wards instead of transmuting in 1–2 terms a commission. With the doc's capped formula, the careful player wins only 51% of commissions.

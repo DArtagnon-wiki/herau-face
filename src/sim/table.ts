@@ -1,19 +1,18 @@
 import { ELEMENTALS } from './alchemy'
-import type { Elemental, Glyph, Rune } from './types'
+import { runesOf } from './sigil'
+import type { Elemental, Sigil } from './types'
 
-/** A rune that has been cast and now sits on the rune table. */
+/** A sigil that has been cast and now sits on the table. */
 export interface TableEntry {
   id: number
   term: number
-  rune: Rune
+  sigil: Sigil
 }
 
-export const glyphsOf = (rune: Rune): Glyph[] => [rune.anchor, ...rune.joins.map((j) => j.glyph)]
-
-/** How many elements of each elemental sit on the table. Neutral elements don't count. */
+/** How many runes of each element sit on the table. Elementless runes don't count. */
 export function tally(table: TableEntry[]): Record<Elemental, number> {
   const counts = Object.fromEntries(ELEMENTALS.map((e) => [e, 0])) as Record<Elemental, number>
-  for (const entry of table) for (const g of glyphsOf(entry.rune)) if (g.affinity !== 'none') counts[g.affinity] += 1
+  for (const entry of table) for (const r of runesOf(entry.sigil)) if (r.affinity !== 'none') counts[r.affinity] += 1
   return counts
 }
 
@@ -31,11 +30,11 @@ export function strain(table: TableEntry[], enabled = true): number {
   return Math.floor(Math.max(0, imbalance(table) - FREE_IMBALANCE) / 2)
 }
 
-export const isEntwined = (entry: TableEntry) => entry.rune.joins.some((j) => j.kind === 'entwine')
+export const isEntwined = (entry: TableEntry) => entry.sigil.joins.some((j) => j.kind === 'entwine')
 
 /**
- * The rune a slump knocks loose: the one whose loss leaves the table most
- * lopsided. Entwined runes hold. Ties go to the most recent.
+ * The sigil a slump knocks loose: the one whose loss leaves the table most
+ * lopsided. Entwined sigils hold. Ties go to the most recent.
  */
 export function slumpTarget(table: TableEntry[]): TableEntry | undefined {
   let best: TableEntry | undefined

@@ -1,13 +1,13 @@
 import { totalKg } from './alchemy'
 import { MUD_START, applyIntent, earthShare, inBand, rollIntent, substanceName, type Intent } from './commission'
-import { startingDeck } from './deck'
+import { DEFAULT_FORGE, buildDeck, cloneForge, standardDeck, type Forge, type RuneSpec } from './deck'
 import { makeRng, type Rng } from './rng'
-import { resolve, type Resolution } from './rune'
-import { glyphsOf, strain, type TableEntry } from './table'
-import type { Glyph, Pool, Rune, ShapeClass } from './types'
+import { canJoin, openLinks, resolve, runesOf, type Resolution } from './sigil'
+import { strain, type TableEntry } from './table'
+import type { Pool, Rune, Sigil } from './types'
 
 export interface Settings {
-  /** Whether a lopsided rune table adds instability each term. */
+  /** Whether a lopsided table adds instability each term. */
   strain: boolean
   /** Whether Force past the requirement multiplies Reach. */
   surplusForce: boolean
@@ -21,7 +21,7 @@ export const DEFAULT_SETTINGS: Settings = { strain: true, surplusForce: true, fl
 
 export interface TermOutcome {
   term: number
-  rune: Rune
+  sigil: Sigil
   resolution: Resolution
   pools: Pool[]
   table: TableEntry[]
@@ -40,11 +40,12 @@ export interface TermOutcome {
 
 export interface GameState {
   settings: Settings
-  deckClass: ShapeClass
+  /** The numbers behind bodies and motes; the sandbox can change them. */
+  forge: Forge
   seed: number
-  draw: Glyph[]
-  hand: Glyph[]
-  discard: Glyph[]
+  draw: Rune[]
+  hand: Rune[]
+  discard: Rune[]
   pools: Pool[]
   table: TableEntry[]
   term: number
@@ -76,7 +77,7 @@ function drawUp(state: GameState, rng: Rng): GameState {
  * Every opening hand holds at least one water and one earth, so the first
  * term can always work the mud. After that the shuffle is left alone.
  */
-export function fairOpening(deck: Glyph[], handSize: number): Glyph[] {
+export function fairOpening(deck: Rune[], handSize: number): Rune[] {
   const out = deck.slice()
   for (const need of ['water', 'earth'] as const) {
     if (out.slice(0, handSize).some((g) => g.affinity === need)) continue
@@ -93,14 +94,21 @@ export function fairOpening(deck: Glyph[], handSize: number): Glyph[] {
   return out
 }
 
-export function newGame(deckClass: ShapeClass, settings: Settings = DEFAULT_SETTINGS, seed = Date.now()): GameState {
+export interface Setup {
+  forge: Forge
+  deck: RuneSpec[]
+}
+
+export const standardSetup = (): Setup => ({ forge: cloneForge(DEFAULT_FORGE), deck: standardDeck() })
+
+export function newGame(settings: Settings = DEFAULT_SETTINGS, seed = Date.now(), setup: Setup = standardSetup()): GameState {
   const rng = makeRng(seed)
   const pools = MUD_START
   let state: GameState = {
     settings,
-    deckClass,
+    forge: setup.forge,
     seed,
-    draw: fairOpening(rng.shuffle(startingDeck(deckClass)), settings.handSize),
+    draw: fairOpening(rng.shuffle(buildDeck(setup.deck, setup.forge)), settings.handSize),
     hand: [],
     discard: [],
     pools,
@@ -118,26 +126,28 @@ export function newGame(deckClass: ShapeClass, settings: Settings = DEFAULT_SETT
   return { ...state, seed: rng.state() }
 }
 
-/** Why a rune can't be cast as it stands, or null when it can. */
-export function invalidReason(state: GameState, rune: Rune): string | null {
-  const glyphs = glyphsOf(rune)
-  const ids = new Set(glyphs.map((g) => g.id))
-  if (ids.size !== glyphs.length) return 'An element can only be placed once.'
-  if (!glyphs.every((g) => state.hand.some((h) => h.id === g.id))) return 'Every element must come from your hand.'
-  if (rune.joins.length > rune.anchor.sides) return `This anchor holds ${rune.anchor.sides} joins.`
+/** Why a sigil can't be cast as it stands, or null when it can. */
+export function invalidReason(state: GameState, sigil: Sigil): string | null {
+  const runes = runesOf(sigil)
+  const ids = new Set(runes.map((r) => r.id))
+  if (ids.size !== runes.length) return 'A rune can only be placed once.'
+  if (!runes.every((r) => state.hand.some((h) => h.id === r.id))) return 'Every rune must come from your hand.'
+  if (sigil.joins.length > 0 && (sigil.anchor.links < 1 || openLinks(sigil) < 0)) return 'The sigil has more joins than links.'
   return null
 }
 
+export { canJoin }
+
 /** Exactly what this term would do, without changing anything. Drives the preview and the cast. */
-export function previewTerm(state: GameState, rune: Rune, poolKey?: string): TermOutcome {
-  const resolution = resolve(rune, state.pools, poolKey, state.settings)
-  const placed: TableEntry = { id: state.nextTableId, term: state.term, rune }
+export function previewTerm(state: GameState, sigil: Sigil, poolKey?: string): TermOutcome {
+  const resolution = resolve(sigil, state.pools, poolKey, state.settings)
+  const placed: TableEntry = { id: state.nextTableId, term: state.term, sigil }
   const tableAfterCast = [...state.table, placed]
   const ward = resolution.outputs.ward
   const finished = inBand(resolution.pools)
   const base = {
     term: state.term,
-    rune,
+    sigil,
     resolution,
     intent: state.intent,
     ward,
@@ -178,20 +188,20 @@ export function previewTerm(state: GameState, rune: Rune, poolKey?: string): Ter
   }
 }
 
-export function cast(state: GameState, rune: Rune, poolKey?: string): GameState {
+export function cast(state: GameState, sigil: Sigil, poolKey?: string): GameState {
   if (state.phase !== 'compose') return state
-  const reason = invalidReason(state, rune)
+  const reason = invalidReason(state, sigil)
   if (reason) throw new Error(reason)
 
-  const outcome = previewTerm(state, rune, poolKey)
+  const outcome = previewTerm(state, sigil, poolKey)
   const rng = makeRng(state.seed)
-  const used = new Set(glyphsOf(rune).map((g) => g.id))
+  const used = new Set(runesOf(sigil).map((r) => r.id))
   const quintessence = Math.max(0, Math.round((state.quintessence - outcome.paid) * 10) / 10)
 
   let next: GameState = {
     ...state,
     hand: state.hand.filter((g) => !used.has(g.id)),
-    discard: [...state.discard, ...glyphsOf(rune)],
+    discard: [...state.discard, ...runesOf(sigil)],
     pools: outcome.pools,
     table: outcome.table,
     quintessence,
@@ -208,7 +218,7 @@ export function cast(state: GameState, rune: Rune, poolKey?: string): GameState 
   return { ...next, seed: rng.state() }
 }
 
-export function discardGlyphs(state: GameState, ids: number[]): GameState {
+export function discardRunes(state: GameState, ids: number[]): GameState {
   if (state.phase !== 'compose' || state.discardsLeft <= 0 || ids.length === 0) return state
   const drop = new Set(ids)
   const rng = makeRng(state.seed)
