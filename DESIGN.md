@@ -203,6 +203,8 @@ Mid-run, each crescent becomes a triangle with two link motes, so it anchors fou
 
 **Ring chains are the mass engine.** A chain of circumscribes that loops back to the anchor's element multiplies the yields along it: earth → air → fire → earth is 20 × 1 × 2 = ×40. One late sigil, an earth anchor ringed by air, fire and earth with a side link, turned 2.7 kg of earth into 108 kg and finished mud as 145 kg of clay. The new earth dilutes the traces into their band, so one cast fixes everything. A loop needs three rings, so it opens only once an anchor holds three links. A simulated player that held off finishing grew the late deck's clay to 440 kg, 11 times the mud, in a median 7 terms for 2 quintessence.
 
+**The opening deck can't overkill.** Asked to finish with even 41 kg of clay, 1 kg more than the mud held, the planning player lost 98% of commissions, bleeding quintessence over 24 terms. Chasing mass alone, it grew the amalgam to as much as 247 kg, but over three quarters of it was air from earth → air at ×20. Without three-ring loops, every gain lands as the wrong element, and three air runes with small Reach can't turn 100 kg of air back into earth before the stock runs out.
+
 **Levers**
 
 - **Hand size moves one-term finishes most.** Finishing takes a bulk sigil plus trace fixes, so the right runes must be in hand together. With every rune given four extra links, one-term finishes rose from 42% with a 6-rune hand to 85% with 8 and 96% with 10.

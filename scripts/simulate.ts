@@ -47,6 +47,8 @@ const settings: Settings = {
   strain: !args.includes('--no-strain'),
   surplusForce: !args.includes('--capped'),
 }
+/** --planner: use the term-planning player even for small decks. */
+const forcePlanner = args.includes('--planner')
 /** --naive: a player who never wards on purpose. */
 const naive = args.includes('--naive')
 /** --no-organics: the old two-element mud and an earth-only target, for comparison. */
@@ -89,7 +91,11 @@ const farm = Number(arg('--farm') ?? 0)
 const startKg = totalKg(setup.start)
 const farmBonus = (pools: EndOutcome['pools']) => (farm ? 40 * Math.log2(Math.min(totalKg(pools), farm) / startKg) : 0)
 
+/** --ignore-spec: with --farm, chase mass alone, to bound how fast a deck can grow it. */
+const ignoreSpec = args.includes('--ignore-spec')
+
 function evalEnd(state: GameState, end: EndOutcome): number {
+  if (ignoreSpec) return farmBonus(end.pools) - end.paid * 3
   return farmBonus(end.pools) - miss(end.pools, state.target) * 30 - centering(state, end.pools) * 2 - end.paid * (naive ? 0 : 3) - imbalance(end.table) * 0.3
 }
 
@@ -254,7 +260,7 @@ function plannedCast(state: GameState): Scored | null {
 }
 
 function bestCast(state: GameState): Scored | null {
-  if (state.hand.length > 7 || state.hand.some((r) => r.links > 2)) return plannedCast(state)
+  if (forcePlanner || state.hand.length > 7 || state.hand.some((r) => r.links > 2)) return plannedCast(state)
   let best: Scored | null = null
   for (const s of sigils(state.hand)) {
     const x = score(state, s)
@@ -268,7 +274,9 @@ function play(seed: number) {
   let discardsUsed = 0
   let wardOnly = 0
   let casts = 0
+  let peak = totalKg(s.pools)
   for (let guard = 0; guard < 200 && s.phase === 'compose'; guard++) {
+    peak = Math.max(peak, totalKg(s.pools))
     const endNow = evalEnd(s, previewEnd(s))
     const best = castsLeft(s) > 0 && s.hand.length ? bestCast(s) : null
     if (best && best.score > endNow + 0.01) {
@@ -292,7 +300,7 @@ function play(seed: number) {
     }
     s = endTerm(s)
   }
-  return { state: s, discardsUsed, wardOnly, casts }
+  return { state: s, discardsUsed, wardOnly, casts, peak: Math.max(peak, totalKg(s.pools)) }
 }
 
 /** --trace N prints the first N commissions cast by cast. */
@@ -345,6 +353,7 @@ const buckets = [
   ['>50', (x: number) => x > 50],
 ] as const
 console.log(`won ${Math.round((100 * won.length) / games)}%  spent median ${pct(spent, 50)}, p90 ${pct(spent, 90)}  terms median ${pct(terms, 50)}, p90 ${pct(terms, 90)}  clay ${f1(mean(won.map((r) => totalKg(r.state.pools))))} kg`)
+if (farm) console.log(`peak mass median ${f1(pct(runs.map((r) => r.peak), 50))} kg, p90 ${f1(pct(runs.map((r) => r.peak), 90))} kg, best ${f1(Math.max(...runs.map((r) => r.peak)))} kg`)
 console.log(`finished in 1 term ${Math.round((100 * won.filter((r) => termsUsed(r.state) <= 1).length) / games)}%, in 2 or fewer ${Math.round((100 * won.filter((r) => termsUsed(r.state) <= 2).length) / games)}%`)
 console.log(buckets.map(([label, f]) => `${label}: ${Math.round((100 * spent.filter(f).length) / games)}%`).join('  '))
 console.log(`sigils a term ${f1(mean(runs.map((r) => r.casts / Math.max(1, termsUsed(r.state)))))} · defence-only sigils ${f1(mean(runs.map((r) => r.wardOnly)))} · discards used ${f1(mean(runs.map((r) => r.discardsUsed)))}`)

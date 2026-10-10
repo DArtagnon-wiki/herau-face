@@ -17,6 +17,7 @@ npm run simulate -- --deck late           # a deck from late in a run (opening, 
 npm run simulate -- --links 4 --hand 10   # every body +4 links, a 10-rune hand (also --power)
 npm run simulate -- --deck late --farm 250  # grow the clay to 250 kg before finishing
 npm run simulate -- --trace 3             # print the first 3 commissions cast by cast
+npm run simulate -- --farm 400 --ignore-spec --planner  # how fast the opening deck can grow mass at all
 npm run build      # dist/index.html, one self-contained page
 ```
 
@@ -104,6 +105,8 @@ The power arc's target: by the end of a run of 20 or more commissions, mud to cl
 | Late-run | 10 | 1 | 91% | 100% | 0 | 106 kg |
 
 **Ring chains are the mass engine.** Earth → air → fire → earth multiplies converted earth by 20 × 1 × 2 = 40. One late sigil, an earth anchor ringed by air, fire and earth with a side link, turned 2.7 kg of earth into 108 kg and finished mud as 145 kg of clay. The new earth dilutes the traces into their band, so one cast fixes everything. A loop needs three rings, so it opens only once an anchor holds three links; the opening deck can't make one. A player that holds off finishing (`--farm`) grew the late deck's clay to 440 kg, 11 times the mud, in a median 7 terms for 2 quintessence.
+
+**The opening deck can't overkill.** Asked to finish with even 41 kg of clay, 1 kg more than the mud held, the planning player lost 98% of commissions, bleeding quintessence over 24 terms. Chasing mass alone, it grew the amalgam to as much as 247 kg, but over three quarters of it was air from earth → air at ×20. Without three-ring loops, every gain lands as the wrong element, and three air runes with small Reach can't turn 100 kg of air back into earth before the stock runs out.
 
 **What moves the arc,** with every body given extra links (`--links`):
 
