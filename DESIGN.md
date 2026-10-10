@@ -278,6 +278,38 @@ R is the sigil's Reach and F its Force. W is the selected pool's weight in kg an
 - **Balatro feel.** Reach, Force and Ward tick up as each rune and mote triggers, then the amalgam shifts.
 - **Exact preview (proposed).** Because overshooting matters, the preview shows the base outcome; surprises come only from chance triggers.
 
+## The alchemical equation (in testing)
+
+A second model for what a sigil does, now running in the prototype's simulator beside Reach × Force. The reach ratio sets whether you reach for a lot or a little; power against the material's resistance sets how far you get. Base 2.5, step ×2 and a neutral 2 kg fit the opening deck's turn target.
+
+```math
+\begin{aligned}
+R &= R_{\text{base}} \times g \times s^{\,\text{flips}} \\
+\text{input} &= N \times \left(\frac{\text{reach}_{\uparrow}}{\text{reach}_{\downarrow}}\right)^{\ln(1 + P/R)} \\
+\text{output} &= \text{input} \times \frac{\prod \text{circumscribe multipliers}}{\prod \text{inscribe multipliers}}
+\end{aligned}
+```
+
+- **Resistance** is the material's base, possibly raised during combat, times the pool's grade multiplier g, times the step factor s for every quality flipped along the runepath. A diagonal flips two.
+- **The runepath** starts at the anchor and walks the elemental square through the circumscribed and inscribed runes, easiest step first. Ties go earth, fire, air, water: the Planeteers' order, which is also a walk around the square. It ends at the seal, the last of those runes placed, and the output is the seal's element.
+- **Input.** N is the neutral amount, taken when reach up equals reach down or the sigil has no power. Reach up is the anchor plus side links, times reach motes. Reach down is the anchor plus tangents, a proposed join that touches the anchor at a point. Power P is the anchor plus circumscribes and inscribes.
+- **Output.** Each circumscribe multiplies by 1.1 and each inscribe divides by 1.1. A boost mote adds a flat 0.1 to its rune's multiplier. Element yields no longer apply. A seal that is an inscribe of the anchor's element condenses, at one extra step.
+
+Simulated against mud with those numbers:
+
+| Deck | Hand | Median terms | Done in 1 term | In 2 or fewer | Quintessence spent (median) |
+| --- | --- | --- | --- | --- | --- |
+| Opening | 6 | 5 | 0% | 15% | 5 |
+| Mid-run | 7 | 2 | 0% | 57% | 1 |
+| Late-run | 8 | 2 | 0% | 52% | 0 |
+| Late-run, +1 link on every rune | 10 | 1 | 58% | 100% | 0 |
+
+- **The neutral amount is the precision floor.** At 1 kg the opening deck crawls; at 3 kg one basic cast wipes out a 2 kg trace.
+- **One-link runes can't aim.** A circle anchor plus its seal always takes the neutral amount, so small, precise casts need multi-link anchors with tangents. Late decks need more links than under Reach × Force to finish in one term.
+- **The arc is flatter.** The mid-run deck already finishes in about two terms, close to the late deck.
+- **Mass grows slowly.** With rings at ×1.1, the late deck took a median 13 terms to double the mud to 80 kg. Huge product late in a run needs boost motes or bigger multipliers. The opening deck can't overkill: finishing with 45 kg took a median 24 terms and nearly the whole stock, and only 30% got there.
+- **Raising resistance slows everything.** At base 10 the opening deck took a median 13 terms and lost 12% of commissions.
+
 ## Instability and quintessence
 
 The commission's flares are the main threat. Ward from the term's sigils absorbs part of each flare and the rest is paid in quintessence; when quintessence runs out, the run is over.

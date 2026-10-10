@@ -5,6 +5,7 @@ import { makeRng, type Rng } from './rng'
 import { canJoin, openLinks, resolve, runesOf, type Resolution } from './sigil'
 import { strain, type TableEntry } from './table'
 import type { Pool, Rune, Sigil } from './types'
+import { resolveEquation, type Equation } from './equation'
 
 export interface Settings {
   /** Whether a lopsided table adds instability each term. */
@@ -17,6 +18,8 @@ export interface Settings {
   discards: number
   /** Most sigils a term; 0 means as many as the hand allows. */
   castsPerTerm: number
+  /** When set, sigils resolve by the alchemical equation instead of Reach × Force. */
+  equation?: Equation | null
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -27,6 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   handSize: 6,
   discards: 2,
   castsPerTerm: 0,
+  equation: null,
 }
 
 /** One sigil cast during a term. It resolves at once. */
@@ -216,7 +220,9 @@ export interface CastPreview {
 
 /** Exactly what casting this sigil would do, and what ending the term after it would cost. */
 export function previewCast(state: GameState, sigil: Sigil, poolKey?: string): CastPreview {
-  const resolution = resolve(sigil, state.pools, poolKey, state.settings)
+  const resolution = state.settings.equation
+    ? resolveEquation(sigil, state.pools, poolKey, state.settings.equation)
+    : resolve(sigil, state.pools, poolKey, state.settings)
   const table = [...state.table, { id: state.nextTableId, term: state.term, sigil }]
   const finished = inBand(resolution.pools, state.target)
   const cast: CastOutcome = { term: state.term, sigil, resolution, pools: resolution.pools, finished }

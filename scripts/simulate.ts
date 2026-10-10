@@ -31,6 +31,7 @@ import { imbalance } from '../src/sim/table'
 import type { JoinKind, Rune, Sigil } from '../src/sim/types'
 import { ELEMENTALS, poolKey } from '../src/sim/alchemy'
 import { presetByKey } from '../src/sim/presets'
+import { DEFAULT_EQUATION } from '../src/sim/equation'
 
 const args = process.argv.slice(2)
 const arg = (name: string) => {
@@ -47,6 +48,20 @@ const settings: Settings = {
   strain: !args.includes('--no-strain'),
   surplusForce: !args.includes('--capped'),
 }
+/**
+ * --equation resolves sigils by the alchemical equation (src/sim/equation.ts),
+ * tuned with --base, --step, --ring, --inscribe and --neutral.
+ */
+if (args.includes('--equation')) {
+  settings.equation = {
+    base: Number(arg('--base') ?? DEFAULT_EQUATION.base),
+    step: Number(arg('--step') ?? DEFAULT_EQUATION.step),
+    ring: Number(arg('--ring') ?? DEFAULT_EQUATION.ring),
+    inscribe: Number(arg('--inscribe') ?? DEFAULT_EQUATION.inscribe),
+    neutral: Number(arg('--neutral') ?? DEFAULT_EQUATION.neutral),
+  }
+}
+const KINDS: JoinKind[] = settings.equation ? ['circumscribe', 'side', 'entwine', 'inscribe', 'tangent'] : ['circumscribe', 'side', 'entwine', 'inscribe']
 /** --planner: use the term-planning player even for small decks. */
 const forcePlanner = args.includes('--planner')
 /** --naive: a player who never wards on purpose. */
@@ -101,7 +116,7 @@ function evalEnd(state: GameState, end: EndOutcome): number {
 
 /** Every sigil the hand can make, within the link limits. */
 function* sigils(hand: Rune[]): Generator<Sigil> {
-  const kinds: JoinKind[] = ['circumscribe', 'side', 'entwine', 'inscribe']
+  const kinds = KINDS
   for (const anchor of hand) {
     const rest = hand.filter((r) => r !== anchor)
     const grow = function* (i: number, s: Sigil): Generator<Sigil> {
@@ -149,7 +164,7 @@ function sigilKey(s: Sigil): string {
  * size. Returns the best sigil overall and the best for each anchor and size.
  */
 function beam(state: GameState, width: number): { best: Scored | null; bySize: Scored[] } {
-  const kinds: JoinKind[] = ['circumscribe', 'side', 'entwine', 'inscribe']
+  const kinds = KINDS
   let best: Scored | null = null
   const bySize: Scored[] = []
   const anchors = new Map<string, Rune>()
@@ -332,7 +347,8 @@ const pct = (xs: number[], p: number) => {
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length)
 const f1 = (n: number) => n.toFixed(1)
 
-const forgeNote = (preset ? ` · ${preset.name.toLowerCase()}` : '') + (power || extraLinks ? ` · power ${power ?? 'default'} · +${extraLinks} links` : '') + (farm ? ` · farming to ${farm} kg` : '')
+const eqNote = settings.equation ? ` · equation: base ${settings.equation.base}, step ×${settings.equation.step}, ring ×${settings.equation.ring}, neutral ${settings.equation.neutral} kg` : ''
+const forgeNote = eqNote + (preset ? ` · ${preset.name.toLowerCase()}` : '') + (power || extraLinks ? ` · power ${power ?? 'default'} · +${extraLinks} links` : '') + (farm ? ` · farming to ${farm} kg` : '')
 console.log(
   `${games} commissions${forgeNote} · hand ${settings.handSize} · ${settings.castsPerTerm || 'any number of'} sigil${settings.castsPerTerm === 1 ? '' : 's'} a term · flare ×${settings.flareScale} · stock ${settings.stock} · strain ${settings.strain ? 'on' : 'off'} · surplus Force ${settings.surplusForce ? 'multiplies' : 'capped'}${naive ? ' · naive player' : ''}${noOrganics ? ' · no organics' : ''}\n`,
 )

@@ -9,7 +9,8 @@ import { imbalance, slumpTarget, strain, type TableEntry } from './table'
 import type { Affinity, Body, JoinKind, Pool, Rune, Sigil } from './types'
 import { PRESETS, presetByKey } from './presets'
 import { totalKg } from './alchemy'
-import { buildDeck } from './deck'
+import { buildDeck, BOOST_MOTE } from './deck'
+import { DEFAULT_EQUATION, resolveEquation, runepath } from './equation'
 
 const capped = { surplusForce: false }
 const R = REACH_PER_POWER
@@ -417,5 +418,52 @@ describe('decks along a run', () => {
     expect(r.produced).toBeCloseTo(r.converted * 40)
     expect(inBand(r.pools, late.target)).toBe(true)
     expect(totalKg(r.pools)).toBeGreaterThan(100)
+  })
+})
+
+describe('the alchemical equation', () => {
+  const eq = DEFAULT_EQUATION
+  const weakWater: Pool = { elemental: 'water', grade: 0, kg: 18 }
+
+  it('walks the square easiest step first and ends at the seal', () => {
+    const s = sigil(rune('earth'), ['circumscribe', rune('air')], ['circumscribe', rune('water')], ['circumscribe', rune('fire')])
+    const p = runepath(s)!
+    expect(p.steps.map((x) => x.to)).toEqual(['water', 'air', 'fire'])
+    expect(p.flips).toBe(3)
+  })
+
+  it('breaks ties earth, fire, air, water', () => {
+    const s = sigil(rune('fire'), ['circumscribe', rune('air')], ['circumscribe', rune('earth')], ['circumscribe', rune('water')])
+    expect(runepath(s)!.steps.map((x) => x.to)).toEqual(['earth', 'air', 'water'])
+  })
+
+  it('takes the neutral kilo at a reach ratio of 1, and more as power and reach rise', () => {
+    const base = resolveEquation(sigil(rune('water'), ['circumscribe', rune('earth')]), [weakWater], undefined, eq)
+    expect(base.required).toBe(10)
+    expect(base.converted).toBeCloseTo(1)
+    expect(base.produced).toBeCloseTo(1.1)
+    const reach = resolveEquation(sigil(rune('water'), ['circumscribe', rune('earth')], ['side', rune('fire')]), [weakWater], undefined, eq)
+    expect(reach.converted).toBeCloseTo(2 ** Math.log(2))
+    const less = resolveEquation(sigil(rune('water'), ['circumscribe', rune('earth')], ['tangent', rune('fire')]), [weakWater], undefined, eq)
+    expect(less.converted).toBeCloseTo(0.5 ** Math.log(2))
+  })
+
+  it('lets an inscribe seal the equation and divide the output', () => {
+    const r = resolveEquation(sigil(rune('water'), ['inscribe', rune('earth')]), [weakWater], undefined, eq)
+    expect(r.target).toEqual({ elemental: 'earth', grade: 0 })
+    expect(r.produced).toBeCloseTo(r.converted / 1.1)
+  })
+
+  it('condenses when the seal is an inscribe of the anchor element', () => {
+    const r = resolveEquation(sigil(rune('earth'), ['inscribe', rune('earth')]), [{ elemental: 'earth', grade: 1, kg: 10 }], undefined, eq)
+    expect(r.mode).toBe('condense')
+    expect(r.required).toBe(20)
+    expect(r.target).toEqual({ elemental: 'earth', grade: 2 })
+  })
+
+  it('adds boost motes to their rune multiplier', () => {
+    const boosted = makeRune(nextId++, { body: 'crescent', motes: [elementMote('earth'), BOOST_MOTE] })
+    const r = resolveEquation(sigil(rune('water'), ['circumscribe', boosted]), [weakWater], undefined, eq)
+    expect(r.yieldFactor).toBeCloseTo(1.2)
   })
 })

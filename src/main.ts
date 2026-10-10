@@ -246,6 +246,8 @@ function joinHelp(kind: JoinKind): string {
       return 'Laces through the anchor. Adds its power as Ward against this term’s flare.'
     case 'inscribe':
       return 'Sits inside and adds its power as Force. Same element as the anchor: condenses a pool one grade. Any other: halves Reach, for small precise casts.'
+    case 'tangent':
+      return 'Touches the anchor at a point. Lowers reach in the equation model.'
   }
 }
 
@@ -429,6 +431,9 @@ function cardHint(r: Rune): string {
       break
     case 'inscribe':
       add = r.affinity === sigil.anchor.affinity && r.affinity !== 'none' ? `+${r.power} Force · condense` : `+${r.power} Force · ½ Reach`
+      break
+    case 'tangent':
+      add = `−${r.power} reach`
   }
   return [add, ...own].join(', ')
 }
@@ -623,7 +628,7 @@ function metricsView(g: GameState): string {
 
 function sigilSummary(sg: Sigil): string {
   const name = (r: Rune) => `${r.affinity === 'none' ? '' : ELEMENT_NAME[r.affinity] + ' '}${BODY_NAMES[r.body].toLowerCase()}`
-  const join: Record<JoinKind, string> = { circumscribe: 'circ', side: 'side', entwine: 'entwine', inscribe: 'insc' }
+  const join: Record<JoinKind, string> = { circumscribe: 'circ', side: 'side', entwine: 'entwine', inscribe: 'insc', tangent: 'tangent' }
   return [name(sg.anchor), ...sg.joins.map((j) => `${join[j.kind]} ${name(j.rune)}`)].join(' + ')
 }
 

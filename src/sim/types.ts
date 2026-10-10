@@ -8,9 +8,9 @@ export type Grade = 0 | 1 | 2 | 3
 export type Body = 'circle' | 'crescent' | 'triangle'
 
 /** How one rune joins another in a sigil. 'side' is a side link. */
-export type JoinKind = 'circumscribe' | 'side' | 'entwine' | 'inscribe'
+export type JoinKind = 'circumscribe' | 'side' | 'entwine' | 'inscribe' | 'tangent'
 
-export type MoteKind = 'element' | 'link' | 'reach' | 'guard'
+export type MoteKind = 'element' | 'link' | 'reach' | 'guard' | 'boost'
 
 /** A mote sits in a bowl and gives the rune its element or an ability. */
 export interface Mote {
@@ -31,6 +31,8 @@ export interface Rune {
   links: number
   reachMult: number
   guard: number
+  /** Added to this rune's multiplier at its step of the equation (boost motes). */
+  boost: number
 }
 
 /** One elemental at one grade within the amalgam. */

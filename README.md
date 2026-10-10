@@ -18,6 +18,7 @@ npm run simulate -- --links 4 --hand 10   # every body +4 links, a 10-rune hand 
 npm run simulate -- --deck late --farm 250  # grow the clay to 250 kg before finishing
 npm run simulate -- --trace 3             # print the first 3 commissions cast by cast
 npm run simulate -- --farm 400 --ignore-spec --planner  # how fast the opening deck can grow mass at all
+npm run simulate -- --equation --base 2.5 --step 2 --neutral 2   # the alchemical equation instead of Reach × Force
 npm run build      # dist/index.html, one self-contained page
 ```
 
@@ -115,4 +116,24 @@ The power arc's target: by the end of a run of 20 or more commissions, mud to cl
 - **Raw power hurts precision.** Power 8 instead of 5 cut one-term finishes from 85% to 52%, because the smallest sigil then overshoots a 2 kg trace.
 
 The simulated player plans each term for big hands and high-link anchors: it tries the best sigil of every anchor and size, plus every ring chain of two or three, plays the rest of the term out greedily from each, and starts with the one that ends best. The opening deck still uses the exhaustive greedy player, so its numbers match those above.
+
+### The alchemical equation (simulator only, for now)
+
+`src/sim/equation.ts` is a second model for what a sigil does, run with `--equation`:
+
+- **Resistance** = the material's base × the pool's grade multiplier × the step factor for every quality flipped along the runepath (a diagonal flips two).
+- **Runepath:** from the anchor, walk the elemental square through the circumscribed and inscribed runes, easiest step first, ties going earth, fire, air, water. It ends at the seal, the last of those runes placed, whose element is the output.
+- **Input kg** = neutral × (reach up ÷ reach down) ^ ln(1 + power ÷ resistance). Reach up is the anchor plus side links, times reach motes; reach down is the anchor plus tangents, a join that touches at a point; power is the anchor plus circumscribes and inscribes.
+- **Output kg** = input × 1.1 per circumscribe ÷ 1.1 per inscribe. A boost mote adds 0.1 to its rune's multiplier. Element yields don't apply. A seal that's an inscribe of the anchor's element condenses.
+
+Against mud, with base 2.5, step ×2 and a neutral 2 kg (60 commissions each; the opening deck 40):
+
+| Deck | Hand | Median terms | Done in 1 term | In 2 or fewer | Median spent |
+| --- | --- | --- | --- | --- | --- |
+| Opening | 6 | 5 | 0% | 15% | 5 |
+| Mid-run | 7 | 2 | 0% | 57% | 1 |
+| Late-run | 8 | 2 | 0% | 52% | 0 |
+| Late-run, +1 link on every rune | 10 | 1 | 58% | 100% | 0 |
+
+A neutral 1 kg makes the opening deck crawl and 3 kg wipes a 2 kg trace in one cast. Raising base or step slows everything: base 10 takes the opening deck 13 terms and loses 12% of commissions. A one-link anchor plus its seal always takes the neutral amount, so aiming small needs multi-link anchors with tangents.
 

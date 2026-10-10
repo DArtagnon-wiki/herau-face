@@ -54,7 +54,7 @@ export function outputs(sigil: Sigil): Outputs {
     if (kind === 'circumscribe') force += rune.power
     else if (kind === 'side') reach += rune.power * REACH_PER_POWER
     else if (kind === 'entwine') ward += rune.power * WARD_PER_POWER
-    else {
+    else if (kind === 'inscribe') {
       force += rune.power
       if (anchor.affinity !== 'none' && rune.affinity === anchor.affinity) condense = true
       else fine += 1

@@ -15,6 +15,8 @@ export interface MoteValues {
   reach: number
   /** A guard mote adds this much Ward. */
   guard: number
+  /** A boost mote adds this to its rune's multiplier in the equation. */
+  boost: number
 }
 
 export interface Forge {
@@ -31,7 +33,7 @@ export const DEFAULT_FORGE: Forge = {
     crescent: { power: 5, links: 1, bowls: 2 },
     triangle: { power: 5, links: 1, bowls: 3 },
   },
-  values: { reach: 1.5, guard: 4 },
+  values: { reach: 1.5, guard: 4, boost: 0.1 },
 }
 
 export const cloneForge = (f: Forge): Forge => ({
@@ -45,6 +47,7 @@ export const elementMote = (elemental: Elemental): Mote => ({ kind: 'element', e
 export const LINK_MOTE: Mote = { kind: 'link' }
 export const REACH_MOTE: Mote = { kind: 'reach' }
 export const GUARD_MOTE: Mote = { kind: 'guard' }
+export const BOOST_MOTE: Mote = { kind: 'boost' }
 
 /** Every mote the sandbox offers, keyed for form controls. */
 export const MOTE_OPTIONS: { key: string; mote: Mote }[] = [
@@ -55,6 +58,7 @@ export const MOTE_OPTIONS: { key: string; mote: Mote }[] = [
   { key: 'link', mote: LINK_MOTE },
   { key: 'reach', mote: REACH_MOTE },
   { key: 'guard', mote: GUARD_MOTE },
+  { key: 'boost', mote: BOOST_MOTE },
 ]
 export const moteKey = (m: Mote) => (m.kind === 'element' ? m.elemental! : m.kind)
 export const moteFromKey = (key: string): Mote | undefined => MOTE_OPTIONS.find((o) => o.key === key)?.mote
@@ -69,6 +73,8 @@ export function moteName(m: Mote): string {
       return 'Reach mote'
     case 'guard':
       return 'Guard mote'
+    case 'boost':
+      return 'Boost mote'
   }
 }
 
@@ -82,6 +88,8 @@ export function moteEffect(m: Mote, values: MoteValues = DEFAULT_FORGE.values): 
       return `Reach ×${values.reach}`
     case 'guard':
       return `+${values.guard} Ward`
+    case 'boost':
+      return `+${values.boost} multiplier`
   }
 }
 
@@ -109,6 +117,7 @@ export function makeRune(id: number, spec: RuneSpec, forge: Forge = DEFAULT_FORG
     links: b.links + motes.filter((m) => m.kind === 'link').length,
     reachMult: motes.filter((m) => m.kind === 'reach').reduce((x) => x * forge.values.reach, 1),
     guard: motes.filter((m) => m.kind === 'guard').length * forge.values.guard,
+    boost: motes.filter((m) => m.kind === 'boost').length * (forge.values.boost ?? 0),
   }
 }
 
