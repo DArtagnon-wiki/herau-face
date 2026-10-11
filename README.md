@@ -6,7 +6,7 @@ A roguelike deckbuilder of runes and alchemy, built from Circumgician's world. T
 
 One commission, playable end to end: 40 kg of mud (18 kg medium earth, 18 kg weak water, and 2 kg each of medium air and fire from its organics) to bring to clay before quintessence runs out. Clay is 75–85% earth, with air and fire each between 1% and 3%; bounds are strict.
 
-Each term, mud shows its move. You compose and cast sigils from a 6-rune hand, as many as the hand allows; each resolves at once against an exact preview, and its Ward builds up for the term. When you end the term, mud acts: the term's Ward absorbs its flare and the rest costs quintessence. Unplayed runes stay in hand.
+Each term, mud shows its move. Tap a rune to anchor a sigil, then tap others and pick how each joins from the menu that opens around it. You compose and cast sigils from a 6-rune hand, as many as the hand allows; each resolves at once against an exact preview, and its Ward builds up for the term. When you end the term, mud acts: the term's Ward absorbs its flare and the rest costs quintessence. Unplayed runes stay in hand.
 
 ```sh
 npm install

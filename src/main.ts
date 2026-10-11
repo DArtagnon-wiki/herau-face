@@ -41,6 +41,10 @@ interface UI {
   /** The per-term record, shown as text when the clipboard refuses it. */
   csv: string
   copied: boolean
+  /** The radial join menu: which hand rune it is open on, and where on screen. */
+  radial: { id: number; x: number; y: number } | null
+  /** Which pile sheet is open. */
+  pile: 'draw' | 'discard' | null
 }
 
 const ui: UI = {
@@ -57,10 +61,12 @@ const ui: UI = {
   discarding: false,
   marked: new Set(),
   flash: '',
-  open: new Set(['sandbox', 'metrics']),
+  open: new Set(['sandbox']),
   scope: 'table',
   csv: '',
   copied: false,
+  radial: null,
+  pile: null,
 }
 
 type JoinOption = { kind: JoinKind; label: string; gives: string }
@@ -116,6 +122,7 @@ function resetComposer() {
   ui.discarding = false
   ui.marked = new Set()
   ui.flash = ''
+  ui.radial = null
 }
 
 function runeById(id: number): Rune | undefined {
@@ -402,7 +409,7 @@ function balanceView(g: GameState, preview: CastPreview | null): string {
 function composerView(g: GameState, sigil: Sigil | null, preview: CastPreview | null): string {
   const anchor = sigil?.anchor
   const used = sigil?.joins.length ?? 0
-  let stats = `<p class="hint">${ui.discarding ? 'Tap the runes to discard, then confirm.' : 'Tap a rune in your hand to make it the anchor.'}</p>`
+  let stats = `<p class="hint">${ui.discarding ? 'Tap the runes to discard, then confirm.' : 'Tap a rune in your hand to make it the anchor. Then tap another to choose how it joins.'}</p>`
   if (sigil && preview && g.settings.equation) {
     stats = equationStats(g, sigil, preview)
   } else if (sigil && preview) {
@@ -445,14 +452,6 @@ function composerView(g: GameState, sigil: Sigil | null, preview: CastPreview | 
       <div class="stats">${stats}</div>
     </div>
     ${ui.flash ? `<p class="flash">${esc(ui.flash)}</p>` : ''}
-    <div class="modes ${g.settings.equation ? 'five' : ''}" role="group" aria-label="Join">
-      ${joinList(!!g.settings.equation).map(
-        (j) => `<button class="mode ${ui.mode === j.kind ? 'is-on' : ''}" data-act="mode" data-kind="${j.kind}" aria-pressed="${ui.mode === j.kind}" ${!anchor || ui.discarding ? 'disabled' : ''}>
-          <span class="mode-name">${j.label}</span>
-          <span class="mode-gives">${j.gives}</span>
-        </button>`,
-      ).join('')}
-    </div>
   </section>`
 }
 
@@ -495,15 +494,11 @@ function equationStats(g: GameState, sigil: Sigil, preview: CastPreview): string
       ${change}${after}${cost}`
 }
 
-/** What a rune would add to the sigil under the selected join; otherwise its abilities. */
-function cardHint(r: Rune): string {
-  const own = abilities(r)
-  const sigil = currentSigil()
-  if (ui.discarding || !sigil) return own.join(', ') || BODY_NAMES[r.body]
-  if (!canJoin(sigil, r)) return 'No open link'
+/** What a rune would add to the sigil if joined this way. */
+function joinHint(r: Rune, kind: JoinKind, sigil: Sigil): string {
+  const same = r.affinity === sigil.anchor.affinity && r.affinity !== 'none'
   const eq = ui.game?.settings.equation
   if (eq) {
-    const same = r.affinity === sigil.anchor.affinity && r.affinity !== 'none'
     const hint: Record<JoinKind, string> = {
       circumscribe: `+${r.power} power · ×${num(eq.ring + r.boost)}`,
       inscribe: same ? `+${r.power} power · condense` : `+${r.power} power · ÷${num(eq.inscribe + r.boost)}`,
@@ -511,26 +506,98 @@ function cardHint(r: Rune): string {
       tangent: `+${r.power} reach down`,
       entwine: `+${num(r.power * WARD_PER_POWER)} Ward`,
     }
-    return [hint[ui.mode], ...own].join(', ')
+    return hint[kind]
   }
-  let add: string
-  switch (ui.mode) {
-    case 'circumscribe':
-      add = `+${r.power} Force`
-      break
-    case 'side':
-      add = `+${kg(r.power * REACH_PER_POWER)}`
-      break
-    case 'entwine':
-      add = `+${num(r.power * WARD_PER_POWER)} Ward`
-      break
-    case 'inscribe':
-      add = r.affinity === sigil.anchor.affinity && r.affinity !== 'none' ? `+${r.power} Force · condense` : `+${r.power} Force · ½ Reach`
-      break
-    case 'tangent':
-      add = `−${r.power} reach`
+  const hint: Record<JoinKind, string> = {
+    circumscribe: `+${r.power} Force · target`,
+    side: `+${kg(r.power * REACH_PER_POWER)} Reach`,
+    entwine: `+${num(r.power * WARD_PER_POWER)} Ward`,
+    inscribe: same ? `+${r.power} Force · condense` : `+${r.power} Force · ½ Reach`,
+    tangent: `+${r.power} reach down`,
   }
-  return [add, ...own].join(', ')
+  return hint[kind]
+}
+
+/** The line under a card: its role in the sigil, whether it can still join, or its abilities. */
+function cardHint(r: Rune): string {
+  const own = abilities(r)
+  const sigil = currentSigil()
+  if (ui.discarding || !sigil) return own.join(', ') || BODY_NAMES[r.body]
+  if (!canJoin(sigil, r)) return 'No open link'
+  return 'Tap to join'
+}
+
+/** The radial menu of joins around the tapped rune. */
+function radialView(g: GameState): string {
+  const at = ui.radial
+  const sigil = currentSigil()
+  const rune = at && g.hand.find((h) => h.id === at.id)
+  if (!at || !sigil || !rune) return ''
+  const options = joinList(!!g.settings.equation)
+  const radius = 86
+  const halfW = radius + 60
+  const halfH = radius + 30
+  const x = Math.min(Math.max(at.x, halfW), Math.max(halfW, window.innerWidth - halfW))
+  const y = Math.min(Math.max(at.y, halfH), Math.max(halfH, window.innerHeight - halfH))
+  const name = `${rune.affinity === 'none' ? '' : ELEMENT_NAME[rune.affinity] + ' '}${BODY_NAMES[rune.body].toLowerCase()}`
+  return `<div class="radial-backdrop" data-act="radial-close"></div>
+  <div class="radial" role="menu" aria-label="Join the ${name}" style="left:${x}px;top:${y}px;--r:${radius}px">
+    <button class="radial-center" data-act="radial-close" aria-label="Cancel" style="--c:${AFFINITY_VAR[rune.affinity]}">${runeSvg(rune, 40)}</button>
+    ${options
+      .map(
+        (o, i) => `<button class="radial-opt" role="menuitem" data-act="radial-pick" data-kind="${o.kind}" style="--a:${-90 + (360 / options.length) * i}deg">
+        <span class="mode-name">${o.label}</span>
+        <span class="mode-gives">${joinHint(rune, o.kind, sigil)}</span>
+      </button>`,
+      )
+      .join('')}
+  </div>`
+}
+
+/** The draw and discard piles, opened from the buttons under the header. */
+function pilesBar(g: GameState): string {
+  return `<nav class="piles" aria-label="Piles">
+    <button data-act="pile-open" data-pile="draw" aria-haspopup="dialog">Draw pile <b class="num">${g.draw.length}</b></button>
+    <button data-act="pile-open" data-pile="discard" aria-haspopup="dialog">Discard <b class="num">${g.discard.length}</b></button>
+  </nav>`
+}
+
+function pileSheet(g: GameState): string {
+  if (!ui.pile) return ''
+  const runes = (ui.pile === 'draw' ? g.draw : g.discard)
+    .slice()
+    .sort((a, b) => BODY_ORDER.indexOf(a.body) - BODY_ORDER.indexOf(b.body) || ORDER.indexOf(a.affinity) - ORDER.indexOf(b.affinity) || a.id - b.id)
+  const counts = ORDER.map((e) => [e, runes.filter((h) => h.affinity === e).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([e, n]) => `<span style="color:${AFFINITY_VAR[e as keyof typeof AFFINITY_VAR]}">${n} ${e === 'none' ? 'without element' : e}</span>`)
+    .join(' · ')
+  const title = ui.pile === 'draw' ? 'Draw pile' : 'Discard pile'
+  const note =
+    ui.pile === 'draw'
+      ? runes.length
+        ? `Sorted, so the draw order stays hidden. ${counts}.`
+        : 'Empty: the discard pile reshuffles into it at the next draw.'
+      : runes.length
+        ? `Played and discarded runes. They reshuffle into the draw pile when it runs out. ${counts}.`
+        : 'Nothing discarded yet.'
+  return `<div class="sheet-backdrop" data-act="pile-close"></div>
+  <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="sheet-head"><h2 id="sheet-title">${title} <span class="num summary-note">${runes.length}</span></h2><button data-act="pile-close" aria-label="Close">Close</button></div>
+    <p class="deck-left">${note}</p>
+    <ul class="deck-list">
+      ${runes
+        .map(
+          (h) => `<li class="deck-item" style="--c:${AFFINITY_VAR[h.affinity]}">
+            ${runeSvg(h, 34)}
+            <span class="deck-item-text">
+              <span class="deck-item-name">${h.affinity === 'none' ? BODY_NAMES[h.body] : `${ELEMENT_NAME[h.affinity]} ${BODY_NAMES[h.body].toLowerCase()}`} · <span class="num">${h.power}</span> · ${linksWord(h.links)}</span>
+              <span class="deck-item-motes">${h.motes.map((m) => `<span class="mote-chip"><span class="mote-dot" style="background:${moteColor(m)}"></span>${moteName(m)}${m.kind === 'element' ? '' : ': ' + moteEffect(m, g.forge.values)}</span>`).join('')}</span>
+            </span>
+          </li>`,
+        )
+        .join('')}
+    </ul>
+  </section>`
 }
 
 /** The Reach × Force arithmetic, spelled out. */
@@ -636,40 +703,6 @@ function endView(g: GameState): string {
 
 const ORDER = ['water', 'earth', 'air', 'fire', 'none']
 const BODY_ORDER: Body[] = ['circle', 'crescent', 'triangle']
-
-function deckView(g: GameState): string {
-  const where = new Map<number, 'hand' | 'draw' | 'discard'>()
-  g.hand.forEach((h) => where.set(h.id, 'hand'))
-  g.draw.forEach((h) => where.set(h.id, 'draw'))
-  g.discard.forEach((h) => where.set(h.id, 'discard'))
-  const all = [...g.hand, ...g.draw, ...g.discard].sort(
-    (a, b) => BODY_ORDER.indexOf(a.body) - BODY_ORDER.indexOf(b.body) || ORDER.indexOf(a.affinity) - ORDER.indexOf(b.affinity) || a.id - b.id,
-  )
-  const left = ORDER.map((e) => [e, g.draw.filter((h) => h.affinity === e).length] as const)
-    .filter(([, n]) => n > 0)
-    .map(([e, n]) => `<span style="color:${AFFINITY_VAR[e as keyof typeof AFFINITY_VAR]}">${n} ${e === 'none' ? 'without element' : e}</span>`)
-    .join(' · ')
-  const label = { hand: 'Hand', draw: 'Draw', discard: 'Discard' }
-  return `<details class="panel deck-panel" data-panel="deck" ${ui.open.has('deck') ? 'open' : ''}>
-    <summary>Deck <span class="summary-note num">· draw ${g.draw.length} · discard ${g.discard.length}</span></summary>
-    <p class="deck-left">${g.draw.length ? `Still to draw: ${left}` : 'The draw pile is empty; the discard reshuffles next.'}</p>
-    <ul class="deck-list">
-      ${all
-        .map((h) => {
-          const at = where.get(h.id)!
-          return `<li class="deck-item at-${at}" style="--c:${AFFINITY_VAR[h.affinity]}">
-            ${runeSvg(h, 34)}
-            <span class="deck-item-text">
-              <span class="deck-item-name">${h.affinity === 'none' ? '' : ELEMENT_NAME[h.affinity] + ' '}${BODY_NAMES[h.body].toLowerCase()} · <span class="num">${h.power}</span> · ${linksWord(h.links)}</span>
-              <span class="deck-item-motes">${h.motes.map((m) => `<span class="mote-chip"><span class="mote-dot" style="background:${moteColor(m)}"></span>${moteName(m)}${m.kind === 'element' ? '' : ': ' + moteEffect(m, g.forge.values)}</span>`).join('')}</span>
-            </span>
-            <span class="deck-item-at">${label[at]}</span>
-          </li>`
-        })
-        .join('')}
-    </ul>
-  </details>`
-}
 
 // ---------------------------------------------------------------------------
 // Table metrics
@@ -977,6 +1010,7 @@ function gameView(g: GameState): string {
       </div>
     </header>
 
+    ${pilesBar(g)}
     ${intentView(g, end)}
 
     <section class="vessel panel">
@@ -990,17 +1024,17 @@ function gameView(g: GameState): string {
       ${balanceView(g, preview)}
     </section>
 
-    ${metricsView(g)}
-
     ${lastTermView(g)}
     ${composerView(g, sigil, preview)}
     ${handView(g)}
     ${actionsView(g, sigil, preview, end)}
     ${sandboxView(g)}
-    ${deckView(g)}
     ${historyView(g)}
+    ${metricsView(g)}
     ${tuningView()}
     ${endView(g)}
+    ${radialView(g)}
+    ${pileSheet(g)}
   </main>`
 }
 
@@ -1013,7 +1047,7 @@ function render() {
   root.innerHTML = ui.game ? gameView(ui.game) : startView()
 }
 
-function tapCard(id: number) {
+function tapCard(id: number, rect?: DOMRect) {
   const g = ui.game!
   ui.flash = ''
   if (ui.discarding) {
@@ -1042,7 +1076,7 @@ function tapCard(id: number) {
     ui.flash = `This ${BODY_NAMES[a.body].toLowerCase()} anchor has ${linksWord(a.links)}, and ${a.links === 1 ? 'it is' : 'they are'} used. Anchor a rune with more links to hold more.`
     return
   }
-  ui.joins.push({ kind: ui.mode, id: rune.id })
+  ui.radial = { id: rune.id, x: rect ? rect.left + rect.width / 2 : window.innerWidth / 2, y: rect ? rect.top + rect.height / 2 : window.innerHeight / 2 }
 }
 
 function readTuning() {
@@ -1112,7 +1146,20 @@ root.addEventListener('click', (e) => {
       window.scrollTo({ top: 0 })
       break
     case 'card':
-      tapCard(Number(el.dataset.id))
+      tapCard(Number(el.dataset.id), el.getBoundingClientRect())
+      break
+    case 'radial-pick':
+      if (ui.radial) ui.joins.push({ kind: el.dataset.kind as JoinKind, id: ui.radial.id })
+      ui.radial = null
+      break
+    case 'radial-close':
+      ui.radial = null
+      break
+    case 'pile-open':
+      ui.pile = el.dataset.pile as 'draw' | 'discard'
+      break
+    case 'pile-close':
+      ui.pile = null
       break
     case 'mode':
       ui.mode = el.dataset.kind as JoinKind
@@ -1267,3 +1314,20 @@ root.addEventListener('click', (e) => {
 })
 
 render()
+
+// The radial menu and pile sheet close on Escape; the radial also closes on scroll, since it is placed on screen.
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || (!ui.radial && !ui.pile)) return
+  ui.radial = null
+  ui.pile = null
+  render()
+})
+window.addEventListener(
+  'scroll',
+  () => {
+    if (!ui.radial) return
+    ui.radial = null
+    render()
+  },
+  { passive: true },
+)
