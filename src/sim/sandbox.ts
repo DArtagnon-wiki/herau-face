@@ -36,6 +36,7 @@ export function removeRune(state: GameState, id: number): GameState {
 /** The whole deck as specs, for starting the next commission with the same runes. */
 export function deckSpecs(state: GameState): RuneSpec[] {
   return [...state.hand, ...state.draw, ...state.discard]
+    .filter((r) => !r.junk)
     .sort((a, b) => a.id - b.id)
     .map((r) => ({ body: r.body, motes: r.motes.slice() }))
 }

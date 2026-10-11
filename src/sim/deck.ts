@@ -97,6 +97,8 @@ export function moteEffect(m: Mote, values: MoteValues = DEFAULT_FORGE.values): 
 export interface RuneSpec {
   body: Body
   motes: Mote[]
+  /** Slag a boss throws into the deck: power 1, no links, no element. */
+  junk?: boolean
 }
 
 /**
@@ -104,6 +106,7 @@ export interface RuneSpec {
  * dropped. The first element mote sets the element.
  */
 export function makeRune(id: number, spec: RuneSpec, forge: Forge = DEFAULT_FORGE, power?: number): Rune {
+  if (spec.junk) return { id, body: 'circle', power: 1, bowls: 0, motes: [], affinity: 'none', links: 0, reachMult: 1, guard: 0, boost: 0, junk: true }
   const b = forge.bodies[spec.body]
   const motes = spec.motes.slice(0, b.bowls)
   const element = motes.find((m) => m.kind === 'element')

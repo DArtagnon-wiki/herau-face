@@ -122,6 +122,8 @@ export interface ResolveOptions {
    * requirement does nothing.
    */
   surplusForce: boolean
+  /** Scales the Force every change needs: a tougher material, or a boss stiffening. */
+  resistanceMult?: number
 }
 
 /** Work out exactly what casting this rune does to the amalgam. */
@@ -142,7 +144,7 @@ export function resolve(sigil: Sigil, pools: Pool[], selectedKey?: string, opts:
   let yieldFactor: number
   let target: { elemental: Elemental; grade: Grade }
   if (out.condense) {
-    required = CONDENSE_COST * GRADE_MULT[source.grade]
+    required = CONDENSE_COST * GRADE_MULT[source.grade] * (opts.resistanceMult ?? 1)
     yieldFactor = CONDENSE_YIELD
     target = { elemental: aff, grade: (source.grade + 1) as Grade }
   } else {
@@ -165,7 +167,7 @@ export function resolve(sigil: Sigil, pools: Pool[], selectedKey?: string, opts:
       cost += STEP_COST[steps as 1 | 2]
       yieldFactor *= YIELD[route[i - 1]][route[i]]
     }
-    required = GRADE_MULT[source.grade] * cost
+    required = GRADE_MULT[source.grade] * cost * (opts.resistanceMult ?? 1)
     target = { elemental: route[route.length - 1], grade: 0 }
   }
 

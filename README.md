@@ -151,3 +151,15 @@ With the equation and the 4-circle, 8-crescent deck, the old mud (flares of 11�
 
 Under the new mud, 3% of opening commissions cost nothing, 23% cost 1–5, 67% cost 6–15 and 7% cost 16–30. Flags: `--flare-min`, `--flare-max`, `--flare-rise`, `--flare-weight-rise`, `--debuff-flare`, `--strain-free`, `--strain-rate`.
 
+### Boss: the Mire
+
+Pick it from the commission buttons on the start screen or in the sandbox (`--commission mire` in the simulator). A 180 kg bog to fire into brick, 80–90% earth with air and fire each 1–3%. Each term it rolls surge, stiffen (resistance ×2 this term), bind (one sigil this term) or slag (two power-1, no-link slag runes into your draw pile), each carrying a flare of 32–36.
+
+| Deck | Won | Spent when won (median, p10–p90) | Terms when won |
+| --- | --- | --- | --- |
+| Mid-run | 0% | — | — |
+| Late-run | 70% | 68 (35–90) | 5 |
+| Late-run, +1 link, 10-rune hand | 100% | 28 | 3 |
+
+Tuning flags: `--boss-resistance`, `--boss-flare-min`, `--boss-flare-max`, `--boss-stiffen`, `--boss-junk`, `--boss-mass`. The simulated player now values progress twice as much as before (`--miss-weight 60`); at 30 it warded forever in cornered boss fights. With it, mud costs the opening deck a median of 13 (p90 24), mid-run 4 and late-run 0.
+

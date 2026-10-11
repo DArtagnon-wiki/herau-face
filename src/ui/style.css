@@ -432,3 +432,4 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--gilt); }
   .sheet { animation: slide 180ms ease-out; }
   @keyframes slide { from { opacity: 0.6; translate: 0 24px; } to { opacity: 1; translate: 0 0; } }
 }
+.presets .seg.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }

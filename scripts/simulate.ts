@@ -31,6 +31,7 @@ import { imbalance } from '../src/sim/table'
 import type { JoinKind, Rune, Sigil } from '../src/sim/types'
 import { ELEMENTALS, poolKey } from '../src/sim/alchemy'
 import { presetByKey } from '../src/sim/presets'
+import { COMMISSIONS, cloneTarget, type BossTuning, type CommissionKey } from '../src/sim/commission'
 import { mixedDeck } from '../src/sim/deck'
 import { DEFAULT_EQUATION } from '../src/sim/equation'
 
@@ -85,6 +86,30 @@ const preset = arg('--deck') ? presetByKey(arg('--deck')!) : undefined
 if (arg('--deck') && !preset) throw new Error(`No deck called ${arg('--deck')}: try opening, mid or late.`)
 if (preset && !arg('--hand')) settings.handSize = preset.handSize
 const setup = preset ? preset.setup() : standardSetup()
+/**
+ * --commission mire plays the boss. --boss-resistance, --boss-flare-min,
+ * --boss-flare-max, --boss-stiffen, --boss-junk, --boss-mass (a multiplier on
+ * its weight) tune it.
+ */
+const commission = (arg('--commission') ?? 'mud') as CommissionKey
+if (commission !== 'mud') {
+  const c = COMMISSIONS[commission]
+  const mass = Number(arg('--boss-mass') ?? 1)
+  setup.commission = commission
+  setup.start = c.start.map((p) => ({ ...p, kg: p.kg * mass }))
+  setup.target = cloneTarget(c.target)
+  const num = (name: string) => (arg(name) !== undefined ? Number(arg(name)) : undefined)
+  const boss: Partial<BossTuning> = {}
+  const set = <K extends keyof BossTuning>(k: K, v: BossTuning[K] | undefined) => {
+    if (v !== undefined) boss[k] = v
+  }
+  set('resistance', num('--boss-resistance'))
+  set('flareMin', num('--boss-flare-min'))
+  set('flareMax', num('--boss-flare-max'))
+  set('stiffen', num('--boss-stiffen'))
+  set('junk', num('--boss-junk'))
+  settings.boss = boss
+}
 /** --mix C:K[:T] starts from C circles and K crescents of each element, plus T plain triangles (default 2). */
 const mix = arg('--mix')
 if (mix) {
@@ -124,12 +149,18 @@ const farm = Number(arg('--farm') ?? 0)
 const startKg = totalKg(setup.start)
 const farmBonus = (pools: EndOutcome['pools']) => (farm ? 40 * Math.log2(Math.min(totalKg(pools), farm) / startKg) : 0)
 
+/**
+ * --miss-weight W: how much the player values progress against quintessence.
+ * 60 by default; at 30 the player wards forever in grinding fights instead of
+ * making slow progress, which mattered against the boss.
+ */
+const missWeight = Number(arg('--miss-weight') ?? 60)
 /** --ignore-spec: with --farm, chase mass alone, to bound how fast a deck can grow it. */
 const ignoreSpec = args.includes('--ignore-spec')
 
 function evalEnd(state: GameState, end: EndOutcome): number {
   if (ignoreSpec) return farmBonus(end.pools) - end.paid * 3
-  return farmBonus(end.pools) - miss(end.pools, state.target) * 30 - centering(state, end.pools) * 2 - end.paid * (naive ? 0 : 3) - imbalance(end.table) * 0.3
+  return farmBonus(end.pools) - miss(end.pools, state.target) * missWeight - centering(state, end.pools) * 2 - end.paid * (naive ? 0 : 3) - imbalance(end.table) * 0.3
 }
 
 /** Every sigil the hand can make, within the link limits. */
@@ -263,7 +294,7 @@ function rollout(state: GameState, first: Scored): number {
   if (first.score >= 10000) return first.score
   let s = cast(state, first.sigil, first.poolKey)
   let value = first.score
-  while (s.phase === 'compose' && s.hand.length) {
+  while (s.phase === 'compose' && s.hand.length && castsLeft(s) > 0) {
     const next = beam(s, 4).best
     if (!next || next.score <= value + 0.01) break
     value = next.score
@@ -324,7 +355,7 @@ function play(seed: number) {
       const needed = new Set<string>(['water', 'earth', 'none'])
       if (sh.air >= t.air.max) needed.add('air')
       if (sh.fire >= t.fire.max) needed.add('fire')
-      const drop = s.hand.filter((r) => !needed.has(r.affinity)).map((r) => r.id)
+      const drop = s.hand.filter((r) => r.junk || !needed.has(r.affinity)).map((r) => r.id)
       if (drop.length) {
         s = discardRunes(s, drop)
         discardsUsed++
@@ -367,7 +398,8 @@ const f1 = (n: number) => n.toFixed(1)
 
 const eqNote = settings.equation ? ` · equation: base ${settings.equation.base}, step ×${settings.equation.step}, ring ×${settings.equation.ring}, neutral ${settings.equation.neutral} kg + ${settings.equation.share * 100}% of the pool${settings.equation.gate ? ', power gate' : ''}` : ''
  const mudNote = ` · flares ${settings.flareMin}–${settings.flareMax} +${settings.flareRise}/term (weight +${settings.flareWeightRise}) · debuff flare ${settings.debuffFlare} · strain past ${settings.strainFree}, 1 per ${settings.strainRate}`
-const forgeNote = eqNote + mudNote + (mix ? ` · deck ${mix} (circles:crescents:triangles)` : '') + (preset ? ` · ${preset.name.toLowerCase()}` : '') + (power || extraLinks ? ` · power ${power ?? 'default'} · +${extraLinks} links` : '') + (farm ? ` · farming to ${farm} kg` : '')
+ const bossNote = commission !== 'mud' ? ` · ${COMMISSIONS[commission].source} ${JSON.stringify(settings.boss)}${arg('--boss-mass') ? ` ×${arg('--boss-mass')} mass` : ''}` : ''
+const forgeNote = bossNote + eqNote + mudNote + (mix ? ` · deck ${mix} (circles:crescents:triangles)` : '') + (preset ? ` · ${preset.name.toLowerCase()}` : '') + (power || extraLinks ? ` · power ${power ?? 'default'} · +${extraLinks} links` : '') + (farm ? ` · farming to ${farm} kg` : '')
 console.log(
   `${games} commissions${forgeNote} · hand ${settings.handSize} · ${settings.castsPerTerm || 'any number of'} sigil${settings.castsPerTerm === 1 ? '' : 's'} a term · flare ×${settings.flareScale} · stock ${settings.stock} · strain ${settings.strain ? 'on' : 'off'} · surplus Force ${settings.surplusForce ? 'multiplies' : 'capped'}${naive ? ' · naive player' : ''}${noOrganics ? ' · no organics' : ''}\n`,
 )
@@ -388,6 +420,7 @@ const buckets = [
   ['>50', (x: number) => x > 50],
 ] as const
 console.log(`won ${Math.round((100 * won.length) / games)}%  spent median ${pct(spent, 50)}, p90 ${pct(spent, 90)}  terms median ${pct(terms, 50)}, p90 ${pct(terms, 90)}  clay ${f1(mean(won.map((r) => totalKg(r.state.pools))))} kg`)
+if (won.length && won.length < runs.length) console.log(`among wins: spent median ${pct(won.map((r) => r.state.spent), 50)}, p10 ${pct(won.map((r) => r.state.spent), 10)}, p90 ${pct(won.map((r) => r.state.spent), 90)} · terms median ${pct(won.map((r) => termsUsed(r.state)), 50)}`)
 if (farm) console.log(`peak mass median ${f1(pct(runs.map((r) => r.peak), 50))} kg, p90 ${f1(pct(runs.map((r) => r.peak), 90))} kg, best ${f1(Math.max(...runs.map((r) => r.peak)))} kg`)
 console.log(`finished in 1 term ${Math.round((100 * won.filter((r) => termsUsed(r.state) <= 1).length) / games)}%, in 2 or fewer ${Math.round((100 * won.filter((r) => termsUsed(r.state) <= 2).length) / games)}%`)
 console.log(buckets.map(([label, f]) => `${label}: ${Math.round((100 * spent.filter(f).length) / games)}%`).join('  '))

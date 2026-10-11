@@ -329,7 +329,7 @@ The commission's flares are the main threat. Ward from the term's sigils absorbs
 | Early commission, a few upgrades | Rarely anything |
 | Boss, inadequate deck | Half to three quarters of the stock |
 
-In the prototype, under the equation with the 4-circle, 8-crescent deck, a careful simulated player pays a median of 8 against mud (90th percentile 15) and finishes every commission: 3% cost nothing, 23% cost 1–5, 67% cost 6–15 and 7% cost 16–30. The mid-run deck pays a median of 2 and the late-run deck nothing.
+In the prototype, under the equation with the 4-circle, 8-crescent deck, a simulated player pays a median of 13 against mud (90th percentile 24) and finishes every commission: 5% cost nothing, 12% cost 1–5, 47% cost 6–15, 32% cost 16–30 and 5% cost 31–50. The mid-run deck pays a median of 4 and the late-run deck nothing.
 
 A partial refill after each boss (proposed) keeps a weak deck's slide from feeling like a slow death sentence.
 
@@ -361,6 +361,38 @@ For example, flax might mix unravel, rot and tangle, while mud mixes seep, split
 - **Settled lumps are banked (proposed):** set aside, no longer acting.
 - **Non-target stable states are tracked, not rewarded,** in the first cut. The economy is decided once there is playtest data.
 - **A tether line marks a byproduct (proposed)**, so the table shows which lumps can be ignored.
+
+## Boss: the Mire (prototyped)
+
+The first boss sits at the far end of the arc: the late-run deck beats it about 70% of the time, paying a median of 68 quintessence when it does, and the mid-run deck never does. It is a 180 kg bog to fire into brick, 80–90% earth with air and fire each between 1% and 3%.
+
+| Pool | Weight | Grade |
+| --- | --- | --- |
+| Earth | 67.5 kg | Medium |
+| Water | 90 kg | Weak |
+| Air | 11.25 kg | Medium |
+| Fire | 11.25 kg | Medium |
+
+Each term it rolls one of four moves, equally likely, and every move carries a flare of 32–36 that never escalates:
+
+| Move | Effect beyond the flare |
+| --- | --- |
+| Surge | None |
+| Stiffen | Resistance ×2 for every sigil this term |
+| Bind | Only one sigil this term |
+| Slag | Two slag runes (power 1, no links, no element) shuffle into the draw pile when the term ends |
+
+Simulated, 60 fights each:
+
+| Deck | Won | Quintessence spent when won (median, p10–p90) | Terms when won |
+| --- | --- | --- | --- |
+| Mid-run | 0% | — | — |
+| Late-run | 70% | 68 (35–90) | 5 |
+| Late-run, +1 link, 10-rune hand | 100% | 28 | 3 |
+
+- **Resistance is the steepest lever.** Doubling the Mire's base resistance and hardening its water cut a late sigil's take from about 15 kg to 2 kg, and the late deck never won. The final Mire resists like mud until it stiffens.
+- **Flares against weight.** Bigger flares on a 120 kg Mire made a three-term race; 180 kg with flares of 32–36 gives a five-term fight where stiffen, bind and slag have time to matter.
+- **Long fights exposed the simulated player, not the boss.** Cornered with earth at 89% and a fire trace still high, a player that weighed quintessence heavily kept warding instead of making slow progress, and bled out. Valuing progress twice as much fixed it; the simulator now uses that player everywhere.
 
 ## Worked example: mud to clay
 

@@ -1,6 +1,6 @@
 import { normalize, totalKg } from './alchemy'
-import { CLAY_TARGET, MUD_START, applyIntent, cloneTarget, inBand, rollIntent, type Intent, type Target } from './commission'
-import { DEFAULT_FORGE, buildDeck, cloneForge, standardDeck, type Forge, type RuneSpec } from './deck'
+import { CLAY_TARGET, MUD_START, applyIntent, cloneTarget, inBand, materialResistance, rollIntent, type BossTuning, type CommissionKey, type Intent, type Target } from './commission'
+import { DEFAULT_FORGE, buildDeck, cloneForge, makeRune, standardDeck, type Forge, type RuneSpec } from './deck'
 import { makeRng, type Rng } from './rng'
 import { canJoin, openLinks, resolve, runesOf, type Resolution } from './sigil'
 import { FREE_IMBALANCE, STRAIN_RATE, strain, type TableEntry } from './table'
@@ -30,6 +30,8 @@ export interface Settings {
   strainRate?: number
   /** When set, sigils resolve by the alchemical equation instead of Reach × Force. */
   equation?: Equation | null
+  /** Overrides for a boss's pressure (see MIRE_TUNING). */
+  boss?: Partial<BossTuning>
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -85,6 +87,8 @@ export interface TermOutcome extends EndOutcome {
 
 export interface GameState {
   settings: Settings
+  /** Which commission is being worked. */
+  commission: CommissionKey
   /** The numbers behind bodies and motes; the sandbox can change them. */
   forge: Forge
   /** The composition this commission must reach. */
@@ -152,6 +156,8 @@ export interface Setup {
   deck: RuneSpec[]
   start: Pool[]
   target: Target
+  /** Which commission: mud by default, or a boss. */
+  commission?: CommissionKey
 }
 
 export const standardSetup = (): Setup => ({
@@ -159,13 +165,16 @@ export const standardSetup = (): Setup => ({
   deck: standardDeck(),
   start: MUD_START.map((p) => ({ ...p })),
   target: cloneTarget(CLAY_TARGET),
+  commission: 'mud',
 })
 
 export function newGame(settings: Settings = DEFAULT_SETTINGS, seed = Date.now(), setup: Setup = standardSetup()): GameState {
   const rng = makeRng(seed)
   const pools = normalize(setup.start)
+  const commission = setup.commission ?? 'mud'
   let state: GameState = {
     settings,
+    commission,
     forge: setup.forge,
     target: setup.target,
     start: pools,
@@ -179,7 +188,7 @@ export function newGame(settings: Settings = DEFAULT_SETTINGS, seed = Date.now()
     quintessence: settings.stock,
     spent: 0,
     discardsLeft: settings.discards,
-    intent: rollIntent(rng, 1, pools, [], settings),
+    intent: rollIntent(rng, 1, pools, [], settings, commission),
     phase: 'compose',
     casts: [],
     termWard: 0,
@@ -190,14 +199,20 @@ export function newGame(settings: Settings = DEFAULT_SETTINGS, seed = Date.now()
   return { ...state, seed: rng.state() }
 }
 
-/** How many more sigils can be cast this term. */
-export const castsLeft = (state: GameState): number =>
-  state.settings.castsPerTerm > 0 ? Math.max(0, state.settings.castsPerTerm - state.casts.length) : Infinity
+/** How many more sigils can be cast this term: the setting, and a boss's bind. */
+export function castsLeft(state: GameState): number {
+  const limit = Math.min(state.settings.castsPerTerm > 0 ? state.settings.castsPerTerm : Infinity, state.intent.castLimit ?? Infinity)
+  return Number.isFinite(limit) ? Math.max(0, limit - state.casts.length) : Infinity
+}
+
+/** The resistance multiplier this term: the material's, times any stiffening. */
+export const resistanceMult = (state: Pick<GameState, 'commission' | 'intent' | 'settings'>): number =>
+  materialResistance(state.commission, state.settings.boss) * (state.intent.resistanceMult ?? 1)
 
 /** Why a sigil can't be cast as it stands, or null when it can. */
 export function invalidReason(state: GameState, sigil: Sigil): string | null {
   if (state.phase !== 'compose') return 'The commission is over.'
-  if (castsLeft(state) <= 0) return 'No more sigils this term.'
+  if (castsLeft(state) <= 0) return state.intent.castLimit ? 'Bound: only one sigil this term.' : 'No more sigils this term.'
   const runes = runesOf(sigil)
   const ids = new Set(runes.map((r) => r.id))
   if (ids.size !== runes.length) return 'A rune can only be placed once.'
@@ -240,9 +255,10 @@ export interface CastPreview {
 
 /** Exactly what casting this sigil would do, and what ending the term after it would cost. */
 export function previewCast(state: GameState, sigil: Sigil, poolKey?: string): CastPreview {
+  const mult = resistanceMult(state)
   const resolution = state.settings.equation
-    ? resolveEquation(sigil, state.pools, poolKey, state.settings.equation)
-    : resolve(sigil, state.pools, poolKey, state.settings)
+    ? resolveEquation(sigil, state.pools, poolKey, { ...state.settings.equation, base: state.settings.equation.base * mult })
+    : resolve(sigil, state.pools, poolKey, { ...state.settings, resistanceMult: mult })
   const table = [...state.table, { id: state.nextTableId, term: state.term, sigil }]
   const finished = inBand(resolution.pools, state.target)
   const cast: CastOutcome = { term: state.term, sigil, resolution, pools: resolution.pools, finished }
@@ -287,8 +303,14 @@ export function endTerm(state: GameState): GameState {
     termWard: 0,
   }
   if (quintessence <= 0) return { ...next, phase: 'lost', seed: rng.state() }
+  if (state.intent.junk) {
+    let id = Math.max(0, ...[...next.hand, ...next.draw, ...next.discard].map((r) => r.id))
+    const draw = next.draw.slice()
+    for (let i = 0; i < state.intent.junk; i++) draw.splice(rng.int(0, draw.length), 0, makeRune(++id, { body: 'circle', motes: [], junk: true }, state.forge))
+    next = { ...next, draw }
+  }
   const term = state.term + 1
-  next = { ...next, term, intent: rollIntent(rng, term, next.pools, next.table, state.settings) }
+  next = { ...next, term, intent: rollIntent(rng, term, next.pools, next.table, state.settings, state.commission) }
   next = drawUp(next, rng)
   return { ...next, seed: rng.state() }
 }

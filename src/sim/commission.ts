@@ -3,7 +3,8 @@ import type { Rng } from './rng'
 import { slumpTarget, type TableEntry } from './table'
 import type { Elemental, Pool } from './types'
 
-// One commission: mud (the source, the opponent) into clay (the target, the puzzle).
+// Commissions: a source (the opponent) to bring to a target (the puzzle).
+// Mud into clay is the everyday commission; the Mire into brick is a boss.
 
 /** Mud: earth and water, with a little air and fire from its organics. */
 export const MUD_START: Pool[] = normalize([
@@ -29,6 +30,57 @@ export const CLAY_TARGET: Target = {
   water: { ...ANY },
   air: { min: 0.01, max: 0.03 },
   fire: { min: 0.01, max: 0.03 },
+}
+
+/** The Mire: a stubborn bog, four and a half times mud's weight. */
+export const MIRE_START: Pool[] = normalize([
+  { elemental: 'earth', grade: 1, kg: 67.5 },
+  { elemental: 'water', grade: 0, kg: 90 },
+  { elemental: 'air', grade: 1, kg: 11.25 },
+  { elemental: 'fire', grade: 1, kg: 11.25 },
+])
+
+/** Brick: 80–90% earth, with air and fire each between 1% and 3%. */
+export const BRICK_TARGET: Target = {
+  earth: { min: 0.8, max: 0.9 },
+  water: { ...ANY },
+  air: { min: 0.01, max: 0.03 },
+  fire: { min: 0.01, max: 0.03 },
+}
+
+export type CommissionKey = 'mud' | 'mire'
+
+export interface Commission {
+  key: CommissionKey
+  /** The source, named as the opponent. */
+  source: string
+  /** What it becomes. */
+  product: string
+  boss: boolean
+  start: Pool[]
+  target: Target
+  blurb: string
+}
+
+export const COMMISSIONS: Record<CommissionKey, Commission> = {
+  mud: {
+    key: 'mud',
+    source: 'Mud',
+    product: 'Clay',
+    boss: false,
+    start: MUD_START,
+    target: CLAY_TARGET,
+    blurb: 'Forty kilos of mud: mostly earth and water, with a little air and fire from its organics. Bring it to clay, 75–85% earth with air and fire each between 1% and 3%, before your quintessence runs out.',
+  },
+  mire: {
+    key: 'mire',
+    source: 'The Mire',
+    product: 'Brick',
+    boss: true,
+    start: MIRE_START,
+    target: BRICK_TARGET,
+    blurb: 'A boss. 180 kilos of stubborn bog to fire into brick, 80–90% earth with air and fire each between 1% and 3%. Every move it makes comes with a flare of 32–36, and between flares it stiffens to double its resistance, binds you to one sigil a term, and throws slag into your deck. Built for a late-run deck.',
+  },
 }
 
 export const cloneTarget = (t: Target): Target => ({
@@ -68,7 +120,11 @@ export function miss(pools: Pool[], target: Target = CLAY_TARGET): number {
 }
 
 /** The amalgam's name: clay when it meets the target, otherwise a region along the earth share. */
-export function substanceName(pools: Pool[], target: Target = CLAY_TARGET): string {
+export function substanceName(pools: Pool[], target: Target = CLAY_TARGET, key: CommissionKey = 'mud'): string {
+  if (key === 'mire') {
+    if (inBand(pools, target)) return 'Brick'
+    return within(earthShare(pools), target.earth) ? 'Unfired brick' : earthShare(pools) < 0.6 ? 'Mire' : 'Peat'
+  }
   if (inBand(pools, target)) return 'Clay'
   const s = earthShare(pools)
   const band = target.earth
@@ -85,7 +141,7 @@ export function substanceName(pools: Pool[], target: Target = CLAY_TARGET): stri
 // ---------------------------------------------------------------------------
 // Mud's action pool: a shallow weighted pool, rolled and revealed each term.
 
-export type IntentKind = 'flare' | 'seep' | 'harden' | 'slump'
+export type IntentKind = 'flare' | 'seep' | 'harden' | 'slump' | 'surge' | 'stiffen' | 'slag' | 'bind'
 
 export interface Intent {
   kind: IntentKind
@@ -95,6 +151,11 @@ export interface Intent {
   kg: number
   title: string
   detail: string
+  /** Boss buffs, in force for the term the move is revealed. */
+  resistanceMult?: number
+  castLimit?: number
+  /** Junk runes added to the draw pile when the term ends. */
+  junk?: number
 }
 
 export interface IntentSettings {
@@ -113,7 +174,67 @@ export interface IntentSettings {
 const SEEP_KG = 0.5
 const HARDEN_KG = 2
 
-export function rollIntent(rng: Rng, term: number, pools: Pool[], table: TableEntry[], settings: IntentSettings): Intent {
+/** How hard a boss presses; the simulator and Tuning can override any of it. */
+export interface BossTuning {
+  /** The material's resistance, as a multiple of the equation's base (mud is 1). */
+  resistance: number
+  /** Every move's flare: flareMin to flareMax, the same every term. */
+  flareMin: number
+  flareMax: number
+  /** Stiffen multiplies resistance by this for the term. */
+  stiffen: number
+  /** Slag adds this many junk runes to the draw pile. */
+  junk: number
+  weights: { surge: number; stiffen: number; slag: number; bind: number }
+}
+
+/**
+ * Tuned so the late-run deck wins about 70% of the time, paying a median of
+ * 68 quintessence when it does, and the mid-run deck never wins.
+ */
+export const MIRE_TUNING: BossTuning = {
+  resistance: 1,
+  flareMin: 32,
+  flareMax: 36,
+  stiffen: 2,
+  junk: 2,
+  weights: { surge: 25, stiffen: 25, slag: 25, bind: 25 },
+}
+
+/** The material's resistance for the commission, before any stiffening. */
+export const materialResistance = (key: CommissionKey, boss?: Partial<BossTuning>): number => (key === 'mire' ? (boss?.resistance ?? MIRE_TUNING.resistance) : 1)
+
+function rollBoss(rng: Rng, settings: IntentSettings & { boss?: Partial<BossTuning> }): Intent {
+  const t = { ...MIRE_TUNING, ...settings.boss, weights: { ...MIRE_TUNING.weights, ...settings.boss?.weights } }
+  const weights = Object.entries(t.weights) as [keyof BossTuning['weights'], number][]
+  const total = weights.reduce((sum, [, w]) => sum + w, 0)
+  let roll = rng.float() * total
+  let kind: keyof BossTuning['weights'] = 'surge'
+  for (const [k, w] of weights) {
+    if (roll < w) {
+      kind = k
+      break
+    }
+    roll -= w
+  }
+  const flare = Math.max(1, Math.round(rng.int(t.flareMin, t.flareMax) * settings.flareScale))
+  if (kind === 'stiffen')
+    return { kind, flare, kg: 0, resistanceMult: t.stiffen, title: `Stiffen + flare ${flare}`, detail: `The Mire sets hard: resistance ×${t.stiffen} for every sigil this term.` }
+  if (kind === 'bind') return { kind, flare, kg: 0, castLimit: 1, title: `Bind + flare ${flare}`, detail: 'Roots close around the work: only one sigil this term.' }
+  if (kind === 'slag')
+    return { kind, flare, kg: 0, junk: t.junk, title: `Slag + flare ${flare}`, detail: `${t.junk} slag runes join your draw pile when the term ends. Slag has power 1 and no links.` }
+  return { kind: 'surge', flare, kg: 0, title: `Surge ${flare}`, detail: 'The Mire heaves. Ward absorbs it; the rest costs quintessence.' }
+}
+
+export function rollIntent(
+  rng: Rng,
+  term: number,
+  pools: Pool[],
+  table: TableEntry[],
+  settings: IntentSettings & { boss?: Partial<BossTuning> },
+  key: CommissionKey = 'mud',
+): Intent {
+  if (key === 'mire') return rollBoss(rng, settings)
   const weakWater = pools.find((p) => p.elemental === 'water' && p.grade === 0)?.kg ?? 0
   const weights: [IntentKind, number][] = [
     ['flare', 60 + (settings.flareWeightRise ?? 5) * (term - 1)],

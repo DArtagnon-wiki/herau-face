@@ -1,9 +1,9 @@
 import './ui/style.css'
 import { GRADE_NAMES, poolKey, totalKg } from './sim/alchemy'
-import { cloneTarget, constrained, inBand, shares, substanceName, within, type Range } from './sim/commission'
+import { COMMISSIONS, cloneTarget, constrained, inBand, shares, substanceName, within, type CommissionKey, type Range } from './sim/commission'
 import { BODY_LIST, BODY_NAMES, DEFAULT_FORGE, GEMS, MOTE_OPTIONS, buildDeck, cloneForge, moteEffect, moteFromKey, moteKey, moteName, type Forge, type RuneSpec } from './sim/deck'
 import { addRune, deckSpecs, editRune, findRune, removeRune, setComposition, setForge, setTarget } from './sim/sandbox'
-import { DEFAULT_SETTINGS, cast, castsLeft, discardRunes, endTerm, invalidReason, newGame, payment, previewCast, previewEnd, sigilsPlayed, standardSetup, termsUsed, type CastOutcome, type CastPreview, type EndOutcome, type GameState, type Settings, type Setup, type TermOutcome } from './sim/game'
+import { DEFAULT_SETTINGS, resistanceMult, cast, castsLeft, discardRunes, endTerm, invalidReason, newGame, payment, previewCast, previewEnd, sigilsPlayed, standardSetup, termsUsed, type CastOutcome, type CastPreview, type EndOutcome, type GameState, type Settings, type Setup, type TermOutcome } from './sim/game'
 import { REACH_PER_POWER, WARD_PER_POWER, candidatePools, canJoin, openLinks, resolve, type Resolution } from './sim/sigil'
 import { slumpTarget, tally } from './sim/table'
 import type { Body, Elemental, Grade, JoinKind, Pool, Rune, Sigil } from './sim/types'
@@ -124,13 +124,23 @@ const captureSetup = (g: GameState): Setup => ({
   deck: deckSpecs(g),
   start: g.start.map((p) => ({ ...p })),
   target: cloneTarget(g.target),
+  commission: g.commission,
 })
+
+/** A setup with the deck and forge of one setup and the commission of another. */
+const withCommission = (setup: Setup, key: CommissionKey = 'mud'): Setup => {
+  const c = COMMISSIONS[key]
+  return { ...setup, commission: key, start: c.start.map((p) => ({ ...p })), target: cloneTarget(c.target) }
+}
+
+/** The commission being worked, or about to be. */
+const commissionOf = () => COMMISSIONS[ui.game?.commission ?? ui.setup.commission ?? 'mud']
 
 function startGame(seed = Date.now() % 1_000_000) {
   if (ui.game) ui.setup = captureSetup(ui.game)
   ui.seed = seed
   const st = ui.setup
-  ui.game = newGame({ ...ui.settings }, seed, { forge: cloneForge(st.forge), deck: st.deck, start: st.start.map((p) => ({ ...p })), target: cloneTarget(st.target) })
+  ui.game = newGame({ ...ui.settings }, seed, { forge: cloneForge(st.forge), deck: st.deck, start: st.start.map((p) => ({ ...p })), target: cloneTarget(st.target), commission: st.commission ?? 'mud' })
   ui.editing = null
   resetComposer()
 }
@@ -228,6 +238,17 @@ function deckGroups(setup: Setup): string {
   }).join('')
 }
 
+/** Choose the commission: everyday mud, or the boss. */
+function commissionPicker(): string {
+  const cur = commissionOf().key
+  return `<div class="presets">
+    <span class="label">Commission</span>
+    <div class="seg two" role="group" aria-label="Commission">${(Object.keys(COMMISSIONS) as CommissionKey[])
+      .map((k) => `<button data-act="commission" data-key="${k}" class="${k === cur ? 'is-on' : ''}" aria-pressed="${k === cur}">${COMMISSIONS[k].boss ? 'Boss: ' : ''}${COMMISSIONS[k].source.replace(/^The /, 'the ')} → ${COMMISSIONS[k].product}</button>`)
+      .join('')}</div>
+  </div>`
+}
+
 /** Decks from points along a run: the opening deck, one mid-run and one late. */
 function presetView(): string {
   const cur = presetByKey(ui.preset)
@@ -236,7 +257,7 @@ function presetView(): string {
     <div class="seg" role="group" aria-label="Deck from a point in the run">${PRESETS.map(
       (p) => `<button data-act="preset" data-key="${p.key}" class="${p.key === ui.preset ? 'is-on' : ''}" aria-pressed="${p.key === ui.preset}">${p.name.replace(' deck', '')}</button>`,
     ).join('')}</div>
-    ${cur ? `<p class="fine">${cur.note}${cur.key === 'late' ? ' Try an earth anchor ringed by air, then fire, then earth: the loop multiplies earth ×40.' : ''}</p>` : ''}
+    ${cur ? `<p class="fine">${cur.note}${cur.key === 'late' && !eqOn() ? ' Try an earth anchor ringed by air, then fire, then earth: the loop multiplies earth ×40.' : ''}</p>` : ''}
   </div>`
 }
 
@@ -244,9 +265,10 @@ function startView(): string {
   return `
   <main class="start">
     <header class="start-head">
-      <p class="eyebrow">A commission · prototype</p>
-      <h1>Mud to Clay</h1>
-      <p class="lede">Forty kilos of mud: mostly earth and water, with a little air and fire from its organics. Bring it to clay, 75–85% earth with air and fire each between 1% and 3%, before your quintessence runs out.</p>
+      <p class="eyebrow">${commissionOf().boss ? 'A boss commission' : 'A commission'} · prototype</p>
+      <h1>${commissionOf().source.replace(/^The /, '')} to ${commissionOf().product}</h1>
+      <p class="lede">${commissionOf().blurb}</p>
+      ${commissionPicker()}
     </header>
 
     <section class="panel">
@@ -260,9 +282,9 @@ function startView(): string {
     <section class="panel rules">
       <h2>How a term works</h2>
       <ol>
-        <li><b>Mud shows its move.</b> A flare, a seep back to water, a hardening, or a slump that knocks a sigil off your table.</li>
+        <li>${commissionOf().boss ? `<b>${commissionOf().source} shows its move.</b> Every move carries a flare. It may stiffen (resistance ×2 this term), bind you to one sigil this term, or throw slag runes into your draw pile.` : '<b>Mud shows its move.</b> A flare, a seep back to water, a hardening, or a slump that knocks a sigil off your table. Its other moves bring a small flare too.'}</li>
         <li><b>Compose and cast sigils.</b> Tap a rune to make it the anchor: its element is what changes. Pick a join and tap more runes, up to the anchor’s links, then cast. Each sigil resolves at once. Cast as many as your hand allows.</li>
-        <li><b>End the term.</b> Mud acts. The Ward from all of this term’s sigils absorbs its flare; whatever gets past costs quintessence. Unplayed runes stay in hand.</li>
+        <li><b>End the term.</b> ${commissionOf().source} acts. The Ward from all of this term’s sigils absorbs its flare; whatever gets past costs quintessence. Unplayed runes stay in hand.</li>
       </ol>
       <h2>Reading a rune</h2>
       <p>The number is its power. The pips are its links: how many runes it can hold as the anchor. Its bowls hold motes, and the motes give it an element and any abilities.</p>
@@ -351,7 +373,7 @@ function intentView(g: GameState, end: EndOutcome): string {
   return `
   <section class="intent tone-${tone}" aria-live="polite">
     <div class="intent-main">
-      <p class="eyebrow">Mud’s move · term ${g.term}</p>
+      <p class="eyebrow">${COMMISSIONS[g.commission].source}’s move · term ${g.term}</p>
       <p class="intent-title">${esc(i.title)}</p>
       <p class="intent-detail">${esc(i.detail)}</p>
     </div>
@@ -377,7 +399,7 @@ function describeCast(c: CastOutcome): string {
       ? 'changed nothing'
       : `${kg(r.converted)} of ${GRADE_NAMES[r.source!.grade]} ${r.source!.elemental} became ${kg(r.produced)} of ${r.mode === 'condense' ? GRADE_NAMES[r.target!.grade] + ' ' : ''}${r.target!.elemental}`
   const ward = r.outputs.ward ? `, Ward ${num(r.outputs.ward)}` : ''
-  return `${sigilSummary(c.sigil)}: ${change}${ward}.${c.finished ? ' Clay.' : ''}`
+  return `${sigilSummary(c.sigil)}: ${change}${ward}.${c.finished ? ` ${COMMISSIONS[ui.game?.commission ?? 'mud'].product}.` : ''}`
 }
 
 function describeEnd(t: TermOutcome): string {
@@ -482,7 +504,8 @@ function composerView(g: GameState, sigil: Sigil | null, preview: CastPreview | 
 
 /** What a sigil under the equation will do: its runepath, the terms, and the arithmetic. */
 function equationStats(g: GameState, sigil: Sigil, preview: CastPreview): string {
-  const eq = g.settings.equation!
+  const mult = resistanceMult(g)
+  const eq = { ...g.settings.equation!, base: g.settings.equation!.base * mult }
   const r = preview.cast.resolution
   const path = runepath(sigil)
   const a = sigil.anchor.affinity
@@ -498,7 +521,7 @@ function equationStats(g: GameState, sigil: Sigil, preview: CastPreview): string
     const wanted = tk.wanted
     const neutralPart = eq.share ? `${Math.round(eq.share * 100)}% of ${kg(r.source!.kg)}${eq.neutral ? ` + ${num(eq.neutral)} kg` : ''}` : `${num(eq.neutral)} kg`
     change = `<p class="formula num">${neutralPart} <span class="op">×</span> ${tk.gate < 1 ? `${num(t.power)}<span class="op">÷</span>${num(t.resistance)} <span class="op">×</span> ` : ''}(${num(t.reachUp)} <span class="op">÷</span> ${num(t.reachDown)})<sup>${t.authority.toFixed(2)}</sup> <span class="op">=</span> <b>${kg(r.converted)}</b>${tk.gate < 1 ? ' <span class="warn">· power short</span>' : ''}</p>
-      <p class="fine">Exponent ln(1 + ${num(t.power)} ÷ ${num(t.resistance)}): power against resistance. Resistance ${num(eq.base)} base × ${GRADE_NAMES[r.source!.grade]} × ${eq.step}<sup>${t.path.flips + (t.condense ? 1 : 0)}</sup> for the steps flipped.</p>
+      <p class="fine">Exponent ln(1 + ${num(t.power)} ÷ ${num(t.resistance)}): power against resistance. Resistance ${num(eq.base)} base × ${GRADE_NAMES[r.source!.grade]} × ${eq.step}<sup>${t.path.flips + (t.condense ? 1 : 0)}</sup> for the steps flipped.${g.intent.resistanceMult ? ` <span class="warn">Stiffened ×${g.intent.resistanceMult} this term.</span>` : ''}</p>
       <p class="change">${src} → <b class="num">${kg(r.produced)}</b> ${tgt} <span class="of">· output ×${t.multiplier.toFixed(2)}</span>${wanted > r.source!.kg + 1e-9 ? ' <span class="warn">· all there is</span>' : ''}</p>`
   }
   if (extras.length) change += `<p class="motes-note">${extras.join(' · ')}</p>`
@@ -680,7 +703,7 @@ function handView(g: GameState): string {
           <span class="card-value num">${h.power}</span>
           ${pips(h.links)}
           ${runeSvg(h, 56)}
-          <span class="card-name">${ELEMENT_NAME[h.affinity]}</span>
+          <span class="card-name">${h.junk ? 'Slag' : ELEMENT_NAME[h.affinity]}</span>
           <span class="card-sides">${role ?? cardHint(h)}</span>
         </button>`
       })
@@ -712,8 +735,8 @@ function endView(g: GameState): string {
   <div class="end" role="dialog" aria-modal="true" aria-labelledby="end-title">
     <div class="end-card">
       <p class="eyebrow">${won ? 'Commission complete' : 'Commission failed'}</p>
-      <h2 id="end-title">${won ? `${kg(totalKg(g.pools))} of clay` : 'The work came apart'}</h2>
-      <p>${won ? 'The clay is set and paid for.' : `Your quintessence ran out at ${shareLine(g, g.pools)}.`}</p>
+      <h2 id="end-title">${won ? `${kg(totalKg(g.pools))} of ${COMMISSIONS[g.commission].product.toLowerCase()}` : 'The work came apart'}</h2>
+      <p>${won ? `The ${COMMISSIONS[g.commission].product.toLowerCase()} is set and paid for.` : `Your quintessence ran out at ${shareLine(g, g.pools)}.`}</p>
       <dl class="end-stats">
         <div><dt>Terms</dt><dd class="num">${termsUsed(g)}</dd></div>
         <div><dt>Spent</dt><dd class="num">${num(g.spent)}</dd></div>
@@ -891,9 +914,10 @@ function commissionEditor(g: GameState): string {
   const total = g.start.reduce((n, p) => n + p.kg, 0)
   return `<div class="sb-section">
     <h3>Commission</h3>
+    ${commissionPicker()}
     <div class="table-wrap">
       <table class="mtable comp-table">
-        <thead><tr><th></th><th scope="col">Mud, kg</th><th scope="col">Grade</th><th scope="col">Target, %</th></tr></thead>
+        <thead><tr><th></th><th scope="col">${COMMISSIONS[g.commission].source.replace(/^The /, '')}, kg</th><th scope="col">Grade</th><th scope="col">Target, %</th></tr></thead>
         <tbody>${ELEMENT_ORDER.map(row).join('')}</tbody>
       </table>
     </div>
@@ -1020,14 +1044,14 @@ function gameView(g: GameState): string {
   const selected = preview?.cast.resolution.source ? poolKey(preview.cast.resolution.source) : undefined
   const threatened = g.intent.kind === 'slump' ? (preview?.end ? preview.end.removed?.id : slumpTarget(g.table)?.id) : undefined
   const share = shares(g.pools).earth
-  const name = substanceName(g.pools, g.target)
+  const name = substanceName(g.pools, g.target, g.commission)
   const qPct = Math.max(0, Math.min(100, (g.quintessence / g.settings.stock) * 100))
   return `
   <main class="game">
     <header class="top">
       <div>
-        <p class="eyebrow">Commission</p>
-        <h1 class="title">Mud <span class="arrow">→</span> Clay</h1>
+        <p class="eyebrow">${COMMISSIONS[g.commission].boss ? 'Boss commission' : 'Commission'}</p>
+        <h1 class="title">${COMMISSIONS[g.commission].source.replace(/^The /, '')} <span class="arrow">→</span> ${COMMISSIONS[g.commission].product}</h1>
       </div>
       <a class="jump" href="#sandbox" data-act="to-sandbox">Sandbox</a>
       <div class="quint" aria-label="Quintessence ${num(g.quintessence)} of ${g.settings.stock}">
@@ -1043,7 +1067,7 @@ function gameView(g: GameState): string {
     <section class="vessel panel">
       ${vesselSvg(g.pools, g.table, share, { previewShare: preview ? shares(preview.cast.pools).earth : undefined, selectedKey: selected, threatenedId: threatened, previewSigil: sigil, band: constrained(g.target.earth) ? g.target.earth : undefined })}
       <div class="vessel-read">
-        <p class="substance ${name === 'Clay' ? 'is-clay' : ''}">${name}</p>
+        <p class="substance ${name === COMMISSIONS[g.commission].product ? 'is-clay' : ''}">${name}</p>
         <p class="read-line"><span class="num">${kg(totalKg(g.pools))}</span> · target ${ELEMENT_ORDER.filter((e) => constrained(g.target[e])).map((e) => `${e} ${rangeText(g.target[e])}`).join(', ')}</p>
         <div class="tchips">${targetChips(g)}</div>
       </div>
@@ -1281,10 +1305,22 @@ root.addEventListener('click', (e) => {
       break
     case 'sb-reset-commission':
       if (g) {
-        const std = standardSetup()
-        ui.game = setTarget(setComposition(g, std.start), std.target)
+        const c = COMMISSIONS[g.commission]
+        ui.game = setTarget(setComposition(g, c.start.map((p) => ({ ...p }))), cloneTarget(c.target))
       }
       break
+    case 'commission': {
+      const c = COMMISSIONS[el.dataset.key as CommissionKey]
+      if (!c) break
+      readTuning()
+      ui.setup = { ...(g ? captureSetup(g) : ui.setup), commission: c.key, start: c.start.map((p) => ({ ...p })), target: cloneTarget(c.target) }
+      if (g) {
+        ui.game = null
+        startGame()
+        window.scrollTo({ top: 0 })
+      }
+      break
+    }
     case 'sb-reset-forge':
       if (g) ui.game = setForge(g, cloneForge(DEFAULT_FORGE))
       break
@@ -1321,7 +1357,7 @@ root.addEventListener('click', (e) => {
       readTuning()
       ui.preset = p.key
       ui.settings.handSize = p.handSize
-      ui.setup = p.setup()
+      ui.setup = withCommission(p.setup(), commissionOf().key)
       if (g) {
         ui.game = null
         startGame()
@@ -1332,7 +1368,7 @@ root.addEventListener('click', (e) => {
     case 'sb-standard':
       readTuning()
       ui.game = null
-      ui.setup = standardSetup()
+      ui.setup = withCommission(standardSetup(), commissionOf().key)
       ui.preset = 'opening'
       startGame()
       window.scrollTo({ top: 0 })

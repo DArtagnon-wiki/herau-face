@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { normalize, poolKey, stepsBetween } from './alchemy'
-import { CLAY_TARGET, applyIntent, inBand, miss, substanceName, type Intent } from './commission'
+import { CLAY_TARGET, COMMISSIONS, MIRE_TUNING, applyIntent, inBand, miss, substanceName, type Intent } from './commission'
 import { DEFAULT_FORGE, GUARD_MOTE, LINK_MOTE, REACH_MOTE, cloneForge, elementMote, makeRune, startingDeck } from './deck'
 import { addRune, deckSpecs, editRune, removeRune, setComposition, setForge, setTarget } from './sandbox'
-import { DEFAULT_SETTINGS, cast, discardRunes, endTerm, fairOpening, invalidReason, newGame, previewCast, previewEnd, sigilsPlayed, standardSetup } from './game'
+import { DEFAULT_SETTINGS, cast, castsLeft, discardRunes, endTerm, fairOpening, invalidReason, newGame, previewCast, previewEnd, resistanceMult, sigilsPlayed, standardSetup } from './game'
 import { REACH_PER_POWER, canJoin, openLinks, outputs, resolve } from './sigil'
 import { imbalance, slumpTarget, strain, type TableEntry } from './table'
 import type { Affinity, Body, JoinKind, Pool, Rune, Sigil } from './types'
@@ -482,5 +482,33 @@ describe('the equation’s neutral take', () => {
     const r = resolveEquation(sigil(rune('earth'), ['circumscribe', rune('air')]), [{ elemental: 'earth', grade: 1, kg: 18 }], undefined, eq)
     expect(r.required).toBe(20)
     expect(r.converted).toBeCloseTo(18 * 0.25 * 0.5)
+  })
+})
+
+describe('the Mire, a boss', () => {
+  const settings = { ...DEFAULT_SETTINGS, equation: { ...DEFAULT_EQUATION } }
+  const boss = (kind: 'stiffen' | 'bind' | 'slag' | 'surge', seed = 50) => {
+    let s = newGame(settings, seed, { ...standardSetup(), commission: 'mire', start: COMMISSIONS.mire.start.map((p) => ({ ...p })), target: COMMISSIONS.mire.target })
+    for (let i = 0; i < 60 && s.intent.kind !== kind; i++) s = { ...newGame(settings, seed + i + 1, { ...standardSetup(), commission: 'mire', start: COMMISSIONS.mire.start.map((p) => ({ ...p })), target: COMMISSIONS.mire.target }) }
+    expect(s.intent.kind).toBe(kind)
+    return s
+  }
+  it('flares on every move', () => {
+    for (const k of ['stiffen', 'bind', 'slag', 'surge'] as const) expect(boss(k).intent.flare).toBeGreaterThanOrEqual(MIRE_TUNING.flareMin)
+  })
+  it('doubles resistance while stiffened', () => {
+    const s = boss('stiffen')
+    expect(resistanceMult(s)).toBe(MIRE_TUNING.resistance * MIRE_TUNING.stiffen)
+  })
+  it('binds the term to one sigil', () => {
+    const s = boss('bind')
+    expect(castsLeft(s)).toBe(1)
+  })
+  it('throws slag into the draw pile', () => {
+    const s = boss('slag')
+    const next = endTerm(s)
+    const junk = next.draw.concat(next.hand).filter((r) => r.junk)
+    expect(junk).toHaveLength(MIRE_TUNING.junk)
+    expect(junk.every((r) => r.power === 1 && r.links === 0 && r.affinity === 'none')).toBe(true)
   })
 })

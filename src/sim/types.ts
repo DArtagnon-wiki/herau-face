@@ -33,6 +33,8 @@ export interface Rune {
   guard: number
   /** Added to this rune's multiplier at its step of the equation (boost motes). */
   boost: number
+  /** Slag from a boss: power 1, no links, no element. */
+  junk?: boolean
 }
 
 /** One elemental at one grade within the amalgam. */
