@@ -5,7 +5,7 @@ import type { Elemental, Grade, Pool, Rune, Sigil } from './types'
 // The alchemical equation: a second model for what a sigil does, next to the
 // Reach × Force model in sigil.ts.
 //
-//   resistance = the pool's base × step for every quality flipped along the runepath
+//   resistance = the pool's base × step for every quality flipped, and every purifying step, along the runepath
 //   input kg   = (neutral + share × pool) × min(1, power ÷ resistance) × (reach up ÷ reach down) ^ ln(1 + power ÷ resistance)
 //   output kg  = input × each circumscribe's multiplier ÷ each inscribe's divider
 //
@@ -13,6 +13,12 @@ import type { Elemental, Grade, Pool, Rune, Sigil } from './types'
 // circumscribed and inscribed runes, easiest step first, and ends at the seal:
 // the last of those runes placed with an element. The output is the seal's
 // element. Ties on the square go earth, fire, air, water.
+//
+// Purity: a step that changes element leaves the output impure. A step that
+// stays on the same element changes purity instead: inscribed, it purifies
+// (one grade up, at one extra step of resistance); circumscribed, it
+// adulterates (one grade down). So air → water → water, the second water
+// inscribed, makes medium water.
 
 export interface Equation {
   /** The material's base resistance. A pool's is this × its grade multiplier; the commission can raise it. */
@@ -48,6 +54,8 @@ export interface PathStep {
   to: Elemental
   /** Qualities flipped on this step: 0 same element, 1 an edge of the square, 2 a diagonal. */
   flips: number
+  /** On a same-element step: +1 when inscribed (purify), −1 when circumscribed (adulterate). 0 otherwise. */
+  purity: -1 | 0 | 1
 }
 
 export interface Runepath {
@@ -86,17 +94,65 @@ export function runepath(sigil: Sigil): Runepath | null {
     }
     const [j] = rest.splice(best, 1)
     const to = j.rune.affinity === 'none' ? at : j.rune.affinity
-    steps.push({ rune: j.rune, kind: j.kind as PathStep['kind'], from: at, to, flips: cost(j.rune) })
+    steps.push(step(j.rune, j.kind as PathStep['kind'], at, to))
     at = to
   }
-  const to = seal.rune.affinity as Elemental
-  steps.push({ rune: seal.rune, kind: seal.kind as PathStep['kind'], from: at, to, flips: stepsBetween(at, to) })
+  steps.push(step(seal.rune, seal.kind as PathStep['kind'], at, seal.rune.affinity as Elemental))
   return { steps, flips: steps.reduce((n, s) => n + s.flips, 0) }
+}
+
+function step(rune: Rune, kind: PathStep['kind'], from: Elemental, to: Elemental): PathStep {
+  const flips = stepsBetween(from, to)
+  const purity = flips === 0 && rune.affinity !== 'none' ? (kind === 'inscribe' ? 1 : -1) : 0
+  return { rune, kind, from, to, flips, purity }
+}
+
+/** Purifying steps on the path: each costs one more step of resistance. */
+export const purifies = (path: Runepath) => path.steps.filter((s) => s.purity > 0).length
+
+/** Whether any step changes element. */
+export const transmutes = (path: Runepath) => path.flips > 0
+
+/**
+ * The purity of what the sigil makes from a pool of this grade: changing
+ * element resets it to impure, and same-element steps after that purify or
+ * adulterate, up to pure.
+ */
+export function outputGrade(path: Runepath, from: Grade): Grade {
+  let g: number = from
+  for (const s of path.steps) {
+    if (s.flips > 0) g = 0
+    else if (s.purity > 0) g = g >= MAX_PLAYER_GRADE ? g : g + 1
+    else if (s.purity < 0) g = Math.max(0, g - 1)
+  }
+  return g as Grade
+}
+
+/** Which way a sigil that never changes element moves purity: +1, −1 or 0 (net, ignoring the bounds). */
+const netPurity = (path: Runepath) => path.steps.reduce((n, s) => n + s.purity, 0)
+
+/**
+ * The anchor's pools this sigil can work, in the order to offer them. A
+ * transmuting sigil prefers the least pure (it resists least); one that only
+ * purifies skips pools already pure, and one that only adulterates skips
+ * impure pools and prefers the purest.
+ */
+export function sourcePools(sigil: Sigil, pools: Pool[]): Pool[] {
+  const aff = sigil.anchor.affinity
+  if (aff === 'none') return []
+  const mine = pools.filter((p) => p.elemental === aff)
+  const path = runepath(sigil)
+  if (!path || transmutes(path)) return mine.sort((a, b) => a.grade - b.grade)
+  const net = netPurity(path)
+  if (net > 0) return mine.filter((p) => p.grade < MAX_PLAYER_GRADE).sort((a, b) => a.grade - b.grade)
+  if (net < 0) return mine.filter((p) => p.grade > 0).sort((a, b) => b.grade - a.grade)
+  return mine.sort((a, b) => a.grade - b.grade)
 }
 
 export interface EquationTerms {
   path: Runepath
-  condense: boolean
+  /** Purifying steps, each one more step of resistance. */
+  purifies: number
   power: number
   resistance: number
   reachUp: number
@@ -109,15 +165,14 @@ export interface EquationTerms {
 /** The equation's terms for a sigil against one pool. */
 export function terms(sigil: Sigil, source: Pool, eq: Equation, path: Runepath): EquationTerms {
   const { anchor, joins } = sigil
-  const seal = path.steps[path.steps.length - 1]
-  const condense = seal.kind === 'inscribe' && seal.to === anchor.affinity
+  const pure = purifies(path)
   const power = anchor.power + path.steps.reduce((p, s) => p + s.rune.power, 0)
-  const resistance = eq.base * GRADE_MULT[source.grade] * eq.step ** (path.flips + (condense ? 1 : 0))
+  const resistance = eq.base * GRADE_MULT[source.grade] * eq.step ** (path.flips + pure)
   const out = outputs(sigil)
   const reachUp = (anchor.power + joins.filter((j) => j.kind === 'side').reduce((p, j) => p + j.rune.power, 0)) * out.reachMult
   const reachDown = anchor.power + joins.filter((j) => j.kind === 'tangent').reduce((p, j) => p + j.rune.power, 0)
   const multiplier = path.steps.reduce((m, s) => (s.kind === 'circumscribe' ? m * (eq.ring + s.rune.boost) : m / (eq.inscribe + s.rune.boost)), 1)
-  return { path, condense, power, resistance, reachUp, reachDown, authority: Math.log(1 + power / resistance), multiplier }
+  return { path, purifies: pure, power, resistance, reachUp, reachDown, authority: Math.log(1 + power / resistance), multiplier }
 }
 
 /** The neutral take for this pool, the power gate, and what the sigil wants after aiming. */
@@ -147,18 +202,23 @@ export function resolveEquation(sigil: Sigil, pools: Pool[], selectedKey: string
   const path = runepath(sigil)
   if (!path) return none('Circumscribe or inscribe a rune with an element to seal the equation.')
   const seal = path.steps[path.steps.length - 1]
-  const condense = seal.kind === 'inscribe' && seal.to === aff
-  const candidates = pools.filter((p) => p.elemental === aff && (!condense || p.grade < MAX_PLAYER_GRADE)).sort((a, b) => a.grade - b.grade)
+  const candidates = sourcePools(sigil, pools)
   const source = candidates.find((p) => poolKey(p) === selectedKey) ?? candidates[0]
-  if (!source) return none(condense && pools.some((p) => p.elemental === aff) ? `The ${aff} is already heavy.` : `There is no ${aff} in the amalgam.`)
+  if (!source) {
+    const net = netPurity(path)
+    if (pools.some((p) => p.elemental === aff) && !transmutes(path))
+      return none(net > 0 ? `The ${aff} is already pure.` : `The ${aff} is already impure.`)
+    return none(`There is no ${aff} in the amalgam.`)
+  }
   const t = terms(sigil, source, eq, path)
   const { wanted } = take(eq, t, source.kg)
   const converted = Math.min(source.kg, wanted)
   const produced = converted * t.multiplier
-  const target = { elemental: seal.to, grade: (condense ? source.grade + 1 : 0) as Grade }
+  const target = { elemental: seal.to, grade: outputGrade(path, source.grade) }
+  const mode = transmutes(path) ? 'transmute' : target.grade > source.grade ? 'purify' : target.grade < source.grade ? 'adulterate' : 'transmute'
   return {
     outputs: out,
-    mode: condense ? 'condense' : 'transmute',
+    mode,
     note: '',
     source,
     target,

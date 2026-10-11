@@ -1,6 +1,6 @@
 import './ui/style.css'
 import { GRADE_NAMES, poolKey, totalKg } from './sim/alchemy'
-import { COMMISSIONS, cloneTarget, constrained, inBand, shares, substanceName, within, type CommissionKey, type Range } from './sim/commission'
+import { COMMISSIONS, actChances, chancesFor, cloneTarget, constrained, inBand, shares, substanceName, within, type CommissionKey, type Range } from './sim/commission'
 import { BODY_LIST, BODY_NAMES, DEFAULT_FORGE, GEMS, MOTE_OPTIONS, buildDeck, cloneForge, moteEffect, moteFromKey, moteKey, moteName, type Forge, type RuneSpec } from './sim/deck'
 import { addRune, deckSpecs, editRune, findRune, removeRune, setComposition, setForge, setTarget } from './sim/sandbox'
 import { DEFAULT_SETTINGS, resistanceMult, cast, castsLeft, discardRunes, endTerm, invalidReason, newGame, payment, previewCast, previewEnd, sigilsPlayed, standardSetup, termsUsed, type CastOutcome, type CastPreview, type EndOutcome, type GameState, type Settings, type Setup, type TermOutcome } from './sim/game'
@@ -11,7 +11,7 @@ import type { TableEntry } from './sim/table'
 import { AFFINITY_VAR, bodyIcon, joinSketch, moteColor, runeSvg, sigilSvg, vesselSvg } from './ui/draw'
 import { AFFINITIES, SIDES, balance, metricsOf, type Measure } from './sim/metrics'
 import { PRESETS, presetByKey } from './sim/presets'
-import { DEFAULT_EQUATION, runepath, take, terms, type Equation } from './sim/equation'
+import { DEFAULT_EQUATION, runepath, sourcePools, take, terms, type Equation } from './sim/equation'
 
 // ---------------------------------------------------------------------------
 // State
@@ -74,7 +74,7 @@ const CLASSIC_JOINS: JoinOption[] = [
   { kind: 'circumscribe', label: 'Circumscribe', gives: 'Force · sets target' },
   { kind: 'side', label: 'Side link', gives: 'Reach' },
   { kind: 'entwine', label: 'Entwine', gives: 'Ward' },
-  { kind: 'inscribe', label: 'Inscribe', gives: 'Fine · or condense' },
+  { kind: 'inscribe', label: 'Inscribe', gives: 'Fine · or purify' },
 ]
 /** Under the equation: rings and inscriptions make the runepath, side links and tangents aim the reach. */
 const EQUATION_JOINS: JoinOption[] = [
@@ -282,7 +282,7 @@ function startView(): string {
     <section class="panel rules">
       <h2>How a term works</h2>
       <ol>
-        <li>${commissionOf().boss ? `<b>${commissionOf().source} shows its move.</b> Every move carries a flare. It may stiffen (resistance ×2 this term), bind you to one sigil this term, or throw slag runes into your draw pile.` : '<b>Mud shows its move.</b> A flare, a seep back to water, a hardening, or a slump that knocks a sigil off your table. Its other moves bring a small flare too.'}</li>
+        <li><b>${commissionOf().source} shows its moves.</b> Each element in it may act, and impure elements act far more often than pure ones, so all four can act at once or none at all. ${commissionOf().boss ? 'The Mire is restless. Every move carries a flare: its earth may stiffen (resistance ×2 this term), its water bind you to one sigil this term, its fire throw slag runes into your draw pile.' : 'Each element flares (earth tremors, water swells, air gusts, fire flares), or does its own mischief with a small flare: water seeps into earth, air evaporates water, fire scorches earth, earth slumps a sigil off your table.'} A move lands harder the more of the amalgam its element is.</li>
         <li><b>Compose and cast sigils.</b> Tap a rune to make it the anchor: its element is what changes. Pick a join and tap more runes, up to the anchor’s links, then cast. Each sigil resolves at once. Cast as many as your hand allows.</li>
         <li><b>End the term.</b> ${commissionOf().source} acts. The Ward from all of this term’s sigils absorbs its flare; whatever gets past costs quintessence. Unplayed runes stay in hand.</li>
       </ol>
@@ -295,8 +295,9 @@ function startView(): string {
       ${
         eqOn()
           ? `<p><b>The equation.</b> With reach up equal to reach down, a sigil takes ${neutralWords(ui.settings.equation!)}${ui.settings.equation!.gate ? ', less if its power falls short of the pool’s resistance' : ''}. Side links aim for more and tangents for less, and power against resistance decides how far you get: kilos = neutral take × (reach up ÷ reach down)<sup>ln(1 + power ÷ resistance)</sup>. Resistance doubles for every quality the runepath flips. Switch to Reach × Force in Tuning.</p>`
-          : `<p><b>Reach × Force.</b> Reach is how many kilos the sigil grabs; Force is how hard it pushes. Each change needs some Force (weak water to earth needs 5), and what converts is Reach × Force ÷ that need. They multiply, so give each new rune to whichever total is smaller.</p>`
+          : `<p><b>Reach × Force.</b> Reach is how many kilos the sigil grabs; Force is how hard it pushes. Each change needs some Force (impure water to earth needs 5), and what converts is Reach × Force ÷ that need. They multiply, so give each new rune to whichever total is smaller.</p>`
       }
+      <p><b>Purity.</b> Every element is impure, medium, pure or perfect. Purer elements resist change more and act less in combat. Anything a sigil transmutes comes out impure, so working the amalgam stirs it up. Inscribe the element the runepath is at to purify (one grade up, one more step of resistance); circumscribe it to adulterate (one grade down).</p>
       <p class="fine">Cast sigils stay on the table. Keep it level, Earth against Air and Water against Fire, or the lopsidedness adds strain every term.</p>
     </section>
     ${tuningView()}
@@ -308,9 +309,9 @@ function joinHelp(kind: JoinKind, equation = false): string {
     const eq = ui.game?.settings.equation ?? ui.settings.equation ?? DEFAULT_EQUATION
     switch (kind) {
       case 'circumscribe':
-        return `Drawn around the anchor: a step on the runepath. Adds its power, and multiplies the output by ${eq.ring} (plus boost motes). The runepath’s last step is the seal, drawn with a double line: its element is what you make.`
+        return `Drawn around the anchor: a step on the runepath. Adds its power, and multiplies the output by ${eq.ring} (plus boost motes). On the element the path is already at, it adulterates: one grade less pure. The runepath’s last step is the seal, drawn with a double line: its element is what you make.`
       case 'inscribe':
-        return `Drawn inside the anchor: a step on the runepath. Adds its power, and divides the output by ${eq.inscribe}. An inscribed seal of the anchor’s own element condenses.`
+        return `Drawn inside the anchor: a step on the runepath. Adds its power, and divides the output by ${eq.inscribe}. On the element the path is already at, it purifies: one grade purer, at one more step of resistance. Anything transmuted comes out impure, so air → water → water, the last inscribed, makes medium water.`
       case 'side':
         return 'Hangs outside, pointing out: adds its power to reach up, for more kilos.'
       case 'tangent':
@@ -327,7 +328,7 @@ function joinHelp(kind: JoinKind, equation = false): string {
     case 'entwine':
       return 'Laces through the anchor. Adds its power as Ward against this term’s flare.'
     case 'inscribe':
-      return 'Sits inside and adds its power as Force. Same element as the anchor: condenses a pool one grade. Any other: halves Reach, for small precise casts.'
+      return 'Sits inside and adds its power as Force. Same element as the anchor: purifies a pool one grade. Any other: halves Reach, for small precise casts.'
     case 'tangent':
       return 'Touches the anchor at a point. Lowers reach in the equation model.'
   }
@@ -367,21 +368,31 @@ function tuningView(): string {
   </details>`
 }
 
-function intentView(g: GameState, end: EndOutcome): string {
+function intentView(g: GameState, end: EndOutcome, after: Pool[]): string {
   const i = g.intent
-  const tone = i.kind === 'flare' ? 'fire' : i.kind === 'seep' ? 'water' : i.kind === 'harden' ? 'glass' : 'gilt'
+  const tone = !i.moves.length ? 'glass' : i.flare > 0 ? 'fire' : 'gilt'
+  const chances = actChances(after, chancesFor(g.settings, g.commission))
+  const moves = i.moves.length
+    ? `<ul class="moves">${i.moves
+        .map(
+          (m) => `<li style="--c:${AFFINITY_VAR[m.element]}"><span class="dot"></span><span class="move-name"><b>${ELEMENT_NAME[m.element]}</b> ${esc(m.name.toLowerCase())}</span>${m.flare ? `<span class="num move-flare">${m.flare}</span>` : ''}<span class="move-detail">${esc(m.detail)}</span></li>`,
+        )
+        .join('')}</ul>`
+    : `<p class="intent-title">Calm</p><p class="intent-detail">Nothing stirs this term.</p>`
   return `
   <section class="intent tone-${tone}" aria-live="polite">
     <div class="intent-main">
-      <p class="eyebrow">${COMMISSIONS[g.commission].source}’s move · term ${g.term}</p>
-      <p class="intent-title">${esc(i.title)}</p>
-      <p class="intent-detail">${esc(i.detail)}</p>
+      <p class="eyebrow">${COMMISSIONS[g.commission].source}’s moves · term ${g.term}</p>
+      ${moves}
     </div>
     <div class="intent-side">
-      <span class="label">Strain</span>
-      <span class="intent-strain">${end.strain ? `+${end.strain}` : '0'}</span>
-      <span class="label">${g.settings.strain ? 'from the table' : 'off'}</span>
+      <span class="label">Flare</span>
+      <span class="intent-strain num">${i.flare}</span>
+      <span class="label">${g.settings.strain ? `strain ${end.strain ? `+${end.strain}` : '0'}` : 'strain off'}</span>
     </div>
+    <p class="intent-odds">Next term each acts by its purity: ${ELEMENT_ORDER.filter((e) => chances[e] > 0)
+      .map((e) => `<span style="--c:${AFFINITY_VAR[e]}"><span class="dot"></span>${ELEMENT_NAME[e].toLowerCase()} <b class="num">${Math.round(chances[e] * 100)}%</b></span>`)
+      .join(' ')}</p>
     <p class="intent-term">${g.casts.length ? `${g.casts.length} sigil${g.casts.length === 1 ? '' : 's'} cast this term · Ward <b class="num">${num(g.termWard)}</b>` : 'No sigils cast this term yet'} · ending now ${end.paid > 0 ? `costs <b class="num warn">${num(end.paid)}</b>` : 'costs nothing'}${end.finished ? finishNote : ''}</p>
   </section>`
 }
@@ -397,7 +408,7 @@ function describeCast(c: CastOutcome): string {
   const change =
     r.mode === 'none'
       ? 'changed nothing'
-      : `${kg(r.converted)} of ${GRADE_NAMES[r.source!.grade]} ${r.source!.elemental} became ${kg(r.produced)} of ${r.mode === 'condense' ? GRADE_NAMES[r.target!.grade] + ' ' : ''}${r.target!.elemental}`
+      : `${kg(r.converted)} of ${GRADE_NAMES[r.source!.grade]} ${r.source!.elemental} became ${kg(r.produced)} of ${GRADE_NAMES[r.target!.grade]} ${r.target!.elemental}`
   const ward = r.outputs.ward ? `, Ward ${num(r.outputs.ward)}` : ''
   return `${sigilSummary(c.sigil)}: ${change}${ward}.${c.finished ? ` ${COMMISSIONS[ui.game?.commission ?? 'mud'].product}.` : ''}`
 }
@@ -421,7 +432,7 @@ function targetChips(g: GameState, pools = g.pools): string {
 }
 
 function poolsView(g: GameState, sigil: Sigil | null, selected?: string): string {
-  const selectable = sigil ? new Set(candidatePools(sigil, g.pools).map(poolKey)) : new Set<string>()
+  const selectable = sigil ? new Set((g.settings.equation ? sourcePools : candidatePools)(sigil, g.pools).map(poolKey)) : new Set<string>()
   return `<div class="pools" role="group" aria-label="Pools">
     ${g.pools
       .map((p) => {
@@ -510,18 +521,18 @@ function equationStats(g: GameState, sigil: Sigil, preview: CastPreview): string
   const path = runepath(sigil)
   const a = sigil.anchor.affinity
   const route =
-    a === 'none' ? 'No element' : path ? [ELEMENT_NAME[a], ...path.steps.map((s) => ELEMENT_NAME[s.to])].join(' → ') + (r.mode === 'condense' ? ' · condense' : ' · sealed') : `${ELEMENT_NAME[a]} → no seal yet`
+    a === 'none' ? 'No element' : path ? [ELEMENT_NAME[a], ...path.steps.map((s) => ELEMENT_NAME[s.to])].join(' → ') + (r.mode === 'purify' ? ' · purify' : r.mode === 'adulterate' ? ' · adulterate' : ' · sealed') : `${ELEMENT_NAME[a]} → no seal yet`
   const t = path && r.source ? terms(sigil, r.source, eq, path) : null
   const extras = [r.outputs.reachMult > 1 ? `Reach up ×${r.outputs.reachMult} from motes` : '', r.outputs.guard ? `+${r.outputs.guard} Ward from motes` : ''].filter(Boolean)
   let change = r.mode === 'none' ? `<p class="note">${esc(r.mode === 'none' && !path && a !== 'none' ? 'Circumscribe or inscribe a rune to seal the equation: its element is the output.' : r.note)}</p>` : ''
   if (t && r.mode !== 'none') {
     const src = `${GRADE_NAMES[r.source!.grade]} ${r.source!.elemental}`
-    const tgt = `${r.mode === 'condense' ? GRADE_NAMES[r.target!.grade] + ' ' : ''}${r.target!.elemental}`
+    const tgt = `${GRADE_NAMES[r.target!.grade]} ${r.target!.elemental}`
     const tk = take(eq, t, r.source!.kg)
     const wanted = tk.wanted
     const neutralPart = eq.share ? `${Math.round(eq.share * 100)}% of ${kg(r.source!.kg)}${eq.neutral ? ` + ${num(eq.neutral)} kg` : ''}` : `${num(eq.neutral)} kg`
     change = `<p class="formula num">${neutralPart} <span class="op">×</span> ${tk.gate < 1 ? `${num(t.power)}<span class="op">÷</span>${num(t.resistance)} <span class="op">×</span> ` : ''}(${num(t.reachUp)} <span class="op">÷</span> ${num(t.reachDown)})<sup>${t.authority.toFixed(2)}</sup> <span class="op">=</span> <b>${kg(r.converted)}</b>${tk.gate < 1 ? ' <span class="warn">· power short</span>' : ''}</p>
-      <p class="fine">Exponent ln(1 + ${num(t.power)} ÷ ${num(t.resistance)}): power against resistance. Resistance ${num(eq.base)} base × ${GRADE_NAMES[r.source!.grade]} × ${eq.step}<sup>${t.path.flips + (t.condense ? 1 : 0)}</sup> for the steps flipped.${g.intent.resistanceMult ? ` <span class="warn">Stiffened ×${g.intent.resistanceMult} this term.</span>` : ''}</p>
+      <p class="fine">Exponent ln(1 + ${num(t.power)} ÷ ${num(t.resistance)}): power against resistance. Resistance ${num(eq.base)} base × ${GRADE_NAMES[r.source!.grade]} × ${eq.step}<sup>${t.path.flips + t.purifies}</sup> for the steps flipped${t.purifies ? ' and purified' : ''}.${g.intent.resistanceMult ? ` <span class="warn">Stiffened ×${g.intent.resistanceMult} this term.</span>` : ''}</p>
       <p class="change">${src} → <b class="num">${kg(r.produced)}</b> ${tgt} <span class="of">· output ×${t.multiplier.toFixed(2)}</span>${wanted > r.source!.kg + 1e-9 ? ' <span class="warn">· all there is</span>' : ''}</p>`
   }
   if (extras.length) change += `<p class="motes-note">${extras.join(' · ')}</p>`
@@ -544,14 +555,20 @@ function equationStats(g: GameState, sigil: Sigil, preview: CastPreview): string
       ${change}${after}${cost}`
 }
 
+/** Whether joining this rune this way would be a purifying (+1) or adulterating (−1) step on the runepath. */
+function purityStep(r: Rune, kind: 'circumscribe' | 'inscribe', sigil: Sigil): number {
+  const path = runepath({ anchor: sigil.anchor, joins: [...sigil.joins, { kind, rune: r }] })
+  return path?.steps.find((st) => st.rune === r)?.purity ?? 0
+}
+
 /** What a rune would add to the sigil if joined this way. */
 function joinHint(r: Rune, kind: JoinKind, sigil: Sigil): string {
   const same = r.affinity === sigil.anchor.affinity && r.affinity !== 'none'
   const eq = ui.game?.settings.equation
   if (eq) {
     const hint: Record<JoinKind, string> = {
-      circumscribe: `+${r.power} power · ×${num(eq.ring + r.boost)}`,
-      inscribe: same ? `+${r.power} power · condense` : `+${r.power} power · ÷${num(eq.inscribe + r.boost)}`,
+      circumscribe: `+${r.power} power · ×${num(eq.ring + r.boost)}${purityStep(r, 'circumscribe', sigil) < 0 ? ' · adulterate' : ''}`,
+      inscribe: `+${r.power} power · ÷${num(eq.inscribe + r.boost)}${purityStep(r, 'inscribe', sigil) > 0 ? ' · purify' : ''}`,
       side: `+${r.power} reach up`,
       tangent: `+${r.power} reach down`,
       entwine: `+${num(r.power * WARD_PER_POWER)} Ward`,
@@ -562,7 +579,7 @@ function joinHint(r: Rune, kind: JoinKind, sigil: Sigil): string {
     circumscribe: `+${r.power} Force · target`,
     side: `+${kg(r.power * REACH_PER_POWER)} Reach`,
     entwine: `+${num(r.power * WARD_PER_POWER)} Ward`,
-    inscribe: same ? `+${r.power} Force · condense` : `+${r.power} Force · ½ Reach`,
+    inscribe: same ? `+${r.power} Force · purify` : `+${r.power} Force · ½ Reach`,
     tangent: `+${r.power} reach down`,
   }
   return hint[kind]
@@ -654,7 +671,7 @@ function pileSheet(g: GameState): string {
 function formulaView(r: Resolution, surplus: boolean): string {
   const o = r.outputs
   const src = `${GRADE_NAMES[r.source!.grade]} ${r.source!.elemental}`
-  const tgt = `${r.mode === 'condense' ? GRADE_NAMES[r.target!.grade] + ' ' : ''}${r.target!.elemental}`
+  const tgt = `${GRADE_NAMES[r.target!.grade]} ${r.target!.elemental}`
   const capped = o.reach * r.efficiency > r.source!.kg + 1e-9
   const wasted = !surplus && o.force > r.required
   return `<p class="formula num">Reach ${kg(o.reach)} <span class="op">×</span> Force ${num(o.force)} <span class="op">÷</span> ${num(r.required)} needed <span class="op">=</span> <b>${kg(r.converted)}</b></p>
@@ -920,7 +937,7 @@ function commissionEditor(g: GameState): string {
     ${commissionPicker()}
     <div class="table-wrap">
       <table class="mtable comp-table">
-        <thead><tr><th></th><th scope="col">${COMMISSIONS[g.commission].source.replace(/^The /, '')}, kg</th><th scope="col">Grade</th><th scope="col">Target, %</th></tr></thead>
+        <thead><tr><th></th><th scope="col">${COMMISSIONS[g.commission].source.replace(/^The /, '')}, kg</th><th scope="col">Purity</th><th scope="col">Target, %</th></tr></thead>
         <tbody>${ELEMENT_ORDER.map(row).join('')}</tbody>
       </table>
     </div>
@@ -1045,7 +1062,7 @@ function gameView(g: GameState): string {
   const preview = sigil && g.phase === 'compose' && !ui.discarding && !invalidReason(g, sigil) ? previewCast(g, sigil, ui.poolKey) : null
   const end = previewEnd(g)
   const selected = preview?.cast.resolution.source ? poolKey(preview.cast.resolution.source) : undefined
-  const threatened = g.intent.kind === 'slump' ? (preview?.end ? preview.end.removed?.id : slumpTarget(g.table)?.id) : undefined
+  const threatened = g.intent.moves.some((m) => m.kind === 'slump') ? (preview?.end ? preview.end.removed?.id : slumpTarget(g.table)?.id) : undefined
   const share = shares(g.pools).earth
   const name = substanceName(g.pools, g.target, g.commission)
   const qPct = Math.max(0, Math.min(100, (g.quintessence / g.settings.stock) * 100))
@@ -1065,7 +1082,7 @@ function gameView(g: GameState): string {
     </header>
 
     ${pilesBar(g)}
-    ${intentView(g, end)}
+    ${intentView(g, end, preview?.end?.pools ?? preview?.cast.pools ?? end.pools)}
 
     <section class="vessel panel">
       ${vesselSvg(g.pools, g.table, share, { previewShare: preview ? shares(preview.cast.pools).earth : undefined, selectedKey: selected, threatenedId: threatened, previewSigil: sigil, band: constrained(g.target.earth) ? g.target.earth : undefined })}

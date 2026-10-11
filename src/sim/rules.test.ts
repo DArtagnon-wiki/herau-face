@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { normalize, poolKey, stepsBetween } from './alchemy'
-import { CLAY_TARGET, COMMISSIONS, MIRE_TUNING, applyIntent, inBand, miss, substanceName, type Intent } from './commission'
+import { ACT_CHANCE, CLAY_TARGET, COMMISSIONS, MIRE_TUNING, actChance, applyIntent, composeIntent, inBand, miss, rollIntent, substanceName, type Move } from './commission'
+import { makeRng } from './rng'
 import { DEFAULT_FORGE, GUARD_MOTE, LINK_MOTE, REACH_MOTE, cloneForge, elementMote, makeRune, startingDeck } from './deck'
 import { addRune, deckSpecs, editRune, removeRune, setComposition, setForge, setTarget } from './sandbox'
 import { DEFAULT_SETTINGS, cast, castsLeft, discardRunes, endTerm, fairOpening, invalidReason, newGame, previewCast, previewEnd, resistanceMult, sigilsPlayed, standardSetup } from './game'
@@ -130,10 +131,10 @@ describe('resolving a sigil', () => {
     expect(direct.yieldFactor).toBe(20)
   })
 
-  it('condenses when the anchor inscribes its own element', () => {
+  it('purifies when the anchor inscribes its own element', () => {
     const pools = normalize([{ elemental: 'earth', grade: 0, kg: 4 }])
     const res = resolve(sigil(rune('earth'), ['inscribe', rune('earth')]), pools, undefined, capped)
-    expect(res.mode).toBe('condense')
+    expect(res.mode).toBe('purify')
     expect(res.required).toBe(5)
     expect(res.converted).toBeCloseTo(5 * R)
     expect(kgOf(res.pools, 'earth:1')).toBeCloseTo(5 * R * 0.5)
@@ -220,27 +221,68 @@ describe('mud', () => {
     expect(miss(start, CLAY_TARGET)).toBeCloseTo(3 + 1 + 1)
   })
 
-  it('seeps earth into water and hardens weak water', () => {
-    const seep: Intent = { kind: 'seep', flare: 0, kg: 1, title: '', detail: '' }
-    const after = applyIntent(seep, mud(12, 12), []).pools
-    expect(kgOf(after, 'earth:1')).toBeCloseTo(11)
-    expect(kgOf(after, 'water:0')).toBeCloseTo(13)
-    const harden: Intent = { kind: 'harden', flare: 0, kg: 2, title: '', detail: '' }
-    const hardened = applyIntent(harden, mud(12, 12), []).pools
-    expect(kgOf(hardened, 'water:1')).toBeCloseTo(2)
-    expect(kgOf(hardened, 'water:0')).toBeCloseTo(10)
+  it('seeps earth into water, evaporates water into air and scorches earth into fire, all impure', () => {
+    const intent = composeIntent([move('water', 'seep', 1), move('air', 'evaporate', 1), move('fire', 'scorch', 0.5)])
+    const after = applyIntent(intent, mud(12, 12, 1, 1), []).pools
+    expect(kgOf(after, 'earth:1')).toBeCloseTo(10.5)
+    expect(kgOf(after, 'water:0')).toBeCloseTo(12)
+    expect(kgOf(after, 'air:0')).toBeCloseTo(1)
+    expect(kgOf(after, 'fire:0')).toBeCloseTo(0.5)
+  })
+})
+
+const move = (element: Move['element'], kind: Move['kind'], kg = 0, flare = 0): Move => ({ element, kind, name: kind, flare, kg, detail: '' })
+
+describe('combat by purity', () => {
+  it('weights each elemental’s chance to act by the purity of its kilos', () => {
+    expect(actChance(mud(12, 12), 'water')).toBe(ACT_CHANCE[0])
+    expect(actChance(mud(12, 12), 'earth')).toBe(ACT_CHANCE[1])
+    const mixed = [{ elemental: 'earth' as const, grade: 0 as const, kg: 3 }, { elemental: 'earth' as const, grade: 2 as const, kg: 1 }]
+    expect(actChance(mixed, 'earth')).toBeCloseTo((3 * ACT_CHANCE[0] + ACT_CHANCE[2]) / 4)
+  })
+
+  it('makes impure amalgams act far more than pure ones, and lets all four act at once', () => {
+    const at = (grade: 0 | 2) => [
+      { elemental: 'earth' as const, grade, kg: 18 },
+      { elemental: 'water' as const, grade, kg: 18 },
+      { elemental: 'air' as const, grade, kg: 2 },
+      { elemental: 'fire' as const, grade, kg: 2 },
+    ]
+    const tally = (grade: 0 | 2) => {
+      const rng = makeRng(3)
+      let moves = 0
+      let four = 0
+      for (let i = 0; i < 2000; i++) {
+        const n = rollIntent(rng, 1, at(grade), [], DEFAULT_SETTINGS).moves.length
+        moves += n
+        if (n === 4) four++
+      }
+      return { moves: moves / 2000, four }
+    }
+    const impure = tally(0)
+    const pure = tally(2)
+    expect(impure.moves).toBeCloseTo(4 * ACT_CHANCE[0], 1)
+    expect(pure.moves).toBeCloseTo(4 * ACT_CHANCE[2], 1)
+    expect(impure.four).toBeGreaterThan(0)
+  })
+
+  it('sums every move’s flare and lets a calm term pass with none', () => {
+    const intent = composeIntent([move('earth', 'flare', 0, 7), move('water', 'flare', 0, 9)])
+    expect(intent.flare).toBe(16)
+    expect(composeIntent([]).flare).toBe(0)
+    expect(composeIntent([]).title).toBe('Calm')
   })
 })
 
 describe('a commission', () => {
   it('finishes when its own move leaves the amalgam in range', () => {
     // 90% earth is out of range; seeping 1 kg of earth into water brings it to 80%.
-    const seep: Intent = { kind: 'seep', flare: 0, kg: 1, title: '', detail: '' }
+    const seep = composeIntent([move('water', 'seep', 1)])
     const s = { ...newGame(undefined, 42), pools: mud(9, 0.6, 0.2, 0.2), intent: seep }
     expect(inBand(s.pools)).toBe(false)
     expect(previewEnd(s).finished).toBe(true)
     expect(endTerm(s).phase).toBe('won')
-    const held = { ...s, intent: { ...seep, kind: 'flare' as const } }
+    const held = { ...s, intent: composeIntent([]) }
     expect(endTerm(held).phase).toBe('compose')
   })
 
@@ -249,7 +291,8 @@ describe('a commission', () => {
     expect(s.hand).toHaveLength(6)
     expect(s.draw).toHaveLength(8)
     expect(s.quintessence).toBe(100)
-    expect(['flare', 'seep', 'harden', 'slump']).toContain(s.intent.kind)
+    expect(s.intent.moves.every((m) => ['flare', 'seep', 'evaporate', 'scorch', 'slump'].includes(m.kind))).toBe(true)
+    expect(s.intent.flare).toBe(s.intent.moves.reduce((sum, m) => sum + m.flare, 0))
   })
 
   it('always opens with at least one water and one earth', () => {
@@ -466,11 +509,32 @@ describe('the alchemical equation', () => {
     expect(r.produced).toBeCloseTo(r.converted / 1.1)
   })
 
-  it('condenses when the seal is an inscribe of the anchor element', () => {
+  it('purifies when the path inscribes the element it is at, at one more step of resistance', () => {
     const r = resolveEquation(sigil(rune('earth'), ['inscribe', rune('earth')]), [{ elemental: 'earth', grade: 1, kg: 10 }], undefined, eq)
-    expect(r.mode).toBe('condense')
+    expect(r.mode).toBe('purify')
     expect(r.required).toBe(20)
     expect(r.target).toEqual({ elemental: 'earth', grade: 2 })
+  })
+
+  it('adulterates when the path circumscribes the element it is at, at no extra resistance', () => {
+    const r = resolveEquation(sigil(rune('earth'), ['circumscribe', rune('earth')]), [{ elemental: 'earth', grade: 2, kg: 10 }], undefined, eq)
+    expect(r.mode).toBe('adulterate')
+    expect(r.required).toBe(20)
+    expect(r.target).toEqual({ elemental: 'earth', grade: 1 })
+    // Impure earth can't get any less pure, so the sigil offers only the pure pool.
+    const both = [{ elemental: 'earth' as const, grade: 0 as const, kg: 5 }, { elemental: 'earth' as const, grade: 2 as const, kg: 5 }]
+    expect(resolveEquation(sigil(rune('earth'), ['circumscribe', rune('earth')]), both, undefined, eq).source?.grade).toBe(2)
+  })
+
+  it('makes everything it transmutes impure, then purifies what follows: air → water → water makes medium water', () => {
+    const air = [{ elemental: 'air' as const, grade: 1 as const, kg: 10 }]
+    const plain = resolveEquation(sigil(rune('air', 'crescent'), ['circumscribe', rune('water')]), air, undefined, eq)
+    expect(plain.target).toEqual({ elemental: 'water', grade: 0 })
+    const purified = resolveEquation(sigil(rune('air', 'crescent'), ['circumscribe', rune('water')], ['inscribe', rune('water')]), air, undefined, eq)
+    expect(purified.mode).toBe('transmute')
+    expect(purified.target).toEqual({ elemental: 'water', grade: 1 })
+    // One flip and one purifying step: two steps of resistance.
+    expect(purified.required).toBe(10 * 1 * 2 ** 2)
   })
 
   it('adds boost motes to their rune multiplier', () => {
@@ -498,14 +562,16 @@ describe('the equation’s neutral take', () => {
 
 describe('the Mire, a boss', () => {
   const settings = { ...DEFAULT_SETTINGS, equation: { ...DEFAULT_EQUATION } }
-  const boss = (kind: 'stiffen' | 'bind' | 'slag' | 'surge', seed = 50) => {
-    let s = newGame(settings, seed, { ...standardSetup(), commission: 'mire', start: COMMISSIONS.mire.start.map((p) => ({ ...p })), target: COMMISSIONS.mire.target })
-    for (let i = 0; i < 60 && s.intent.kind !== kind; i++) s = { ...newGame(settings, seed + i + 1, { ...standardSetup(), commission: 'mire', start: COMMISSIONS.mire.start.map((p) => ({ ...p })), target: COMMISSIONS.mire.target }) }
-    expect(s.intent.kind).toBe(kind)
+  const boss = (kind: 'stiffen' | 'bind' | 'slag' | 'flare', seed = 50) => {
+    const has = (g: ReturnType<typeof newGame>) => g.intent.moves.some((m) => m.kind === kind)
+    const start = (n: number) => newGame(settings, n, { ...standardSetup(), commission: 'mire', start: COMMISSIONS.mire.start.map((p) => ({ ...p })), target: COMMISSIONS.mire.target })
+    let s = start(seed)
+    for (let i = 0; i < 200 && !has(s); i++) s = start(seed + i + 1)
+    expect(has(s)).toBe(true)
     return s
   }
   it('flares on every move', () => {
-    for (const k of ['stiffen', 'bind', 'slag', 'surge'] as const) expect(boss(k).intent.flare).toBeGreaterThanOrEqual(MIRE_TUNING.flareMin)
+    for (const k of ['stiffen', 'bind', 'slag', 'flare'] as const) expect(boss(k).intent.moves.every((m) => m.flare > 0)).toBe(true)
   })
   it('doubles resistance while stiffened', () => {
     const s = boss('stiffen')

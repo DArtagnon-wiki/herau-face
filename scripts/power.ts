@@ -1,7 +1,7 @@
 // How much mass a deck can move in one term, the game's equivalent of damage
 // per turn. For each deck along the run, deal many hands and find the most
 // kilos the best sigil, and the best set of sigils for the whole hand, can
-// take from an unlimited weak pool and turn into another element. Defence and
+// take from an unlimited impure pool and turn into another element. Defence and
 // aim are ignored: this is raw throughput against the neutral 1 kg take.
 //
 //   npx tsx scripts/power.ts [--hands 300] [--grade 0]
@@ -86,7 +86,7 @@ const decks = [
     return { name: 'late+', setup: late, hand: 10 }
   })(),
 ]
-console.log(`Kilos moved from an unlimited ${['weak', 'medium', 'heavy', 'inert'][grade]} pool, ${hands} hands per deck (neutral take ${DEFAULT_EQUATION.neutral} kg)`)
+console.log(`Kilos moved from an unlimited ${['impure', 'medium', 'pure', 'perfect'][grade]} pool, ${hands} hands per deck (neutral take ${DEFAULT_EQUATION.neutral} kg)`)
 console.log('deck      hand   best sigil p10/p50/p90      whole term p10/p50/p90')
 for (const d of decks) {
   const rng = makeRng(7)

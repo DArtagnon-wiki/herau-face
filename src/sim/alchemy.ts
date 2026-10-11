@@ -26,7 +26,8 @@ export function stepsBetween(a: Elemental, b: Elemental): 0 | 1 | 2 {
 
 export const STEP_COST = { 1: 10, 2: 30 } as const
 export const GRADE_MULT: Record<Grade, number> = { 0: 0.5, 1: 1, 2: 2, 3: 4 }
-export const GRADE_NAMES: Record<Grade, string> = { 0: 'weak', 1: 'medium', 2: 'heavy', 3: 'inert' }
+/** Purity: transmuted elementals come out impure; purifying raises them. Purer elementals resist change more and act less in combat. */
+export const GRADE_NAMES: Record<Grade, string> = { 0: 'impure', 1: 'medium', 2: 'pure', 3: 'perfect' }
 
 /**
  * Kg produced per kg changed, by from→to pair. Every elemental has a coarse
@@ -42,7 +43,7 @@ export const YIELD: Record<Elemental, Record<Elemental, number>> = {
 
 export const CONDENSE_COST = 10
 export const CONDENSE_YIELD = 0.5
-/** Players can condense up to heavy; inert is reserved for bosses. */
+/** Players can purify up to pure; perfect is reserved for bosses and the Great Work. */
 export const MAX_PLAYER_GRADE: Grade = 2
 
 export const poolKey = (p: { elemental: Elemental; grade: Grade }) => `${p.elemental}:${p.grade}`

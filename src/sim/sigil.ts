@@ -35,7 +35,7 @@ export interface Outputs {
   reachMult: number
   /** Ward from guard motes, included in ward. */
   guard: number
-  /** True when an inscribed rune shares the anchor's affinity. */
+  /** True when an inscribed rune shares the anchor's affinity: the sigil purifies. */
   condense: boolean
   /** Number of off-affinity inscribes; each halves Reach. */
   fine: number
@@ -79,7 +79,8 @@ export function outputs(sigil: Sigil): Outputs {
 
 export interface Resolution {
   outputs: Outputs
-  mode: 'transmute' | 'condense' | 'none'
+  /** Purify and adulterate change a pool's purity without changing its element. */
+  mode: 'transmute' | 'purify' | 'adulterate' | 'none'
   /** Why nothing changes, when mode is 'none'. */
   note: string
   source?: Pool
@@ -136,7 +137,7 @@ export function resolve(sigil: Sigil, pools: Pool[], selectedKey?: string, opts:
   const source = candidates.find((p) => poolKey(p) === selectedKey) ?? candidates[0]
   if (!source) {
     if (out.condense && pools.some((p) => p.elemental === aff))
-      return none(out, pools, `The ${aff} is already heavy.`)
+      return none(out, pools, `The ${aff} is already pure.`)
     return none(out, pools, `There is no ${aff} in the amalgam.`)
   }
 
@@ -155,7 +156,7 @@ export function resolve(sigil: Sigil, pools: Pool[], selectedKey?: string, opts:
         out,
         pools,
         circled
-          ? `The ring matches the anchor. Inscribe ${aff} to condense instead.`
+          ? `The ring matches the anchor. Inscribe ${aff} to purify instead.`
           : 'Circumscribe a rune to set where the change goes.',
         source,
       )
@@ -177,7 +178,7 @@ export function resolve(sigil: Sigil, pools: Pool[], selectedKey?: string, opts:
   const produced = converted * yieldFactor
   return {
     outputs: out,
-    mode: out.condense ? 'condense' : 'transmute',
+    mode: out.condense ? 'purify' : 'transmute',
     note: '',
     source,
     target,

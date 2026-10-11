@@ -18,12 +18,14 @@ export interface Settings {
   discards: number
   /** Most sigils a term; 0 means as many as the hand allows. */
   castsPerTerm: number
-  /** A small flare on mud's seep, harden and slump turns (see rollIntent); 0 for none. */
+  /** The small flare on mud's moves that do something else (seep, evaporate, scorch, slump); 0 for none. */
   debuffFlare?: number
+  /** Mud's flare moves, before the acting elemental's share scales them. */
   flareMin?: number
   flareMax?: number
   flareRise?: number
-  flareWeightRise?: number
+  /** Each elemental's chance to act in a term, by purity (see ACT_CHANCE). */
+  actChance?: number[]
   /** Imbalance on the table that costs nothing. */
   strainFree?: number
   /** Points of imbalance past the free amount per point of strain. */
@@ -43,12 +45,12 @@ export const DEFAULT_SETTINGS: Settings = {
   discards: 2,
   castsPerTerm: 0,
   // Mud's pressure, tuned with the equation and the 4-circle, 8-crescent deck:
-  // flares of 16–20 that don't escalate, small flares on its other moves, and
-  // a point of strain for every point of imbalance past the first.
-  flareMin: 16,
-  flareMax: 20,
+  // each elemental acts by its purity, flare moves of 13–16 scaled by the
+  // elemental's share, small flares on its other moves, and a point of strain
+  // for every point of imbalance past the first.
+  flareMin: 13,
+  flareMax: 16,
   flareRise: 0,
-  flareWeightRise: 0,
   debuffFlare: 4,
   strainFree: 1,
   strainRate: 1,

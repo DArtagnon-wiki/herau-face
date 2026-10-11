@@ -1,7 +1,7 @@
 export type Elemental = 'earth' | 'water' | 'air' | 'fire'
 export type Affinity = Elemental | 'none'
 
-/** 0 weak, 1 medium, 2 heavy, 3 inert (bosses only). */
+/** Purity: 0 impure, 1 medium, 2 pure, 3 perfect (bosses only). */
 export type Grade = 0 | 1 | 2 | 3
 
 /** A rune's body sets its power, links and bowls. */

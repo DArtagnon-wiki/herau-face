@@ -28,12 +28,12 @@ import {
 import { balance, metricsOf } from '../src/sim/metrics'
 import { candidatePools, canJoin } from '../src/sim/sigil'
 import { imbalance } from '../src/sim/table'
-import type { JoinKind, Rune, Sigil } from '../src/sim/types'
+import type { Grade, JoinKind, Rune, Sigil } from '../src/sim/types'
 import { ELEMENTALS, poolKey } from '../src/sim/alchemy'
 import { presetByKey } from '../src/sim/presets'
-import { COMMISSIONS, cloneTarget, type BossTuning, type CommissionKey } from '../src/sim/commission'
+import { ACT_CHANCE, COMMISSIONS, cloneTarget, expectedThreat, type BossTuning, type CommissionKey } from '../src/sim/commission'
 import { mixedDeck } from '../src/sim/deck'
-import { DEFAULT_EQUATION } from '../src/sim/equation'
+import { DEFAULT_EQUATION, sourcePools } from '../src/sim/equation'
 
 const args = process.argv.slice(2)
 const arg = (name: string) => {
@@ -53,11 +53,12 @@ const settings: Settings = {
   debuffFlare: Number(arg('--debuff-flare') ?? DEFAULT_SETTINGS.debuffFlare ?? 0),
   strainFree: Number(arg('--strain-free') ?? DEFAULT_SETTINGS.strainFree ?? 2),
   strainRate: Number(arg('--strain-rate') ?? DEFAULT_SETTINGS.strainRate ?? 2),
-  /** --flare-min, --flare-max, --flare-rise, --flare-weight-rise: mud's flares. */
+  /** --flare-min, --flare-max, --flare-rise: mud's flare moves. */
   flareMin: Number(arg('--flare-min') ?? DEFAULT_SETTINGS.flareMin ?? 11),
   flareMax: Number(arg('--flare-max') ?? DEFAULT_SETTINGS.flareMax ?? 15),
   flareRise: Number(arg('--flare-rise') ?? DEFAULT_SETTINGS.flareRise ?? 1),
-  flareWeightRise: Number(arg('--flare-weight-rise') ?? DEFAULT_SETTINGS.flareWeightRise ?? 5),
+  /** --act 0.5,0.25,0.1,0.03: each elemental's chance to act by purity. */
+  actChance: arg('--act') ? arg('--act')!.split(',').map(Number) : DEFAULT_SETTINGS.actChance,
 }
 /**
  * --equation resolves sigils by the alchemical equation (src/sim/equation.ts),
@@ -96,7 +97,10 @@ if (commission !== 'mud') {
   const c = COMMISSIONS[commission]
   const mass = Number(arg('--boss-mass') ?? 1)
   setup.commission = commission
-  setup.start = c.start.map((p) => ({ ...p, kg: p.kg * mass }))
+  /** --boss-grades E,W,A,F: the purity of each elemental in the boss, 0 impure to 3 perfect. */
+  const grades = arg('--boss-grades')?.split(',').map(Number)
+  const order = ['earth', 'water', 'air', 'fire']
+  setup.start = c.start.map((p) => ({ ...p, kg: p.kg * mass, ...(grades ? { grade: grades[order.indexOf(p.elemental)] as Grade } : {}) }))
   setup.target = cloneTarget(c.target)
   const num = (name: string) => (arg(name) !== undefined ? Number(arg(name)) : undefined)
   const boss: Partial<BossTuning> = {}
@@ -108,6 +112,8 @@ if (commission !== 'mud') {
   set('flareMax', num('--boss-flare-max'))
   set('stiffen', num('--boss-stiffen'))
   set('junk', num('--boss-junk'))
+  /** --boss-act 0.8,0.6,0.3,0.1: the boss's chance to act by purity. */
+  if (arg('--boss-act')) boss.act = arg('--boss-act')!.split(',').map(Number)
   settings.boss = boss
 }
 /** --mix C:K[:T] starts from C circles and K crescents of each element, plus T plain triangles (default 2). */
@@ -158,9 +164,13 @@ const missWeight = Number(arg('--miss-weight') ?? 60)
 /** --ignore-spec: with --farm, chase mass alone, to bound how fast a deck can grow it. */
 const ignoreSpec = args.includes('--ignore-spec')
 
+/** --threat-weight N: how much the player weighs next term's expected instability, so purifying pays (0 ignores it). */
+const threatWeight = Number(arg('--threat-weight') ?? 1.5)
+const threat = (state: GameState, end: EndOutcome) => (naive || !threatWeight ? 0 : threatWeight * expectedThreat(end.pools, end.table, state.settings, state.commission, state.term + 1))
+
 function evalEnd(state: GameState, end: EndOutcome): number {
-  if (ignoreSpec) return farmBonus(end.pools) - end.paid * 3
-  return farmBonus(end.pools) - miss(end.pools, state.target) * missWeight - centering(state, end.pools) * 2 - end.paid * (naive ? 0 : 3) - imbalance(end.table) * 0.3
+  if (ignoreSpec) return farmBonus(end.pools) - end.paid * 3 - threat(state, end)
+  return farmBonus(end.pools) - miss(end.pools, state.target) * missWeight - centering(state, end.pools) * 2 - end.paid * (naive ? 0 : 3) - imbalance(end.table) * 0.3 - threat(state, end)
 }
 
 /** Every sigil the hand can make, within the link limits. */
@@ -186,7 +196,7 @@ type Scored = { sigil: Sigil; poolKey?: string; score: number }
 
 function score(state: GameState, s: Sigil): Scored {
   let best: Scored | null = null
-  const keys = candidatePools(s, state.pools).map(poolKey)
+  const keys = (state.settings.equation ? sourcePools : candidatePools)(s, state.pools).map(poolKey)
   for (const key of keys.length > 1 ? keys : [undefined]) {
     const p = previewCast(state, s, key)
     const v = p.cast.finished
@@ -337,6 +347,7 @@ function play(seed: number) {
   let s = newGame(settings, seed, { ...setup, start: setup.start.map((p) => ({ ...p })) })
   let discardsUsed = 0
   let wardOnly = 0
+  let purified = 0
   let casts = 0
   let peak = totalKg(s.pools)
   for (let guard = 0; guard < 200 && s.phase === 'compose'; guard++) {
@@ -347,6 +358,7 @@ function play(seed: number) {
       if (!best.sigil.joins.some((j) => j.kind === 'circumscribe' || j.kind === 'inscribe')) wardOnly++
       casts++
       s = cast(s, best.sigil, best.poolKey)
+      if (s.casts.at(-1)?.resolution.mode === 'purify') purified++
       continue
     }
     if (s.casts.length === 0 && s.discardsLeft > 0) {
@@ -364,7 +376,7 @@ function play(seed: number) {
     }
     s = endTerm(s)
   }
-  return { state: s, discardsUsed, wardOnly, casts, peak: Math.max(peak, totalKg(s.pools)) }
+  return { state: s, discardsUsed, wardOnly, purified, casts, peak: Math.max(peak, totalKg(s.pools)) }
 }
 
 /** --trace N prints the first N commissions cast by cast. */
@@ -397,7 +409,7 @@ const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.le
 const f1 = (n: number) => n.toFixed(1)
 
 const eqNote = settings.equation ? ` · equation: base ${settings.equation.base}, step ×${settings.equation.step}, ring ×${settings.equation.ring}, neutral ${settings.equation.neutral} kg + ${settings.equation.share * 100}% of the pool${settings.equation.gate ? ', power gate' : ''}` : ''
- const mudNote = ` · flares ${settings.flareMin}–${settings.flareMax} +${settings.flareRise}/term (weight +${settings.flareWeightRise}) · debuff flare ${settings.debuffFlare} · strain past ${settings.strainFree}, 1 per ${settings.strainRate}`
+ const mudNote = ` · flares ${settings.flareMin}–${settings.flareMax} +${settings.flareRise}/term · act ${(settings.actChance ?? ACT_CHANCE).join('/')} · debuff flare ${settings.debuffFlare} · strain past ${settings.strainFree}, 1 per ${settings.strainRate}`
  const bossNote = commission !== 'mud' ? ` · ${COMMISSIONS[commission].source} ${JSON.stringify(settings.boss)}${arg('--boss-mass') ? ` ×${arg('--boss-mass')} mass` : ''}` : ''
 const forgeNote = bossNote + eqNote + mudNote + (mix ? ` · deck ${mix} (circles:crescents:triangles)` : '') + (preset ? ` · ${preset.name.toLowerCase()}` : '') + (power || extraLinks ? ` · power ${power ?? 'default'} · +${extraLinks} links` : '') + (farm ? ` · farming to ${farm} kg` : '')
 console.log(
@@ -424,7 +436,7 @@ if (won.length && won.length < runs.length) console.log(`among wins: spent media
 if (farm) console.log(`peak mass median ${f1(pct(runs.map((r) => r.peak), 50))} kg, p90 ${f1(pct(runs.map((r) => r.peak), 90))} kg, best ${f1(Math.max(...runs.map((r) => r.peak)))} kg`)
 console.log(`finished in 1 term ${Math.round((100 * won.filter((r) => termsUsed(r.state) <= 1).length) / games)}%, in 2 or fewer ${Math.round((100 * won.filter((r) => termsUsed(r.state) <= 2).length) / games)}%`)
 console.log(buckets.map(([label, f]) => `${label}: ${Math.round((100 * spent.filter(f).length) / games)}%`).join('  '))
-console.log(`sigils a term ${f1(mean(runs.map((r) => r.casts / Math.max(1, termsUsed(r.state)))))} · defence-only sigils ${f1(mean(runs.map((r) => r.wardOnly)))} · discards used ${f1(mean(runs.map((r) => r.discardsUsed)))}`)
+console.log(`sigils a term ${f1(mean(runs.map((r) => r.casts / Math.max(1, termsUsed(r.state)))))} · defence-only sigils ${f1(mean(runs.map((r) => r.wardOnly)))} · purifying ${f1(mean(runs.map((r) => r.purified)))} · discards used ${f1(mean(runs.map((r) => r.discardsUsed)))}`)
 
 // Table metrics at the end of each commission, averaged.
 const played = runs.map((r) => metricsOf(sigilsPlayed(r.state)))

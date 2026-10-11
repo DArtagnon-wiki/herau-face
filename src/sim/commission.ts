@@ -79,7 +79,7 @@ export const COMMISSIONS: Record<CommissionKey, Commission> = {
     boss: true,
     start: MIRE_START,
     target: BRICK_TARGET,
-    blurb: 'A boss. 180 kilos of stubborn bog to fire into brick, 80–90% earth with air and fire each between 1% and 3%. Every move it makes comes with a flare of 32–36, and between flares it stiffens to double its resistance, binds you to one sigil a term, and throws slag into your deck. Built for a late-run deck.',
+    blurb: 'A boss. 180 kilos of stubborn bog to fire into brick, 80–90% earth with air and fire each between 1% and 3%. It is restless: its elements act far more often than mud’s, every move carries a flare, its earth stiffens to double its resistance, its water binds you to one sigil a term, and its fire throws slag into your deck. Built for a late-run deck.',
   },
 }
 
@@ -139,17 +139,25 @@ export function substanceName(pools: Pool[], target: Target = CLAY_TARGET, key: 
 }
 
 // ---------------------------------------------------------------------------
-// Mud's action pool: a shallow weighted pool, rolled and revealed each term.
+// Combat: each elemental in the amalgam may act each term, and its purity sets
+// the chance. Impure elementals are restless; pure ones settle. An elemental
+// that acts draws one move from its own pool, so all four can act at once,
+// and a calm term is possible. Moves land in proportion to the elemental's
+// share of the amalgam, so a trace's moves are small. Everything a sigil
+// transmutes comes out impure, so working an amalgam stirs it up; purifying
+// is the defence.
 
-export type IntentKind = 'flare' | 'seep' | 'harden' | 'slump' | 'surge' | 'stiffen' | 'slag' | 'bind'
+export type MoveKind = 'flare' | 'seep' | 'evaporate' | 'scorch' | 'slump' | 'stiffen' | 'bind' | 'slag'
 
-export interface Intent {
-  kind: IntentKind
-  /** Instability this term, before Ward and table strain. */
+/** One elemental's move this term. */
+export interface Move {
+  element: Elemental
+  kind: MoveKind
+  name: string
+  /** Instability this move adds, before Ward and table strain. */
   flare: number
-  /** Kg affected, for seep and harden. */
+  /** Kg affected, for seep, evaporate and scorch. */
   kg: number
-  title: string
   detail: string
   /** Boss buffs, in force for the term the move is revealed. */
   resistanceMult?: number
@@ -158,118 +166,247 @@ export interface Intent {
   junk?: number
 }
 
-export interface IntentSettings {
-  flareScale: number
-  /** A small flare on seep, harden and slump turns: this to this + 2, plus half a point a term. 0 for none. */
-  debuffFlare?: number
-  /** A flare's size before escalation: flareMin to flareMax (11–15). */
-  flareMin?: number
-  flareMax?: number
-  /** How much a flare grows each term (1). */
-  flareRise?: number
-  /** How much more likely a flare becomes each term (weight +5 against seep 20, harden 15, slump 15). */
-  flareWeightRise?: number
+/** Everything the commission does this term: every elemental that acts, and the totals. */
+export interface Intent {
+  moves: Move[]
+  /** Instability this term from every move, before Ward and table strain. */
+  flare: number
+  resistanceMult?: number
+  castLimit?: number
+  junk?: number
+  title: string
+  detail: string
 }
 
-const SEEP_KG = 0.5
-const HARDEN_KG = 2
+/** The chance an elemental acts in a term, by purity: impure, medium, pure, perfect. */
+export const ACT_CHANCE: number[] = [0.5, 0.25, 0.1, 0.03]
+
+export interface IntentSettings {
+  flareScale: number
+  /** The small flare on moves that do something else (seep, evaporate, scorch, slump): this to this + 2. 0 for none. */
+  debuffFlare?: number
+  /** A flare move's size before its elemental's share scales it: flareMin to flareMax. */
+  flareMin?: number
+  flareMax?: number
+  /** How much a flare grows each term (0). */
+  flareRise?: number
+  /** Chance to act by purity, overriding ACT_CHANCE. */
+  actChance?: number[]
+}
 
 /** How hard a boss presses; the simulator and Tuning can override any of it. */
 export interface BossTuning {
   /** The material's resistance, as a multiple of the equation's base (mud is 1). */
   resistance: number
-  /** Every move's flare: flareMin to flareMax, the same every term. */
+  /** Every boss move's flare before its elemental's share scales it: flareMin to flareMax. */
   flareMin: number
   flareMax: number
   /** Stiffen multiplies resistance by this for the term. */
   stiffen: number
   /** Slag adds this many junk runes to the draw pile. */
   junk: number
-  weights: { surge: number; stiffen: number; slag: number; bind: number }
+  /** A boss is restless: each of its elementals' chance to act, by purity. */
+  act: number[]
 }
 
 /**
- * Tuned so the late-run deck wins about 70% of the time, paying a median of
- * 68 quintessence when it does, and the mid-run deck never wins.
+ * A restless boss: its elementals act far more often than mud's, mostly with
+ * flares and a third of the time with a debuff. Tuned so the late-run deck
+ * wins about two times in three, spending a median of about 63 quintessence
+ * when it does, and the mid-run deck never wins.
  */
 export const MIRE_TUNING: BossTuning = {
   resistance: 1,
-  flareMin: 32,
-  flareMax: 36,
+  flareMin: 14,
+  flareMax: 18,
   stiffen: 2,
   junk: 2,
-  weights: { surge: 25, stiffen: 25, slag: 25, bind: 25 },
+  act: [0.9, 0.65, 0.35, 0.1],
 }
 
 /** The material's resistance for the commission, before any stiffening. */
 export const materialResistance = (key: CommissionKey, boss?: Partial<BossTuning>): number => (key === 'mire' ? (boss?.resistance ?? MIRE_TUNING.resistance) : 1)
 
-function rollBoss(rng: Rng, settings: IntentSettings & { boss?: Partial<BossTuning> }): Intent {
-  const t = { ...MIRE_TUNING, ...settings.boss, weights: { ...MIRE_TUNING.weights, ...settings.boss?.weights } }
-  const weights = Object.entries(t.weights) as [keyof BossTuning['weights'], number][]
-  const total = weights.reduce((sum, [, w]) => sum + w, 0)
-  let roll = rng.float() * total
-  let kind: keyof BossTuning['weights'] = 'surge'
-  for (const [k, w] of weights) {
-    if (roll < w) {
-      kind = k
-      break
-    }
-    roll -= w
-  }
-  const flare = Math.max(1, Math.round(rng.int(t.flareMin, t.flareMax) * settings.flareScale))
-  if (kind === 'stiffen')
-    return { kind, flare, kg: 0, resistanceMult: t.stiffen, title: `Stiffen + flare ${flare}`, detail: `The Mire sets hard: resistance ×${t.stiffen} for every sigil this term.` }
-  if (kind === 'bind') return { kind, flare, kg: 0, castLimit: 1, title: `Bind + flare ${flare}`, detail: 'Roots close around the work: only one sigil this term.' }
-  if (kind === 'slag')
-    return { kind, flare, kg: 0, junk: t.junk, title: `Slag + flare ${flare}`, detail: `${t.junk} slag runes join your draw pile when the term ends. Slag has power 1 and no links.` }
-  return { kind: 'surge', flare, kg: 0, title: `Surge ${flare}`, detail: 'The Mire heaves. Ward absorbs it; the rest costs quintessence.' }
+interface MoveSpec {
+  kind: MoveKind
+  name: string
+  weight: number
+  /** Carries the small flare rather than a full one (mud only). */
+  small?: boolean
+  kg?: number
 }
 
-export function rollIntent(
-  rng: Rng,
-  term: number,
-  pools: Pool[],
-  table: TableEntry[],
-  settings: IntentSettings & { boss?: Partial<BossTuning> },
-  key: CommissionKey = 'mud',
-): Intent {
-  if (key === 'mire') return rollBoss(rng, settings)
-  const weakWater = pools.find((p) => p.elemental === 'water' && p.grade === 0)?.kg ?? 0
-  const weights: [IntentKind, number][] = [
-    ['flare', 60 + (settings.flareWeightRise ?? 5) * (term - 1)],
-    ['seep', elementalKg(pools, 'earth') > 0.5 ? 20 : 0],
-    ['harden', weakWater >= 0.5 ? 15 : 0],
-    ['slump', slumpTarget(table) ? 15 : 0],
-  ]
-  const total = weights.reduce((sum, [, w]) => sum + w, 0)
-  let roll = rng.float() * total
-  let kind: IntentKind = 'flare'
-  for (const [k, w] of weights) {
-    if (roll < w) {
-      kind = k
-      break
-    }
-    roll -= w
-  }
+/** Each elemental's pool of moves, by commission. */
+const MOVES: Record<CommissionKey, Record<Elemental, MoveSpec[]>> = {
+  mud: {
+    earth: [
+      { kind: 'flare', name: 'Tremor', weight: 2 },
+      { kind: 'slump', name: 'Slump', weight: 1, small: true },
+    ],
+    water: [
+      { kind: 'flare', name: 'Swell', weight: 2 },
+      { kind: 'seep', name: 'Seep', weight: 1, small: true, kg: 0.5 },
+    ],
+    air: [
+      { kind: 'flare', name: 'Gust', weight: 2 },
+      { kind: 'evaporate', name: 'Evaporate', weight: 1, small: true, kg: 0.5 },
+    ],
+    fire: [
+      { kind: 'flare', name: 'Flare', weight: 2 },
+      { kind: 'scorch', name: 'Scorch', weight: 1, small: true, kg: 0.5 },
+    ],
+  },
+  mire: {
+    earth: [
+      { kind: 'stiffen', name: 'Stiffen', weight: 1 },
+      { kind: 'flare', name: 'Tremor', weight: 2 },
+    ],
+    water: [
+      { kind: 'bind', name: 'Bind', weight: 1 },
+      { kind: 'flare', name: 'Swell', weight: 2 },
+    ],
+    air: [{ kind: 'flare', name: 'Gust', weight: 1 }],
+    fire: [
+      { kind: 'slag', name: 'Slag', weight: 1 },
+      { kind: 'flare', name: 'Flare', weight: 2 },
+    ],
+  },
+}
 
-  if (kind === 'flare') {
-    const flare = Math.max(1, Math.round((rng.int(settings.flareMin ?? 11, settings.flareMax ?? 15) + (settings.flareRise ?? 1) * (term - 1)) * settings.flareScale))
-    return { kind, flare, kg: 0, title: `Flare ${flare}`, detail: 'The mud destabilizes. Ward absorbs it; the rest costs quintessence.' }
+const NAME: Record<Elemental, string> = { earth: 'Earth', water: 'Water', air: 'Air', fire: 'Fire' }
+
+/** How strongly an elemental's moves land, by its share of the amalgam. */
+export const moveStrength = (share: number) => 0.4 + 1.2 * share
+
+/** The chance this elemental acts this term: its pools' chances, weighted by kilos. */
+export function actChance(pools: Pool[], e: Elemental, chances: number[] = ACT_CHANCE): number {
+  const mine = pools.filter((p) => p.elemental === e && p.kg > 0)
+  const kg = mine.reduce((sum, p) => sum + p.kg, 0)
+  return kg > 0 ? mine.reduce((sum, p) => sum + p.kg * (chances[p.grade] ?? 0), 0) / kg : 0
+}
+
+export const actChances = (pools: Pool[], chances: number[] = ACT_CHANCE): Record<Elemental, number> =>
+  Object.fromEntries(ELEMENTALS.map((e) => [e, actChance(pools, e, chances)])) as Record<Elemental, number>
+
+function available(m: MoveSpec, pools: Pool[], table: TableEntry[]): boolean {
+  if (m.kind === 'seep' || m.kind === 'scorch') return elementalKg(pools, 'earth') >= 0.5
+  if (m.kind === 'evaporate') return elementalKg(pools, 'water') >= 0.5
+  if (m.kind === 'slump') return !!slumpTarget(table)
+  return true
+}
+
+type Settings = IntentSettings & { boss?: Partial<BossTuning> }
+
+/** The flare range a move draws from, before share scaling. */
+function flareRange(m: MoveSpec, term: number, settings: Settings, key: CommissionKey): [number, number] {
+  if (key !== 'mud') {
+    const t = { ...MIRE_TUNING, ...settings.boss }
+    return [t.flareMin, t.flareMax]
   }
-  const d = settings.debuffFlare ?? 0
-  const small = d > 0 ? Math.max(1, Math.round((rng.int(d, d + 2) + (term - 1) / 2) * settings.flareScale)) : 0
-  const plus = small ? ` Flare ${small} with it.` : ''
-  const titled = (t: string) => (small ? `${t} + flare ${small}` : t)
-  if (kind === 'seep') {
-    const kg = Math.min(SEEP_KG, elementalKg(pools, 'earth'))
-    return { kind, flare: small, kg, title: titled('Seep'), detail: `${fmtKg(kg)} of earth turns back to weak water.${plus}` }
+  if (m.small) {
+    const d = settings.debuffFlare ?? 0
+    return d > 0 ? [d, d + 2] : [0, 0]
   }
-  if (kind === 'harden') {
-    const kg = Math.min(HARDEN_KG, weakWater)
-    return { kind, flare: small, kg, title: titled('Harden'), detail: `${fmtKg(kg)} of weak water firms up to medium.${plus}` }
+  const rise = (settings.flareRise ?? 0) * (term - 1)
+  return [(settings.flareMin ?? 16) + rise, (settings.flareMax ?? 20) + rise]
+}
+
+function buildMove(rng: Rng, e: Elemental, m: MoveSpec, term: number, pools: Pool[], settings: Settings, key: CommissionKey): Move {
+  const [lo, hi] = flareRange(m, term, settings, key)
+  const strength = moveStrength(share(pools, e))
+  const flare = hi > 0 ? Math.max(1, Math.round(rng.int(Math.round(lo), Math.round(hi)) * strength * settings.flareScale)) : 0
+  const t = { ...MIRE_TUNING, ...settings.boss }
+  const base = { element: e, kind: m.kind, name: m.name, flare, kg: 0 }
+  switch (m.kind) {
+    case 'seep': {
+      const kg = Math.min(m.kg ?? 0.5, elementalKg(pools, 'earth'))
+      return { ...base, kg, detail: `${fmtKg(kg)} of earth seeps into impure water.` }
+    }
+    case 'evaporate': {
+      const kg = Math.min(m.kg ?? 0.5, elementalKg(pools, 'water'))
+      return { ...base, kg, detail: `${fmtKg(kg)} of water evaporates into impure air.` }
+    }
+    case 'scorch': {
+      const kg = Math.min(m.kg ?? 0.5, elementalKg(pools, 'earth'))
+      return { ...base, kg, detail: `${fmtKg(kg)} of earth burns into impure fire.` }
+    }
+    case 'slump':
+      return { ...base, detail: `The rune holding the table most level slips off; entwined runes hold.` }
+    case 'stiffen':
+      return { ...base, resistanceMult: t.stiffen, detail: `Resistance ×${t.stiffen} for every sigil this term.` }
+    case 'bind':
+      return { ...base, castLimit: 1, detail: `Only one sigil this term.` }
+    case 'slag':
+      return { ...base, junk: t.junk, detail: `${t.junk} slag runes join your draw pile when the term ends: power 1, no links.` }
+    default:
+      return { ...base, detail: `The ${e} destabilizes.` }
   }
-  return { kind, flare: small, kg: 0, title: titled('Slump'), detail: `The rune holding the table most level slips off. Entwined runes hold.${plus}` }
+}
+
+/** Gather the term's moves into one intent. */
+export function composeIntent(moves: Move[]): Intent {
+  const mult = moves.reduce((m, x) => m * (x.resistanceMult ?? 1), 1)
+  const limit = Math.min(...moves.map((x) => x.castLimit ?? Infinity))
+  const junk = moves.reduce((n, x) => n + (x.junk ?? 0), 0)
+  return {
+    moves,
+    flare: moves.reduce((sum, x) => sum + x.flare, 0),
+    ...(mult !== 1 ? { resistanceMult: mult } : {}),
+    ...(Number.isFinite(limit) ? { castLimit: limit } : {}),
+    ...(junk ? { junk } : {}),
+    title: moves.length ? moves.map((x) => `${NAME[x.element]}: ${x.name}${x.flare ? ` ${x.flare}` : ''}`).join(' · ') : 'Calm',
+    detail: moves.length ? moves.map((x) => `${x.detail}${x.flare ? ` Flare ${x.flare}.` : ''}`).join(' ') : 'Nothing stirs this term.',
+  }
+}
+
+/** The chances to act by purity for this commission: a boss's own, or the settings'. */
+export const chancesFor = (settings: Settings, key: CommissionKey): number[] =>
+  key === 'mud' ? (settings.actChance ?? ACT_CHANCE) : (settings.boss?.act ?? MIRE_TUNING.act)
+
+export function rollIntent(rng: Rng, term: number, pools: Pool[], table: TableEntry[], settings: Settings, key: CommissionKey = 'mud'): Intent {
+  const moves: Move[] = []
+  const chances = chancesFor(settings, key)
+  for (const e of ELEMENTALS) {
+    if (elementalKg(pools, e) <= 0) continue
+    if (rng.float() >= actChance(pools, e, chances)) continue
+    const specs = MOVES[key][e].filter((m) => available(m, pools, table))
+    const total = specs.reduce((sum, m) => sum + m.weight, 0)
+    if (!total) continue
+    let roll = rng.float() * total
+    let pick = specs[0]
+    for (const m of specs) {
+      if (roll < m.weight) {
+        pick = m
+        break
+      }
+      roll -= m.weight
+    }
+    moves.push(buildMove(rng, e, pick, term, pools, settings, key))
+  }
+  return composeIntent(moves)
+}
+
+/**
+ * The instability the commission is expected to throw next term from this
+ * amalgam: each elemental's chance to act times its moves' average flare.
+ * What the simulated player weighs when it decides whether purifying pays.
+ */
+export function expectedThreat(pools: Pool[], table: TableEntry[], settings: Settings, key: CommissionKey = 'mud', term = 1): number {
+  let total = 0
+  const chances = chancesFor(settings, key)
+  for (const e of ELEMENTALS) {
+    const p = actChance(pools, e, chances)
+    if (!p) continue
+    const specs = MOVES[key][e].filter((m) => available(m, pools, table))
+    const w = specs.reduce((sum, m) => sum + m.weight, 0)
+    if (!w) continue
+    const strength = moveStrength(share(pools, e)) * settings.flareScale
+    total += p * specs.reduce((sum, m) => {
+      const [lo, hi] = flareRange(m, term, settings, key)
+      return sum + (m.weight / w) * ((lo + hi) / 2) * strength
+    }, 0)
+  }
+  return total
 }
 
 export interface IntentResult {
@@ -279,34 +416,31 @@ export interface IntentResult {
   note: string
 }
 
-/** What the commission does at the end of a term. */
+/** What the commission does at the end of a term: every move in turn. */
 export function applyIntent(intent: Intent, pools: Pool[], table: TableEntry[]): IntentResult {
-  if (intent.kind === 'seep') {
-    const source = pools.filter((p) => p.elemental === 'earth').sort((a, b) => b.kg - a.kg)[0]
-    if (!source) return { pools, table, note: 'Nothing left to seep.' }
-    const kg = Math.min(intent.kg, source.kg)
-    return {
-      pools: transfer(pools, source, kg, { elemental: 'water', grade: 0 }, kg),
-      table,
-      note: `Seep: ${fmtKg(kg)} of earth turned to water.`,
+  let removed: TableEntry | undefined
+  const notes: string[] = []
+  for (const m of intent.moves) {
+    const shift = (from: Elemental, to: Elemental, verb: string) => {
+      const source = pools.filter((p) => p.elemental === from).sort((a, b) => b.kg - a.kg)[0]
+      if (!source) return
+      const kg = Math.min(m.kg, source.kg)
+      pools = transfer(pools, source, kg, { elemental: to, grade: 0 }, kg)
+      notes.push(`${m.name}: ${fmtKg(kg)} of ${from} ${verb} impure ${to}.`)
+    }
+    if (m.kind === 'seep') shift('earth', 'water', 'seeped into')
+    else if (m.kind === 'evaporate') shift('water', 'air', 'evaporated into')
+    else if (m.kind === 'scorch') shift('earth', 'fire', 'burned into')
+    else if (m.kind === 'slump') {
+      const r = slumpTarget(table)
+      if (r) {
+        removed = r
+        table = table.filter((e) => e !== r)
+        notes.push('Slump: a sigil slipped off the table.')
+      } else notes.push('Slump: every sigil held.')
     }
   }
-  if (intent.kind === 'harden') {
-    const source = pools.find((p) => p.elemental === 'water' && p.grade === 0)
-    if (!source) return { pools, table, note: 'Nothing left to harden.' }
-    const kg = Math.min(intent.kg, source.kg)
-    return {
-      pools: transfer(pools, source, kg, { elemental: 'water', grade: 1 }, kg),
-      table,
-      note: `Harden: ${fmtKg(kg)} of water is now medium.`,
-    }
-  }
-  if (intent.kind === 'slump') {
-    const removed = slumpTarget(table)
-    if (!removed) return { pools, table, note: 'Slump: every rune held.' }
-    return { pools, table: table.filter((e) => e !== removed), removed, note: 'Slump: a rune slipped off the table.' }
-  }
-  return { pools, table, note: '' }
+  return { pools, table, removed, note: notes.join(' ') }
 }
 
 export const fmtKg = (kg: number) => `${kg.toFixed(1)} kg`

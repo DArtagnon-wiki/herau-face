@@ -4,9 +4,9 @@ A roguelike deckbuilder of runes and alchemy, built from Circumgician's world. T
 
 ## Prototype: mud to clay
 
-One commission, playable end to end: 40 kg of mud (18 kg medium earth, 18 kg weak water, and 2 kg each of medium air and fire from its organics) to bring to clay before quintessence runs out. Clay is 75–85% earth, with air and fire each between 1% and 3%; bounds are strict.
+One commission, playable end to end: 40 kg of mud (18 kg medium earth, 18 kg impure water, and 2 kg each of medium air and fire from its organics) to bring to clay before quintessence runs out. Clay is 75–85% earth, with air and fire each between 1% and 3%; bounds are strict.
 
-Each term, mud shows its move. Tap a rune to anchor a sigil, then tap others and pick how each joins from the menu that opens around it. You compose and cast sigils from a 6-rune hand, as many as the hand allows; each resolves at once against an exact preview, and its Ward builds up for the term. When you end the term, mud acts: the term's Ward absorbs its flare and the rest costs quintessence. Unplayed runes stay in hand.
+Each term, mud shows its moves: each of its elements may act, the less pure the likelier. Tap a rune to anchor a sigil, then tap others and pick how each joins from the menu that opens around it. You compose and cast sigils from a 6-rune hand, as many as the hand allows; each resolves at once against an exact preview, and its Ward builds up for the term. When you end the term, mud acts: the term's Ward absorbs its flares and the rest costs quintessence. Unplayed runes stay in hand.
 
 ```sh
 npm install
@@ -54,7 +54,7 @@ With the standard deck, runes and gems always agree, because every elemental run
 
 ### Sandbox
 
-The Sandbox panel changes the commission in progress, live: the mud's starting composition (kg and grade per element, which resets the amalgam) and the target bands; each body's power, links and bowls; the reach and guard mote values; any rune's body and motes, wherever it is in the deck; new runes straight into the hand; and removing runes. Restarting keeps every change, and "Restart with the standard deck" undoes them. "Decks along a run" loads the opening, mid-run or late-run deck, on the start screen too. The Tuning panel covers the rest: table strain, surplus Force, flare size, quintessence, hand size, sigils a term and discards.
+The Sandbox panel changes the commission in progress, live: the mud's starting composition (kg and purity per element, which resets the amalgam) and the target bands; each body's power, links and bowls; the reach and guard mote values; any rune's body and motes, wherever it is in the deck; new runes straight into the hand; and removing runes. Restarting keeps every change, and "Restart with the standard deck" undoes them. "Decks along a run" loads the opening, mid-run or late-run deck, on the start screen too. The Tuning panel covers the rest: table strain, surplus Force, flare size, quintessence, hand size, sigils a term and discards.
 
 ### Rules the doc leaves open
 
@@ -62,7 +62,7 @@ The Sandbox panel changes the commission in progress, live: the mud's starting c
 - **Table imbalance adds strain.** Runes on the table are tallied Earth against Air and Water against Fire. Every point of imbalance past the first adds 1 instability a term (Tuning has gentler and harsher settings).
 - **Surplus Force multiplies Reach.** This departs from the doc's formula, which caps Force at the requirement. Under the cap, the standard deck wins only half its commissions against mud (see below).
 - **Reach × Force.** Kilos converted = Reach × Force ÷ the Force the change needs. The preview spells this out, runes show what they'd add under the selected join, and a tip compares the best side link and best circumscribe left in hand.
-- **Inscribe.** An inscribed rune of the anchor's own element condenses the selected pool. Any other halves Reach, for small precise casts.
+- **Inscribe.** An inscribed rune of the anchor's own element purifies the selected pool. Any other halves Reach, for small precise casts.
 - **Slump** knocks loose the table sigil whose loss leaves the table most lopsided. Entwined sigils hold.
 - **A commission finishes in range.** It ends the moment the amalgam is in range, whether a cast or the commission's own move at the end of a term put it there; that term's instability is paid first.
 
@@ -85,9 +85,9 @@ Every sigil is drawn the way the design doc's notation reads (`src/ui/draw.ts`):
 | Reach | 0.2 kg per point of power (anchor and side links) |
 | Force | 1 per point (anchor, circumscribes, inscribes) |
 | Ward | 1 per point (entwines), plus guard motes |
-| Mud's moves | Flare 60, seep 20, harden 15, slump 15; seep, harden and slump bring a flare of 4–6 (+½ a term) |
-| Seep, harden | 0.5 kg of earth back to water; 2 kg of weak water to medium |
-| Flare size | 16–20, no escalation |
+| Chance to act | Each element, each term, by purity weighted by kilos: impure 50%, medium 25%, pure 10%, perfect 3% |
+| Mud's moves | Each element: a flare move (weight 2) or its own move (weight 1): earth slumps, water seeps 0.5 kg of earth into water, air evaporates 0.5 kg of water, fire scorches 0.5 kg of earth |
+| Flare size | Flare moves 13–16, own moves 4–6, each × (0.4 + 1.2 × the element's share); no escalation |
 | Quintessence, hand, discards | 100, 6, 2 |
 | Sigils a term | As many as the hand allows |
 
@@ -138,7 +138,7 @@ The simulated player plans each term for big hands and high-link anchors: it tri
 - **Resistance** = the material's base × the pool's grade multiplier × the step factor for every quality flipped along the runepath (a diagonal flips two).
 - **Runepath:** from the anchor, walk the elemental square through the circumscribed and inscribed runes, easiest step first, ties going earth, fire, air, water. It ends at the seal, the last of those runes placed, whose element is the output.
 - **Input kg** = neutral take × min(1, power ÷ resistance) × (reach up ÷ reach down) ^ ln(1 + power ÷ resistance). The neutral take is a flat 1 kg, a property of the material, so a heavier pool takes more work. Reach up is the anchor plus side links, times reach motes; reach down is the anchor plus tangents, a join that touches at a point; power is the anchor plus circumscribes and inscribes.
-- **Output kg** = input × 1.1 per circumscribe ÷ 1.1 per inscribe. A boost mote adds 0.1 to its rune's multiplier. Element yields don't apply. A seal that's an inscribe of the anchor's element condenses.
+- **Output kg** = input × 1.1 per circumscribe ÷ 1.1 per inscribe. A boost mote adds 0.1 to its rune's multiplier. Element yields don't apply. A step that stays on the element the path is at changes purity: inscribed, it purifies (+1 grade, one more step of resistance); circumscribed, it adulterates (−1 grade). Everything transmuted comes out impure, so air → water → water, the last inscribed, makes medium water.
 
 Defaults: base 3.5, step ×2, a flat 1 kg take, power gate on. `--mix C:K[:T]` tries a starting deck of C circles and K crescents per element (and T plain triangles).
 
@@ -163,23 +163,37 @@ With the equation and the 4-circle, 8-crescent deck, the old mud (flares of 11�
 | New | 8 (15) | 100% | 9 | 2 | 0 |
 | New, flares +½ a term | 12 (54) | 93% | 9 | 3 | 0 |
 
-Under the new mud, 3% of opening commissions cost nothing, 23% cost 1–5, 67% cost 6–15 and 7% cost 16–30. Flags: `--flare-min`, `--flare-max`, `--flare-rise`, `--flare-weight-rise`, `--debuff-flare`, `--strain-free`, `--strain-rate`.
+Under the new mud, 3% of opening commissions cost nothing, 23% cost 1–5, 67% cost 6–15 and 7% cost 16–30. Flags: `--flare-min`, `--flare-max`, `--flare-rise`, `--debuff-flare`, `--strain-free`, `--strain-rate`, `--act`.
+
+These numbers predate purity. Under purity-driven combat (next section) the opening deck spends a median of 13 (p90 33), mid-run 4 and late-run 0.
+
+### Purity and combat
+
+Grades are purity now: impure, medium, pure, perfect. Purer elements resist change more (×0.5, ×1, ×2, ×4) and act less. Each term every element in the amalgam may act, so all four can go at once or none; an acting element picks a flare move or its own move, and moves land by its share of the amalgam. The intent panel lists each element's move and, under it, next term's chance for each element to act, which a previewed sigil updates.
+
+Everything a sigil transmutes comes out impure, so working the mud stirs it up and the threat follows the bulk into the new earth. Purifying (inscribe the element the runepath is at) is the defence. The simulated player weighs next term's expected flares (`--threat-weight`, default 1.5), but still purifies only about once a commission: an opening sigil purifies 1–3 kg of 30, and the chance to act is weighted by kilos.
+
+| Deck | Mud: median spent (p90) | Terms | Purifying sigils |
+| --- | --- | --- | --- |
+| Opening | 13 (33) | 6 | 1.2 |
+| Mid-run | 4 (18) | 3 | 0.5 |
+| Late-run | 0 (9) | 2 | 0.1 |
 
 ### Boss: the Mire
 
-Pick it from the commission buttons on the start screen or in the sandbox (`--commission mire` in the simulator). A 180 kg bog to fire into brick, 80–90% earth with air and fire each 1–3%. Each term it rolls surge, stiffen (resistance ×2 this term), bind (one sigil this term) or slag (two power-1, no-link slag runes into your draw pile), each carrying a flare of 32–36.
+Pick it from the commission buttons on the start screen or in the sandbox (`--commission mire` in the simulator). A 180 kg bog to fire into brick, 80–90% earth with air and fire each 1–3%. It is restless: its elements act at 90/65/35/10% by purity (its water is impure, the rest medium). An element that acts flares two times in three; otherwise earth stiffens (resistance ×2 this term), water binds (one sigil this term) and fire throws slag (two power-1, no-link slag runes into your draw pile). Every move carries a flare of 14–18 scaled by the element's share.
 
 | Deck | Won | Spent when won (median, p10–p90) | Terms when won |
 | --- | --- | --- | --- |
 | Mid-run | 0% | — | — |
-| Late-run | 70% | 68 (35–90) | 5 |
-| Late-run, +1 link, 10-rune hand | 100% | 28 | 3 |
+| Late-run | 62% | 64 (28–88) | 5 |
+| Late-run, +1 link, 10-rune hand | 95% | 28 | 3 |
 
-Tuning flags: `--boss-resistance`, `--boss-flare-min`, `--boss-flare-max`, `--boss-stiffen`, `--boss-junk`, `--boss-mass`. The simulated player now values progress twice as much as before (`--miss-weight 60`); at 30 it warded forever in cornered boss fights. With it, mud costs the opening deck a median of 13 (p90 24), mid-run 4 and late-run 0.
+Tuning flags: `--boss-resistance`, `--boss-flare-min`, `--boss-flare-max`, `--boss-stiffen`, `--boss-junk`, `--boss-mass`, `--boss-act`, `--boss-grades`. The simulated player now values progress twice as much as before (`--miss-weight 60`); at 30 it warded forever in cornered boss fights. With it, mud costs the opening deck a median of 13 (p90 24), mid-run 4 and late-run 0.
 
 ### Throughput
 
-`npm run power` deals 200 hands from each deck and finds the most kilos its best sigils can take in one term from an unlimited weak pool, ignoring aim and defence: the game's damage per turn.
+`npm run power` deals 200 hands from each deck and finds the most kilos its best sigils can take in one term from an unlimited impure pool, ignoring aim and defence: the game's damage per turn.
 
 | Deck | Hand | Best sigil (p10 / p50 / p90) | Whole term (p10 / p50 / p90) |
 | --- | --- | --- | --- |

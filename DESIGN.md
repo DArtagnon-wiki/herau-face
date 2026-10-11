@@ -34,12 +34,12 @@ A roguelike deckbuilder in the spirit of Balatro: each term you compose sigils f
 | Class | A deck family defined by symmetry: Regular, Isosceles or Scalene. Parked while bodies and motes settle. |
 | Elemental | One of the four classical elements: Earth, Water, Air, Fire. |
 | Amalgam | The substance being worked, shown as one circle. Its constitution is the share and grade of each elemental. |
-| Pool | One elemental at one grade within the amalgam, such as 3 kg of weak earth. An elemental can hold several pools. |
+| Pool | One elemental at one purity within the amalgam, such as 3 kg of impure earth. An elemental can hold several pools. |
 | Weight | How much of a pool the amalgam holds, in kg. |
-| Grade | How hard a pool is to change: weak, medium, heavy, or inert for bosses. |
+| Purity | How pure a pool is: impure, medium, pure, or perfect for bosses. Purer pools resist change more and act less in combat; anything transmuted comes out impure. |
 | Yield | Kg produced per kg changed, set by the from→to pair. |
 | Change-inertia | Umbrella for how hard a change is (grade) and how much results (yield). |
-| Condensing | Transmuting an elemental into itself, raising its grade at a cost in mass. |
+| Purifying | A runepath step that inscribes the element the path is at: purity one grade up, at one more step of resistance. Its opposite, adulterating, circumscribes it: one grade down. |
 | Commission | One encounter: a source material (the opponent) to transmute into a target material (the puzzle). Balatro's blind. |
 | Action pool | A source's weighted set of moves; one is rolled and revealed each term. |
 | Flare | A burst of instability from the commission. Ward absorbs part; the rest costs quintessence. |
@@ -57,7 +57,7 @@ A roguelike deckbuilder in the spirit of Balatro: each term you compose sigils f
 
 A run is a chain of commissions. Each commission repeats terms until it is done. Within a term the player casts as many sigils as the hand allows, and the commission acts only when the term ends.
 
-1. The commission rolls an action from its pool and reveals it.
+1. Each element in the commission may act, the less pure the likelier; every move is revealed.
 2. Draw up to hand size (prototype: 6 runes).
 3. Compose a sigil: an anchor plus joined runes, up to the anchor's links. Or spend a discard to redraw.
 4. Read the preview: the sigil's Reach, Force, Vector and Ward against the selected pool, and what ending the term after it would cost.
@@ -113,11 +113,11 @@ Leaning: each play is a floating sigil, an anchor plus joined runes up to the an
 | Circumscribe | Power as Force; the outermost circumscribed rune's element is the target | Multiplicative, like Balatro's mult |
 | Side link | Power × 0.2 kg of Reach | Additive, like Balatro's chips |
 | Entwine | Power as Ward | Defence |
-| Inscribe | Power as Force; condenses if it matches the anchor's element, otherwise halves Reach for fine control | Precision |
+| Inscribe | Power as Force; purifies if it matches the anchor's element, otherwise halves Reach for fine control | Precision |
 
 The anchor adds its power as Force and power × 0.2 kg of Reach. Kilos converted = Reach × Force ÷ the Force the change needs, so Force past the requirement multiplies Reach. The original formula capped Force at the requirement; under the cap, the standard deck won only half its commissions against mud in simulation.
 
-**Few, large sigils.** A term lasts until the hand is spent or the player ends it. Reach and Force multiply, so runes are worth more in one sigil than spread across several. The same six power-5 runes, a Water anchor working weak water into earth:
+**Few, large sigils.** A term lasts until the hand is spent or the player ends it. Reach and Force multiply, so runes are worth more in one sigil than spread across several. The same six power-5 runes, a Water anchor working impure water into earth:
 
 | Six runes cast as | Water moved |
 | --- | --- |
@@ -131,7 +131,7 @@ Links therefore compound, and the expected play is one or two high-link sigils a
 **Rules**
 
 - The anchor's element is the source of the change; the player selects which pool, and which lump, it works on.
-- Inscribing a rune of the anchor's own element condenses the selected pool one grade.
+- Inscribing a rune of the anchor's own element purifies the selected pool one grade.
 - Chained circumscribes route around the elemental square: an Earth anchor circumscribed by Water, then Air, takes two easy steps instead of one hard jump. That needs an anchor with two links.
 - Runes with no element add their power without changing the route.
 
@@ -143,7 +143,7 @@ Links therefore compound, and the expected play is one or two high-link sigils a
 | Crescent anchor + circumscribe + entwine | Progress with some Ward |
 | Crescent anchor + circumscribe + side link | More kilos, no Ward |
 | Triangle anchor + two entwines | All-out defence: Ward 14, no change |
-| Anchor + inscribe of its own element | Condense |
+| Anchor + inscribe of its own element | Purify |
 
 **Stabilizing patterns.** Entwines and guard motes give Ward directly. Balance across the table can add to it: whole-table symmetry, and opposites joined together, Earth with Air or Water with Fire.
 
@@ -213,7 +213,7 @@ Mid-run, each crescent becomes a triangle with two link motes, so it anchors fou
 - **Hand size moves one-term finishes most.** Finishing takes a bulk sigil plus trace fixes, so the right runes must be in hand together. With every rune given four extra links, one-term finishes rose from 42% with a 6-rune hand to 85% with 8 and 96% with 10.
 - **Links open chains, then level off.** Six extra links did no better than four.
 - **Raw power hurts precision.** Power 8 instead of 5 cut one-term finishes from 85% to 52%, because the smallest sigil then overshoots a 2 kg trace. Fine tools must grow with power.
-- **The counter-curve** is later commissions' weight and grade: heavy ×2 and inert ×4 raise the Force every change needs.
+- **The counter-curve** is later commissions' weight and purity: pure ×2 and perfect ×4 raise the resistance every change meets.
 - **Greed is cheap so far.** Flares rising by 1 a term barely tax a long commission. If extra product should carry risk, escalation needs teeth.
 
 **Scaling compared.** A commission's job grows about 7× from mud to the Mire, but a deck's throughput grows 13× by the late run, and 50× with one more link and a 10-rune hand. So late in a run mass stops mattering, and only flares and the boss's debuffs hold. Balatro grows its target about 330×, exponentially; Slay the Spire grows enemy HP about 18× and leans on enemy damage and mechanics.
@@ -225,20 +225,20 @@ Mid-run, each crescent becomes a triangle with two link motes, so it anchors fou
 | Here: kilos the job needs moved | Mud, ~15 kg | The Mire, ~100 kg | ~7× |
 | Here: kilos a deck moves in a term (median) | Opening deck, 6 kg | Late deck, 83 kg; late+, 310 kg | 13–50× |
 
-Throughput is from `scripts/power.ts`: the best sigils from 200 hands per deck against an unlimited weak pool, ignoring aim and defence. Sources: [Jaw Worm](https://slaythespire.gg/monsters/Jaw_Worm), [Corrupt Heart](https://slaythespire.gg/bosses/The_Corrupt_Heart), [Balatro blind multipliers](https://steamcommunity.com/app/2379780/discussions/0/596263353496658219).
+Throughput is from `scripts/power.ts`: the best sigils from 200 hands per deck against an unlimited impure pool, ignoring aim and defence. Sources: [Jaw Worm](https://slaythespire.gg/monsters/Jaw_Worm), [Corrupt Heart](https://slaythespire.gg/bosses/The_Corrupt_Heart), [Balatro blind multipliers](https://steamcommunity.com/app/2379780/discussions/0/596263353496658219).
 
 ## Challenge system: transmutation
 
 Each commission is an amalgam to bring to a target constitution. Difficulty comes from how much there is (weight), how hard each pool is to change (grade), and how many elementals must be steered at once. Mud, as prototyped:
 
-| Pool | Weight | Grade | Share |
+| Pool | Weight | Purity | Share |
 | --- | --- | --- | --- |
 | Earth | 18 kg | Medium | 45% |
-| Water | 18 kg | Weak | 45% |
+| Water | 18 kg | Impure | 45% |
 | Air | 2 kg | Medium | 5% |
 | Fire | 2 kg | Medium | 5% |
 
-**Traces matter.** Real mud holds organics, and where there are organics there is air and fire. With two-element mud, air and fire runes had nothing to do but defend. Traces give every element a job, and they must be steered into narrow bands, not simply removed. At medium grade, one basic circle sigil removes about 1 kg and lands inside the band; a careless second one wipes the trace out. In simulation, traces add about one hand size of difficulty, and air and fire runes are played nearly as often as water and earth.
+**Traces matter.** Real mud holds organics, and where there are organics there is air and fire. With two-element mud, air and fire runes had nothing to do but defend. Traces give every element a job, and they must be steered into narrow bands, not simply removed. At medium purity, one basic circle sigil removes about 1 kg and lands inside the band; a careless second one wipes the trace out. In simulation, traces add about one hand size of difficulty, and air and fire runes are played nearly as often as water and earth.
 
 Change-inertia splits in two: the from→to pair sets yield, and the source pool's grade sets resistance.
 
@@ -246,9 +246,9 @@ Change-inertia splits in two: the from→to pair sets yield, and the source pool
 
 ![Mud, clay and steel drawn as amalgam circles](docs/diagrams/amalgam-circles.svg)
 
-The clay holds two earth pools: the original medium earth and the weak earth made from water, which shows as the step in its edge.
+The clay holds two earth pools: the original medium earth and the impure earth made from water, which shows as the step in its edge.
 
-**Targets are proportions plus quantity.** Clay is 75–85% earth, with air and fire each strictly between 1% and 3%, any grade; steel needs heavy earth. Off-spec amalgams take their own names: organic clay when the traces run high, lean clay when they run out. Final quantity matters: more product earns a bigger reward.
+**Targets are proportions plus quantity.** Clay is 75–85% earth, with air and fire each strictly between 1% and 3%, any purity; steel needs pure earth. Off-spec amalgams take their own names: organic clay when the traces run high, lean clay when they run out. Final quantity matters: more product earns a bigger reward.
 
 **Resistance from the elemental square (proposed).** Classical theory gives each elemental two qualities: Earth is cold and dry, Water cold and wet, Air hot and wet, Fire hot and dry. Flipping one quality is a 1-step change and flipping both is a 2-step change, so water to air is easier than earth to air.
 
@@ -258,18 +258,18 @@ Each side of the square keeps one quality, so crossing it is a 1-step change; th
 
 Proposed base resistance: 10 for a 1-step change and 30 for a direct 2-step jump. Routing through a middle layer costs 10 + 10 = 20, which rewards deeper runes. The source pool's grade multiplies it:
 
-| Grade | Resistance multiplier |
+| Purity | Resistance multiplier |
 | --- | --- |
-| Weak | ×0.5 |
+| Impure | ×0.5 |
 | Medium | ×1 |
-| Heavy | ×2 |
-| Inert (bosses) | ×4 |
+| Pure | ×2 |
+| Perfect (bosses) | ×4 |
 
-**New material comes out weak**, so a correction after an overshoot is always affordable.
+**New material comes out impure**, so a correction after an overshoot is always affordable.
 
 **Yield is leverage, not reward.** A high yield is a sledgehammer: 1 kg Earth → 20 kg Air is fast but easy to overshoot. A low yield is a scalpel: 1 kg Water → 0.2 kg Fire. Proposed principle: every elemental gets at least one coarse route and one fine route. Mass is not conserved.
 
-**Condensing** transmutes a pool into its own elemental, one grade heavier: weak to medium, medium to heavy. It uses the same resistance rule, so each step costs more, and its yield is below 1 (proposed: 2 kg in, 1 kg out). Steel from water: water to weak earth, condense to medium, condense to heavy.
+**Purifying** raises a pool one grade along the runepath: inscribe the element the path is at. It costs one more step of resistance and, under the equation, the inscribe's ÷1.1. Circumscribing it instead adulterates, one grade down, at no extra step. Steel from water: water to impure earth, then purify to medium and to pure.
 
 ## Multi-axis resolution
 
@@ -285,10 +285,10 @@ F_{\text{req}} &= g \times \sum_{\text{steps}} c \\
 
 R is the sigil's Reach and F its Force. W is the selected pool's weight in kg and g its grade multiplier. Each step on the route has a base cost c (10 or 30) and a yield y.
 
-- **The player picks the pool and the lump.** Tapping a band of the amalgam selects it, so steel can condense medium earth while weak earth is still present.
-- **Condensing uses the same formula**, with the grade change as one step. Its product lands one grade heavier; every other product lands weak.
+- **The player picks the pool and the lump.** Tapping a band of the amalgam selects it, so steel can purify medium earth while impure earth is still present.
+- **Purifying uses the same formula**, with the purity change as one step. Its product lands one grade purer; every transmuted product lands impure.
 - **Proportional, not a hard gate.** A weak sigil still moves something, so no cast is wasted outright.
-- **Four outputs, four joins.** Circumscribes buy Force, side links buy Reach, entwines buy Ward, and inscribes condense or fine-tune. The anchor and the outermost circumscribe set the Vector.
+- **Four outputs, four joins.** Circumscribes buy Force, side links buy Reach, entwines buy Ward, and inscribes purify or fine-tune. The anchor and the outermost circumscribe set the Vector.
 - **Balatro feel.** Reach, Force and Ward tick up as each rune and mote triggers, then the amalgam shifts.
 - **Exact preview (proposed).** Because overshooting matters, the preview shows the base outcome; surprises come only from chance triggers.
 
@@ -308,7 +308,7 @@ R &= R_{\text{base}} \times g \times s^{\,\text{flips}} \\
 - **The runepath** starts at the anchor and walks the elemental square through the circumscribed and inscribed runes, easiest step first. Ties go earth, fire, air, water: the Planeteers' order, which is also a walk around the square. It ends at the seal, the last of those runes placed, and the output is the seal's element.
 - **The neutral take** N is a flat amount, a property of the material (mud: 1 kg), so weight is difficulty: emptying a pool needs a multiplier of the pool's weight ÷ N. Power short of resistance shrinks the take: earth to air flips both qualities, so medium earth resists 14 against a two-rune sigil's 10, and the take shrinks to 0.7 kg.
 - **Aiming.** Reach up is the anchor plus side links, times reach motes. Reach down is the anchor plus tangents, a join that touches the anchor at a point, kept for the prototype. Power P is the anchor plus circumscribes and inscribes.
-- **Output.** Each circumscribe multiplies by 1.1 and each inscribe divides by 1.1. A boost mote adds a flat 0.1 to its rune's multiplier. Element yields no longer apply. A seal that is an inscribe of the anchor's element condenses, at one extra step.
+- **Output.** Each circumscribe multiplies by 1.1 and each inscribe divides by 1.1. A boost mote adds a flat 0.1 to its rune's multiplier. Element yields no longer apply. A step that stays on the element the path is at changes purity instead: inscribed, it purifies (one grade up, at one extra step); circumscribed, it adulterates (one grade down). Anything transmuted comes out impure, so air → water → water, the last inscribed, makes medium water.
 
 Simulated against mud with those numbers, 60 commissions each:
 
@@ -355,7 +355,7 @@ The commission's flares are the main threat. Ward from the term's sigils absorbs
 - **Spend the hand.** The player casts until the hand is spent, or ends the term early. Most runes go into one or two large sigils; a leftover rune waits in hand or makes a small warding sigil. With the starting deck's links, a careful simulated player casts about two a term.
 - **Quintessence does one job.** It is spent only to stabilize, so it never competes with upgrades.
 - **Defending has a hidden cost.** A rune spent on Ward moves no material, so the commission takes more terms and faces more actions.
-- **Units.** A stock of 100, with flares of 16–20 and small flares of 4–6 on mud's other moves in the prototype, gives partial coverage room to matter.
+- **Units.** A stock of 100, with flare moves of 13–16 scaled by each element's share, and small flares of 4–6 on mud's other moves in the prototype, gives partial coverage room to matter.
 - **Overshoot costs quintessence.** A corrective term faces the commission's next action like any other.
 
 | Situation | Target quintessence cost |
@@ -364,18 +364,35 @@ The commission's flares are the main threat. Ward from the term's sigils absorbs
 | Early commission, a few upgrades | Rarely anything |
 | Boss, inadequate deck | Half to three quarters of the stock |
 
-In the prototype, under the equation with the 4-circle, 8-crescent deck, a simulated player pays a median of 13 against mud (90th percentile 24) and finishes every commission: 5% cost nothing, 12% cost 1–5, 47% cost 6–15, 32% cost 16–30 and 5% cost 31–50. The mid-run deck pays a median of 4 and the late-run deck nothing.
+In the prototype, under the equation with the 4-circle, 8-crescent deck, a simulated player pays a median of 13 against mud (90th percentile 33) and finishes every commission: 7% cost nothing, 17% cost 1–5, 35% cost 6–15, 29% cost 16–30, 10% cost 31–50 and 2% more. The mid-run deck pays a median of 4 and the late-run deck nothing.
 
 A partial refill after each boss (proposed) keeps a weak deck's slide from feeling like a slow death sentence.
+
+## Purity and combat
+
+Each element in the amalgam may act each term, and the less pure it is, the likelier: impure 50%, medium 25%, pure 10%, perfect 3%, weighted by its kilos. An element that acts draws one move from its own pool, so all four can act at once, and a term can pass calm.
+
+| Element | Flare move | Its own move, with a small flare of 4–6 |
+| --- | --- | --- |
+| Earth | Tremor | Slump: knocks the sigil holding the table most level off it |
+| Water | Swell | Seep: 0.5 kg of earth into impure water |
+| Air | Gust | Evaporate: 0.5 kg of water into impure air |
+| Fire | Flare | Scorch: 0.5 kg of earth into impure fire |
+
+- **Moves land by share.** A move's flare is scaled by 0.4 + 1.2 × its element's share, so mud's 2 kg traces gust for about 7 while its water swells for about 14. Flare moves draw 13–16 before scaling and are twice as likely as an element's own move.
+- **Working stirs it up.** Everything a sigil transmutes comes out impure, so turning water into earth makes the earth restless, and the threat follows the bulk.
+- **Purifying is the defence.** Inscribing the element the runepath is at purifies it one grade, so it acts less. Purer elements also resist change more, so purify what you mean to keep.
+- **Same pressure as before, wider spread.** The opening deck spends a median of 13 quintessence on mud (p90 33, up from 24), the mid-run deck 4 and the late-run deck 0.
+- **Purifying barely pays yet.** The simulated player casts about one purifying sigil a commission, even when it weighs next term's expected flares. The chance to act is weighted by kilos, and an opening sigil purifies 1–3 kg of 30.
 
 ## Commissions: source and target
 
 Each commission pairs a source material, the opponent, with a target material, the puzzle. A source behaves the same way whatever the target, which rewards familiarity; targets supply the variety.
 
-- **A shallow weighted pool.** Each source draws three to five actions from a shared library, weighted to its personality. Players learn likelihoods, not a script.
-- **Roll, then compose.** Each term's action is revealed before the player builds, so reacting is accessible without planning ahead.
+- **A shallow pool per element.** Each of a source's elements draws two to four moves from a shared library, weighted to the source's personality, and acts by its purity. Players learn likelihoods, not a script.
+- **Roll, then compose.** Each term's moves are revealed before the player builds, so reacting is accessible without planning ahead.
 - **Escalation punishes the unlucky.** Letting flares grow by even half a point a term turned the opening deck's long commissions into losses (7% lost, one in ten costing over 50) while barely moving the median, so the prototype's flares don't escalate.
-- **Bosses use the same template**, with heavier weights and nastier signature moves.
+- **Bosses use the same template**, with restless elements and nastier signature moves.
 
 | Family | Examples |
 | --- | --- |
@@ -399,41 +416,42 @@ For example, flax might mix unravel, rot and tangle, while mud mixes seep, split
 
 ## Boss: the Mire (prototyped)
 
-The first boss sits at the far end of the arc: the late-run deck beats it about 70% of the time, paying a median of 68 quintessence when it does, and the mid-run deck never does. It is a 180 kg bog to fire into brick, 80–90% earth with air and fire each between 1% and 3%.
+The first boss sits at the far end of the arc: the late-run deck beats it about two times in three, paying a median of 64 quintessence when it does, and the mid-run deck never does. It is a 180 kg bog to fire into brick, 80–90% earth with air and fire each between 1% and 3%. It is restless: its elements act far more often than mud's.
 
-| Pool | Weight | Grade |
+| Pool | Weight | Purity | Chance to act |
+| --- | --- | --- | --- |
+| Earth | 67.5 kg | Medium | 65% |
+| Water | 90 kg | Impure | 90% |
+| Air | 11.25 kg | Medium | 65% |
+| Fire | 11.25 kg | Medium | 65% |
+
+An element that acts makes a flare move two times in three and its signature move otherwise. Every move carries a flare of 14–18, scaled by the element's share:
+
+| Element | Signature move | Effect beyond the flare |
 | --- | --- | --- |
-| Earth | 67.5 kg | Medium |
-| Water | 90 kg | Weak |
-| Air | 11.25 kg | Medium |
-| Fire | 11.25 kg | Medium |
+| Earth | Stiffen | Resistance ×2 for every sigil this term |
+| Water | Bind | Only one sigil this term |
+| Fire | Slag | Two slag runes (power 1, no links, no element) shuffle into the draw pile when the term ends |
+| Air | None | Gusts only |
 
-Each term it rolls one of four moves, equally likely, and every move carries a flare of 32–36 that never escalates:
-
-| Move | Effect beyond the flare |
-| --- | --- |
-| Surge | None |
-| Stiffen | Resistance ×2 for every sigil this term |
-| Bind | Only one sigil this term |
-| Slag | Two slag runes (power 1, no links, no element) shuffle into the draw pile when the term ends |
-
-Simulated, 60 fights each:
+Simulated, 60 to 120 fights each:
 
 | Deck | Won | Quintessence spent when won (median, p10–p90) | Terms when won |
 | --- | --- | --- | --- |
 | Mid-run | 0% | — | — |
-| Late-run | 70% | 68 (35–90) | 5 |
-| Late-run, +1 link, 10-rune hand | 100% | 28 | 3 |
+| Late-run | 62% | 64 (28–88) | 5 |
+| Late-run, +1 link, 10-rune hand | 95% | 28 | 3 |
 
 - **Resistance is the steepest lever.** Doubling the Mire's base resistance and hardening its water cut a late sigil's take from about 15 kg to 2 kg, and the late deck never won. The final Mire resists like mud until it stiffens.
-- **Flares against weight.** Bigger flares on a 120 kg Mire made a three-term race; 180 kg with flares of 32–36 gives a five-term fight where stiffen, bind and slag have time to matter.
+- **Flares against weight.** Bigger flares on a 120 kg Mire made a three-term race; 180 kg gives a five-term fight where stiffen, bind and slag have time to matter.
 - **Long fights exposed the simulated player, not the boss.** Cornered with earth at 89% and a fire trace still high, a player that weighed quintessence heavily kept warding instead of making slow progress, and bled out. Valuing progress twice as much fixed it; the simulator now uses that player everywhere.
+- **Restless, not random.** With mud's chances to act and flares of 32–36, the Mire's calm terms let lucky wins cost almost nothing (p10 of 1) while busy ones lost. Acting more often with smaller flares (90/65/35/10%, 14–18) narrows the spread, and making most moves flares keeps bind and stiffen from landing every term.
 
 ## Worked example: mud to clay
 
 Two terms of a Water anchor circumscribed by Earth bring two-element mud into the earth band. The example predates mud's traces and the prototype's power-5 runes, so it shows only the earth step and the formula at work.
 
-Water to Earth flips wet to dry (1 step), so required Force is 10 × 0.5 (weak water) = 5. The example assumes a Water→Earth yield of 0.6; the new earth arrives as a weak pool beside the medium one.
+Water to Earth flips wet to dry (1 step), so required Force is 10 × 0.5 (impure water) = 5. The example assumes a Water→Earth yield of 0.6; the new earth arrives as an impure pool beside the medium one.
 
 | Term | Rune | Reach | Force (needed) | Earth | Water | Earth share |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -452,7 +470,7 @@ A run is 20 or more commissions across four material tiers, five or six to a tie
 | Tier | Example commissions | New pressure |
 | --- | --- | --- |
 | 1. Earthen | Mud to clay; sand to glass | Earth and water, with traces of air and fire held in narrow bands |
-| 2. Mineral | Brine to salt; ore to metal | Three elementals; heavy grades |
+| 2. Mineral | Brine to salt; ore to metal | Three elementals; pure grades |
 | 3. Noble | Tin to silver | Four elementals; narrow bands |
 | 4. Great Work | Lead to gold | Inert grades throughout |
 
@@ -501,19 +519,20 @@ Circumgician is built on Pixi.js, TypeScript and Vite, and most of its look is g
 | Which measure of table balance: runes, elemental motes, or sides? | The prototype tracks all three; strain counts runes for now |
 | How do symmetry classes map onto bodies and motes? | Open |
 | How many sigils a term, and how big a hand? | Settled: as many as the hand allows, with one or two high-link sigils expected. Hand size is open: 6 in the prototype, where 5 was too punishing against mud with traces |
-| What grade are trace elementals? | Prototype: medium, so one basic sigil removes about 1 kg and lands in band |
+| What purity are trace elementals? | Prototype: medium, so one basic sigil removes about 1 kg and lands in band |
 | Do links on joined runes ever count? | No, only the anchor's, so starting sigils stay at two or three runes |
 | Floating sigils, the table, or both? | Both: each sigil takes effect, then stays on the table |
 | Should table imbalance itself cause instability? | Yes, on top of the flares a commission rolls |
-| How big are the quintessence stock and flares? | Prototype: a stock of 100, flares of 16–20 that don't escalate, and 4–6 on mud's other moves |
+| How big are the quintessence stock and flares? | Prototype: a stock of 100; mud's flare moves draw 13–16 and its other moves 4–6, scaled by the acting element's share; the Mire's draw 14–18 |
 | How is quintessence restored? | A partial refill after each boss; small refills from efficient commissions |
 | How does product convert to reward? | Currency in proportion to product made |
 | Are non-target stable states worth anything? | Tracked, not rewarded, in the first cut; decide from playtest data |
 | Can a player end a commission early with partial product? | Yes, at reduced reward, so a poor encounter still makes progress |
-| What is condensing's yield? | 2 kg in, 1 kg out per grade |
+| What is purifying's yield? | The equation: the inscribe's ÷1.1 and one more step of resistance. Reach × Force: 2 kg in, 1 kg out |
 | Is routing through chained circumscribes too strong? | They are the late-run mass engine: earth → air → fire → earth is ×40. Links gate them; tune step costs and yields if loops arrive too early |
 | Names: working title, the currency? | Open. Settled: a card is a rune; what you cast is a sigil |
 | Does a commission finish the moment it is in band, or when the player seals it? | Settled: the moment the amalgam is in range, whether a cast or the commission's own move put it there. Extra product means working off-spec and landing at the end |
 | Does a shape's side count cap the reach runes it carries? | Open. The notation sketch hangs three crescents off a triangle and sets four triangles inside a square; the prototype limits joins only by the anchor's links |
 | What does a bigger concentricity trade? | Open: more pay against harsher moves or more traces |
 | How should difficulty scale over a run? | Open: grow jobs with throughput (Balatro), keep jobs flatter and grow the commission's damage and mechanics (Slay the Spire), or narrow bands so big decks must aim |
+| Is purifying strong enough as a defence? | Not yet for the opening deck. Levers: weight the chance by the impure share more steeply, let purifying move more kilos, or give pure elements weaker moves as well as rarer ones |
