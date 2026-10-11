@@ -11,7 +11,7 @@ import type { TableEntry } from './sim/table'
 import { AFFINITY_VAR, bodyIcon, moteColor, runeSvg, sigilSvg, vesselSvg } from './ui/draw'
 import { AFFINITIES, SIDES, balance, metricsOf, type Measure } from './sim/metrics'
 import { PRESETS, presetByKey } from './sim/presets'
-import { DEFAULT_EQUATION, runepath, terms } from './sim/equation'
+import { DEFAULT_EQUATION, runepath, take, terms, type Equation } from './sim/equation'
 
 // ---------------------------------------------------------------------------
 // State
@@ -87,6 +87,19 @@ const EQUATION_JOINS: JoinOption[] = [
 const joinList = (equation: boolean) => (equation ? EQUATION_JOINS : CLASSIC_JOINS)
 /** Whether the commission in progress (or the next one) uses the equation. */
 const eqOn = () => !!(ui.game ? ui.game.settings.equation : ui.settings.equation)
+
+/** The neutral take options Tuning offers: a share of the source pool, or flat kilos. */
+const NEUTRAL_TAKES: { key: string; label: string; neutral: number; share: number }[] = [
+  { key: 'share-0.2', label: '20% of the pool', neutral: 0, share: 0.2 },
+  { key: 'share-0.25', label: '25% of the pool', neutral: 0, share: 0.25 },
+  { key: 'share-0.15', label: '15% of the pool', neutral: 0, share: 0.15 },
+  { key: 'share-0.1', label: '10% of the pool', neutral: 0, share: 0.1 },
+  { key: 'flat-2', label: '2 kg flat', neutral: 2, share: 0 },
+  { key: 'flat-1', label: '1 kg flat', neutral: 1, share: 0 },
+]
+const takeKey = (eq: Equation) => NEUTRAL_TAKES.find((t) => t.neutral === eq.neutral && t.share === eq.share)?.key ?? 'share-0.2'
+const neutralWords = (eq: Equation) =>
+  eq.share ? `${Math.round(eq.share * 100)}% of the pool it works${eq.neutral ? ` plus ${num(eq.neutral)} kg` : ''}` : `${num(eq.neutral)} kg`
 
 const ELEMENT_NAME: Record<string, string> = { earth: 'Earth', water: 'Water', air: 'Air', fire: 'Fire', none: 'No element' }
 
@@ -251,7 +264,7 @@ function startView(): string {
       </dl>
       ${
         eqOn()
-          ? `<p><b>The equation.</b> A sigil takes ${num(ui.settings.equation!.neutral)} kg when reach up equals reach down. Side links aim for more and tangents for less, and power against the pool’s resistance decides how far you get: kilos = ${num(ui.settings.equation!.neutral)} × (reach up ÷ reach down)<sup>ln(1 + power ÷ resistance)</sup>. Resistance doubles for every quality the runepath flips. Switch to Reach × Force in Tuning.</p>`
+          ? `<p><b>The equation.</b> With reach up equal to reach down, a sigil takes ${neutralWords(ui.settings.equation!)}${ui.settings.equation!.gate ? ', less if its power falls short of the pool’s resistance' : ''}. Side links aim for more and tangents for less, and power against resistance decides how far you get: kilos = neutral take × (reach up ÷ reach down)<sup>ln(1 + power ÷ resistance)</sup>. Resistance doubles for every quality the runepath flips. Switch to Reach × Force in Tuning.</p>`
           : `<p><b>Reach × Force.</b> Reach is how many kilos the sigil grabs; Force is how hard it pushes. Each change needs some Force (weak water to earth needs 5), and what converts is Reach × Force ÷ that need. They multiply, so give each new rune to whichever total is smaller.</p>`
       }
       <p class="fine">Cast sigils stay on the table. Keep it level, Earth against Air and Water against Fire, or the lopsidedness adds strain every term.</p>
@@ -301,9 +314,10 @@ function tuningView(): string {
       <label>Rules <select id="tune-rules">${optS('equation', s.equation ? 'equation' : 'classic', 'Alchemical equation')}${optS('classic', s.equation ? 'equation' : 'classic', 'Reach × Force')}</select></label>
       ${
         s.equation
-          ? `<label>Base resistance <select id="tune-eq-base">${[1.5, 2.5, 5, 10].map((v) => opt(v, s.equation!.base)).join('')}</select></label>
+          ? `<label>Base resistance <select id="tune-eq-base">${[2.5, 5, 10, 20].map((v) => opt(v, s.equation!.base)).join('')}</select></label>
       <label>Step factor <select id="tune-eq-step">${[1.5, 2, 3].map((v) => opt(v, s.equation!.step, `×${v}`)).join('')}</select></label>
-      <label>Neutral kilos <select id="tune-eq-neutral">${[1, 1.5, 2, 3].map((v) => opt(v, s.equation!.neutral, `${v} kg`)).join('')}</select></label>
+      <label>Neutral take <select id="tune-eq-take">${NEUTRAL_TAKES.map((t) => optS(t.key, takeKey(s.equation!), t.label)).join('')}</select></label>
+      <label class="check"><input type="checkbox" id="tune-eq-gate" ${s.equation!.gate ? 'checked' : ''}> Power short of resistance shrinks the take</label>
       <label>Ring and inscribe <select id="tune-eq-ring">${[1.05, 1.1, 1.2, 1.5].map((v) => opt(v, s.equation!.ring, `×${v}`)).join('')}</select></label>`
           : ''
       }
@@ -315,7 +329,7 @@ function tuningView(): string {
       <label>Sigils a term <select id="tune-casts">${opt(1, s.castsPerTerm)}${opt(2, s.castsPerTerm)}${opt(3, s.castsPerTerm)}${opt(0, s.castsPerTerm, 'Any number')}</select></label>
       <label>Discards <select id="tune-discards">${opt(1, s.discards)}${opt(2, s.discards)}${opt(3, s.discards)}</select></label>
     </div>
-    <p class="fine">${s.equation ? 'The equation: kilos = neutral × (reach up ÷ reach down)^ln(1 + power ÷ resistance), output × each ring ÷ each inscribe.' : 'Unticking surplus Force uses the design doc’s formula, where Force past the requirement does nothing.'} Changing the rules takes effect on restart. ${ui.game ? `Seed ${ui.seed}.` : ''}</p>
+    <p class="fine">${s.equation ? 'The equation: kilos = neutral take × (reach up ÷ reach down)^ln(1 + power ÷ resistance), output × each ring ÷ each inscribe.' : 'Unticking surplus Force uses the design doc’s formula, where Force past the requirement does nothing.'} Changing the rules takes effect on restart. ${ui.game ? `Seed ${ui.seed}.` : ''}</p>
     ${ui.game ? `<div class="row"><button data-act="restart">Restart with these</button><button data-act="replay">Replay seed ${ui.seed}</button></div>` : ''}
   </details>`
 }
@@ -469,8 +483,10 @@ function equationStats(g: GameState, sigil: Sigil, preview: CastPreview): string
   if (t && r.mode !== 'none') {
     const src = `${GRADE_NAMES[r.source!.grade]} ${r.source!.elemental}`
     const tgt = `${r.mode === 'condense' ? GRADE_NAMES[r.target!.grade] + ' ' : ''}${r.target!.elemental}`
-    const wanted = eq.neutral * (t.reachUp / t.reachDown) ** t.authority
-    change = `<p class="formula num">${num(eq.neutral)} kg <span class="op">×</span> (${num(t.reachUp)} <span class="op">÷</span> ${num(t.reachDown)})<sup>${t.authority.toFixed(2)}</sup> <span class="op">=</span> <b>${kg(r.converted)}</b></p>
+    const tk = take(eq, t, r.source!.kg)
+    const wanted = tk.wanted
+    const neutralPart = eq.share ? `${Math.round(eq.share * 100)}% of ${kg(r.source!.kg)}${eq.neutral ? ` + ${num(eq.neutral)} kg` : ''}` : `${num(eq.neutral)} kg`
+    change = `<p class="formula num">${neutralPart} <span class="op">×</span> ${tk.gate < 1 ? `${num(t.power)}<span class="op">÷</span>${num(t.resistance)} <span class="op">×</span> ` : ''}(${num(t.reachUp)} <span class="op">÷</span> ${num(t.reachDown)})<sup>${t.authority.toFixed(2)}</sup> <span class="op">=</span> <b>${kg(r.converted)}</b>${tk.gate < 1 ? ' <span class="warn">· power short</span>' : ''}</p>
       <p class="fine">Exponent ln(1 + ${num(t.power)} ÷ ${num(t.resistance)}): power against resistance. Resistance ${num(eq.base)} base × ${GRADE_NAMES[r.source!.grade]} × ${eq.step}<sup>${t.path.flips + (t.condense ? 1 : 0)}</sup> for the steps flipped.</p>
       <p class="change">${src} → <b class="num">${kg(r.produced)}</b> ${tgt} <span class="of">· output ×${t.multiplier.toFixed(2)}</span>${wanted > r.source!.kg + 1e-9 ? ' <span class="warn">· all there is</span>' : ''}</p>`
   }
@@ -1101,7 +1117,9 @@ function readTuning() {
     else {
       const prev = s.equation ?? DEFAULT_EQUATION
       const ring = n('tune-eq-ring', prev.ring)
-      s.equation = { base: n('tune-eq-base', prev.base), step: n('tune-eq-step', prev.step), neutral: n('tune-eq-neutral', prev.neutral), ring, inscribe: ring }
+      const chosen = NEUTRAL_TAKES.find((t) => t.key === (val('tune-eq-take')?.value ?? takeKey(prev))) ?? NEUTRAL_TAKES[0]
+      const gateEl = val('tune-eq-gate') as HTMLInputElement | null
+      s.equation = { ...prev, base: n('tune-eq-base', prev.base), step: n('tune-eq-step', prev.step), neutral: chosen.neutral, share: chosen.share, gate: gateEl ? gateEl.checked : prev.gate, ring, inscribe: ring }
     }
   }
 }

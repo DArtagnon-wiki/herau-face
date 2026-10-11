@@ -59,6 +59,8 @@ if (args.includes('--equation')) {
     ring: Number(arg('--ring') ?? DEFAULT_EQUATION.ring),
     inscribe: Number(arg('--inscribe') ?? DEFAULT_EQUATION.inscribe),
     neutral: Number(arg('--neutral') ?? DEFAULT_EQUATION.neutral),
+    share: Number(arg('--share') ?? DEFAULT_EQUATION.share),
+    gate: args.includes('--gate') ? true : args.includes('--no-gate') ? false : DEFAULT_EQUATION.gate,
   }
 }
 const KINDS: JoinKind[] = settings.equation ? ['circumscribe', 'side', 'entwine', 'inscribe', 'tangent'] : ['circumscribe', 'side', 'entwine', 'inscribe']
@@ -347,7 +349,7 @@ const pct = (xs: number[], p: number) => {
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length)
 const f1 = (n: number) => n.toFixed(1)
 
-const eqNote = settings.equation ? ` · equation: base ${settings.equation.base}, step ×${settings.equation.step}, ring ×${settings.equation.ring}, neutral ${settings.equation.neutral} kg` : ''
+const eqNote = settings.equation ? ` · equation: base ${settings.equation.base}, step ×${settings.equation.step}, ring ×${settings.equation.ring}, neutral ${settings.equation.neutral} kg + ${settings.equation.share * 100}% of the pool${settings.equation.gate ? ', power gate' : ''}` : ''
 const forgeNote = eqNote + (preset ? ` · ${preset.name.toLowerCase()}` : '') + (power || extraLinks ? ` · power ${power ?? 'default'} · +${extraLinks} links` : '') + (farm ? ` · farming to ${farm} kg` : '')
 console.log(
   `${games} commissions${forgeNote} · hand ${settings.handSize} · ${settings.castsPerTerm || 'any number of'} sigil${settings.castsPerTerm === 1 ? '' : 's'} a term · flare ×${settings.flareScale} · stock ${settings.stock} · strain ${settings.strain ? 'on' : 'off'} · surplus Force ${settings.surplusForce ? 'multiplies' : 'capped'}${naive ? ' · naive player' : ''}${noOrganics ? ' · no organics' : ''}\n`,

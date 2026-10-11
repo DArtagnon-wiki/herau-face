@@ -6,7 +6,7 @@ import type { Elemental, Grade, Pool, Rune, Sigil } from './types'
 // Reach × Force model in sigil.ts.
 //
 //   resistance = the pool's base × step for every quality flipped along the runepath
-//   input kg   = neutral × (reach up ÷ reach down) ^ ln(1 + power ÷ resistance)
+//   input kg   = (neutral + share × pool) × min(1, power ÷ resistance) × (reach up ÷ reach down) ^ ln(1 + power ÷ resistance)
 //   output kg  = input × each circumscribe's multiplier ÷ each inscribe's divider
 //
 // The runepath starts at the anchor and walks the elemental square through the
@@ -23,12 +23,20 @@ export interface Equation {
   ring: number
   /** An inscribe divides output by this, plus its rune's boost motes. */
   inscribe: number
-  /** Kilos taken when reach up equals reach down, or the sigil has no power. */
+  /** Flat kilos in the neutral take: what a sigil takes when reach up equals reach down. */
   neutral: number
+  /** The share of the source pool added to the neutral take, so small pools give small takes. */
+  share: number
+  /** When true, power short of resistance scales the take down: min(1, power ÷ resistance). */
+  gate: boolean
 }
 
-/** Fitted against mud: the opening deck takes a median 5 terms and 5 quintessence, as before. */
-export const DEFAULT_EQUATION: Equation = { base: 2.5, step: 2, ring: 1.1, inscribe: 1.1, neutral: 2 }
+/**
+ * Fitted against mud: the neutral take is a fifth of the source pool, and power
+ * short of resistance shrinks it. The opening deck takes a median 5 terms and
+ * 3 quintessence; a 2 kg trace gives 0.4 kg takes.
+ */
+export const DEFAULT_EQUATION: Equation = { base: 5, step: 2, ring: 1.1, inscribe: 1.1, neutral: 0, share: 0.2, gate: true }
 
 /** How ties on the square break: earth, fire, air (wind), water. */
 export const PREFERENCE: Elemental[] = ['earth', 'fire', 'air', 'water']
@@ -112,6 +120,13 @@ export function terms(sigil: Sigil, source: Pool, eq: Equation, path: Runepath):
   return { path, condense, power, resistance, reachUp, reachDown, authority: Math.log(1 + power / resistance), multiplier }
 }
 
+/** The neutral take for this pool, the power gate, and what the sigil wants after aiming. */
+export function take(eq: Equation, t: EquationTerms, poolKg: number): { neutral: number; gate: number; wanted: number } {
+  const neutral = eq.neutral + (eq.share ?? 0) * poolKg
+  const gate = eq.gate ? Math.min(1, t.power / t.resistance) : 1
+  return { neutral, gate, wanted: neutral * gate * (t.reachUp / t.reachDown) ** t.authority }
+}
+
 /** Work out exactly what casting this sigil does under the equation. */
 export function resolveEquation(sigil: Sigil, pools: Pool[], selectedKey: string | undefined, eq: Equation): Resolution {
   const out = outputs(sigil)
@@ -137,7 +152,7 @@ export function resolveEquation(sigil: Sigil, pools: Pool[], selectedKey: string
   const source = candidates.find((p) => poolKey(p) === selectedKey) ?? candidates[0]
   if (!source) return none(condense && pools.some((p) => p.elemental === aff) ? `The ${aff} is already heavy.` : `There is no ${aff} in the amalgam.`)
   const t = terms(sigil, source, eq, path)
-  const wanted = eq.neutral * (t.reachUp / t.reachDown) ** t.authority
+  const { wanted } = take(eq, t, source.kg)
   const converted = Math.min(source.kg, wanted)
   const produced = converted * t.multiplier
   const target = { elemental: seal.to, grade: (condense ? source.grade + 1 : 0) as Grade }

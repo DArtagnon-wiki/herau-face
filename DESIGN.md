@@ -280,35 +280,37 @@ R is the sigil's Reach and F its Force. W is the selected pool's weight in kg an
 
 ## The alchemical equation (in testing)
 
-A second model for what a sigil does. The prototype now plays by it by default, with a Tuning switch back to Reach × Force, and its simulator runs both. The reach ratio sets whether you reach for a lot or a little; power against the material's resistance sets how far you get. Base 2.5, step ×2 and a neutral 2 kg fit the opening deck's turn target.
+A second model for what a sigil does. The prototype plays by it by default, with a Tuning switch back to Reach × Force, and its simulator runs both. The reach ratio sets whether you reach for a lot or a little; power against the material's resistance sets how far you get, and whether you get the neutral take at all. Base 5, step ×2 and a neutral take of a fifth of the source pool fit the opening deck's turn target.
 
 ```math
 \begin{aligned}
 R &= R_{\text{base}} \times g \times s^{\,\text{flips}} \\
-\text{input} &= N \times \left(\frac{\text{reach}_{\uparrow}}{\text{reach}_{\downarrow}}\right)^{\ln(1 + P/R)} \\
+\text{input} &= \sigma W \times \min\!\left(1, \frac{P}{R}\right) \times \left(\frac{\text{reach}_{\uparrow}}{\text{reach}_{\downarrow}}\right)^{\ln(1 + P/R)} \\
 \text{output} &= \text{input} \times \frac{\prod \text{circumscribe multipliers}}{\prod \text{inscribe multipliers}}
 \end{aligned}
 ```
 
 - **Resistance** is the material's base, possibly raised during combat, times the pool's grade multiplier g, times the step factor s for every quality flipped along the runepath. A diagonal flips two.
 - **The runepath** starts at the anchor and walks the elemental square through the circumscribed and inscribed runes, easiest step first. Ties go earth, fire, air, water: the Planeteers' order, which is also a walk around the square. It ends at the seal, the last of those runes placed, and the output is the seal's element.
-- **Input.** N is the neutral amount, taken when reach up equals reach down or the sigil has no power. Reach up is the anchor plus side links, times reach motes. Reach down is the anchor plus tangents, a proposed join that touches the anchor at a point. Power P is the anchor plus circumscribes and inscribes.
+- **The neutral take** is a share σ of the source pool's weight W (prototype: 20%), so an 18 kg pool gives 3.6 kg and a 2 kg trace 0.4 kg. Power short of resistance shrinks it: earth to air flips both qualities, so medium earth resists 20 against a two-rune sigil's power of 10, and the take halves.
+- **Aiming.** Reach up is the anchor plus side links, times reach motes. Reach down is the anchor plus tangents, a proposed join that touches the anchor at a point. Power P is the anchor plus circumscribes and inscribes.
 - **Output.** Each circumscribe multiplies by 1.1 and each inscribe divides by 1.1. A boost mote adds a flat 0.1 to its rune's multiplier. Element yields no longer apply. A seal that is an inscribe of the anchor's element condenses, at one extra step.
 
 Simulated against mud with those numbers:
 
 | Deck | Hand | Median terms | Done in 1 term | In 2 or fewer | Quintessence spent (median) |
 | --- | --- | --- | --- | --- | --- |
-| Opening | 6 | 5 | 0% | 15% | 5 |
-| Mid-run | 7 | 2 | 0% | 57% | 1 |
-| Late-run | 8 | 2 | 0% | 52% | 0 |
-| Late-run, +1 link on every rune | 10 | 1 | 58% | 100% | 0 |
+| Opening | 6 | 5 | 0% | 0% | 3 |
+| Mid-run | 7 | 3 | 0% | 23% | 0 |
+| Late-run | 8 | 2 | 0% | 63% | 0 |
+| Late-run, +1 link on every rune | 10 | 2 | 35% | 100% | 0 |
 
-- **The neutral amount is the precision floor.** At 1 kg the opening deck crawls; at 3 kg one basic cast wipes out a 2 kg trace.
-- **One-link runes can't aim.** A circle anchor plus its seal always takes the neutral amount, so small, precise casts need multi-link anchors with tangents. Late decks need more links than under Reach × Force to finish in one term.
-- **The arc is flatter.** The mid-run deck already finishes in about two terms, close to the late deck.
-- **Mass grows slowly.** With rings at ×1.1, the late deck took a median 13 terms to double the mud to 80 kg. Huge product late in a run needs boost motes or bigger multipliers. The opening deck can't overkill: finishing with 45 kg took a median 24 terms and nearly the whole stock, and only 30% got there.
-- **Raising resistance slows everything.** At base 10 the opening deck took a median 13 terms and lost 12% of commissions.
+- **A flat neutral can't serve both bulk and traces.** A flat 2 kg wiped a 2 kg trace in one cast. With the power gate, 1 kg or 0.5 kg made the opening deck lose 30% and 100% of commissions. A share of the pool scales itself.
+- **One-link runes can't aim.** A circle anchor plus its seal always takes the neutral share, so small, precise casts need multi-link anchors with tangents.
+- **The arc** runs 5, 3 and 2 terms. Takes shrink as a pool empties, so finishing in one cast needs a big reach ratio: the strongest late deck finishes in one term 35% of the time, and always within two.
+- **Mass grows slowly.** With rings at ×1.1, the strongest late deck took a median 13 terms to double the mud to 80 kg. Huge product late in a run needs boost motes or bigger multipliers.
+- **The opening deck can't overkill.** Finishing with 45 kg took about 25 terms and the whole stock, and only 10% got there.
+- **Raising resistance slows everything.** At base 10, even with a 25% share, the opening deck took a median 12 terms.
 
 ## Instability and quintessence
 

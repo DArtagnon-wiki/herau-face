@@ -423,7 +423,7 @@ describe('decks along a run', () => {
 
 describe('the alchemical equation', () => {
   // Round numbers for readable arithmetic; the game's defaults live in DEFAULT_EQUATION.
-  const eq = { ...DEFAULT_EQUATION, base: 10, step: 2, ring: 1.1, inscribe: 1.1, neutral: 1 }
+  const eq = { ...DEFAULT_EQUATION, base: 10, step: 2, ring: 1.1, inscribe: 1.1, neutral: 1, share: 0, gate: false }
   const weakWater: Pool = { elemental: 'water', grade: 0, kg: 18 }
 
   it('walks the square easiest step first and ends at the seal', () => {
@@ -466,5 +466,21 @@ describe('the alchemical equation', () => {
     const boosted = makeRune(nextId++, { body: 'crescent', motes: [elementMote('earth'), BOOST_MOTE] })
     const r = resolveEquation(sigil(rune('water'), ['circumscribe', boosted]), [weakWater], undefined, eq)
     expect(r.yieldFactor).toBeCloseTo(1.2)
+  })
+})
+
+describe('the equation’s neutral take', () => {
+  const eq = { ...DEFAULT_EQUATION, base: 5, step: 2, neutral: 0, share: 0.25, gate: true }
+  it('takes a share of the source pool, so a trace gives a small take', () => {
+    const water = resolveEquation(sigil(rune('water'), ['circumscribe', rune('earth')]), [{ elemental: 'water', grade: 0, kg: 18 }], undefined, eq)
+    expect(water.converted).toBeCloseTo(4.5)
+    const air = resolveEquation(sigil(rune('air'), ['circumscribe', rune('water')]), [{ elemental: 'air', grade: 1, kg: 2 }], undefined, eq)
+    expect(air.converted).toBeCloseTo(0.5)
+  })
+  it('scales the take down when power falls short of resistance', () => {
+    // Earth to air flips both qualities: medium earth resists 5 × 1 × 2² = 20 against power 10.
+    const r = resolveEquation(sigil(rune('earth'), ['circumscribe', rune('air')]), [{ elemental: 'earth', grade: 1, kg: 18 }], undefined, eq)
+    expect(r.required).toBe(20)
+    expect(r.converted).toBeCloseTo(18 * 0.25 * 0.5)
   })
 })
