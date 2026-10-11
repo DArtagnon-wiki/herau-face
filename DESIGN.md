@@ -370,7 +370,22 @@ A partial refill after each boss (proposed) keeps a weak deck's slide from feeli
 
 ## Purity and combat
 
-Each element in the amalgam may act each term, and the less pure it is, the likelier: impure 50%, medium 25%, pure 10%, perfect 3%, weighted by its kilos. An element that acts draws one move from its own pool, so all four can act at once, and a term can pass calm.
+The prototype now defaults to purity effects. Every pool, an element at one purity, may stir each term with the same chances as before: impure 50%, medium 25%, pure 10%, perfect 3%. What it does depends only on its purity, scaled by its kilos:
+
+| Purity | When it stirs, per 15 kg of the pool |
+| --- | --- |
+| Impure | Flare 15 |
+| Medium | Flare 5, and a tenth of the pool turns impure |
+| Pure, perfect | Lends Ward 3 against this term's flares |
+
+- **The amalgam's purity is its threat.** Mud's 18 kg of impure water flares 18 half the time; its medium earth flares 6 a quarter of the time and slowly sours, so a long commission grows more volatile.
+- **The reference mass sets the pressure.** Quoted per 10 kg, the opening deck paid a median of 37 against mud and lost 3% of commissions. Per 15 kg it pays a median of 14 (p90 32), the mid-run deck 6 and the late-run deck 0.
+- **The Mire** quotes its effects per 30 kg, and when its earth, water or fire stirs it makes its signature move a third of the time. The late-run deck wins 68% (wins cost a median of 45, p10 0, p90 92), the mid-run deck never wins, and late+ wins 98%.
+- **Purifying still barely pays for the opening deck.** Purifying impure kilos cuts their expected flare sixfold, but an opening purifying sigil moves 2–3 kg, worth about one flare a term, and the water is about to be transmuted anyway. Waiving purifying's extra step of resistance changed nothing.
+
+The element moves below, the first version, remain an option in Tuning.
+
+Under element moves, each element in the amalgam may act each term, and the less pure it is, the likelier: impure 50%, medium 25%, pure 10%, perfect 3%, weighted by its kilos. An element that acts draws one move from its own pool, so all four can act at once, and a term can pass calm.
 
 | Element | Flare move | Its own move, with a small flare of 4–6 |
 | --- | --- | --- |

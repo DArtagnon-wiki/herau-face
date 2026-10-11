@@ -59,11 +59,23 @@ const settings: Settings = {
   flareRise: Number(arg('--flare-rise') ?? DEFAULT_SETTINGS.flareRise ?? 1),
   /** --act 0.5,0.25,0.1,0.03: each elemental's chance to act by purity. */
   actChance: arg('--act') ? arg('--act')!.split(',').map(Number) : DEFAULT_SETTINGS.actChance,
+  /** --combat moves|purity: element move pools, or purity effects (default). */
+  combat: (arg('--combat') as Settings['combat']) ?? DEFAULT_SETTINGS.combat,
 }
 /**
  * --equation resolves sigils by the alchemical equation (src/sim/equation.ts),
  * tuned with --base, --step, --ring, --inscribe and --neutral.
  */
+/** --purity-mass N, --purity-flare a,b,c,d, --purity-ward a,b,c,d, --purity-taint a,b,c,d: purity effects by grade, per N kg. */
+{
+  const list = (name: string) => arg(name)?.split(',').map(Number)
+  const purity: NonNullable<Settings['purity']> = {}
+  if (arg('--purity-mass')) purity.mass = Number(arg('--purity-mass'))
+  if (list('--purity-flare')) purity.flare = list('--purity-flare')
+  if (list('--purity-ward')) purity.ward = list('--purity-ward')
+  if (list('--purity-taint')) purity.taint = list('--purity-taint')
+  if (Object.keys(purity).length) settings.purity = purity
+}
 if (args.includes('--equation')) {
   settings.equation = {
     base: Number(arg('--base') ?? DEFAULT_EQUATION.base),
@@ -73,6 +85,8 @@ if (args.includes('--equation')) {
     neutral: Number(arg('--neutral') ?? DEFAULT_EQUATION.neutral),
     share: Number(arg('--share') ?? DEFAULT_EQUATION.share),
     gate: args.includes('--gate') ? true : args.includes('--no-gate') ? false : DEFAULT_EQUATION.gate,
+    /** --free-purify: purifying steps cost no extra resistance. */
+    purifyStep: !args.includes('--free-purify'),
   }
 }
 const KINDS: JoinKind[] = settings.equation ? ['circumscribe', 'side', 'entwine', 'inscribe', 'tangent'] : ['circumscribe', 'side', 'entwine', 'inscribe']
@@ -112,6 +126,9 @@ if (commission !== 'mud') {
   set('flareMax', num('--boss-flare-max'))
   set('stiffen', num('--boss-stiffen'))
   set('junk', num('--boss-junk'))
+  /** --boss-purity-mass N: under purity effects, the boss's effects are quoted per N kg. --boss-signature P: chance a stirring element also makes its signature move. */
+  if (arg('--boss-purity-mass')) boss.purity = { mass: Number(arg('--boss-purity-mass')) }
+  if (arg('--boss-signature')) boss.signature = Number(arg('--boss-signature'))
   /** --boss-act 0.8,0.6,0.3,0.1: the boss's chance to act by purity. */
   if (arg('--boss-act')) boss.act = arg('--boss-act')!.split(',').map(Number)
   settings.boss = boss
@@ -409,7 +426,7 @@ const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.le
 const f1 = (n: number) => n.toFixed(1)
 
 const eqNote = settings.equation ? ` · equation: base ${settings.equation.base}, step ×${settings.equation.step}, ring ×${settings.equation.ring}, neutral ${settings.equation.neutral} kg + ${settings.equation.share * 100}% of the pool${settings.equation.gate ? ', power gate' : ''}` : ''
- const mudNote = ` · flares ${settings.flareMin}–${settings.flareMax} +${settings.flareRise}/term · act ${(settings.actChance ?? ACT_CHANCE).join('/')} · debuff flare ${settings.debuffFlare} · strain past ${settings.strainFree}, 1 per ${settings.strainRate}`
+ const mudNote = ` · flares ${settings.flareMin}–${settings.flareMax} +${settings.flareRise}/term · act ${(settings.actChance ?? ACT_CHANCE).join('/')} · combat ${settings.combat ?? 'purity'}${settings.purity ? ' ' + JSON.stringify(settings.purity) : ''} · debuff flare ${settings.debuffFlare} · strain past ${settings.strainFree}, 1 per ${settings.strainRate}`
  const bossNote = commission !== 'mud' ? ` · ${COMMISSIONS[commission].source} ${JSON.stringify(settings.boss)}${arg('--boss-mass') ? ` ×${arg('--boss-mass')} mass` : ''}` : ''
 const forgeNote = bossNote + eqNote + mudNote + (mix ? ` · deck ${mix} (circles:crescents:triangles)` : '') + (preset ? ` · ${preset.name.toLowerCase()}` : '') + (power || extraLinks ? ` · power ${power ?? 'default'} · +${extraLinks} links` : '') + (farm ? ` · farming to ${farm} kg` : '')
 console.log(

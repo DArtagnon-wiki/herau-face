@@ -1,5 +1,5 @@
 import { normalize, totalKg } from './alchemy'
-import { CLAY_TARGET, MUD_START, applyIntent, cloneTarget, inBand, materialResistance, rollIntent, type BossTuning, type CommissionKey, type Intent, type Target } from './commission'
+import { CLAY_TARGET, MUD_START, applyIntent, cloneTarget, inBand, materialResistance, rollIntent, type BossTuning, type CombatMode, type CommissionKey, type Intent, type PurityEffects, type Target } from './commission'
 import { DEFAULT_FORGE, buildDeck, cloneForge, makeRune, standardDeck, type Forge, type RuneSpec } from './deck'
 import { makeRng, type Rng } from './rng'
 import { canJoin, openLinks, resolve, runesOf, type Resolution } from './sigil'
@@ -26,6 +26,10 @@ export interface Settings {
   flareRise?: number
   /** Each elemental's chance to act in a term, by purity (see ACT_CHANCE). */
   actChance?: number[]
+  /** How the commission fights: purity effects (the default) or element moves. */
+  combat?: CombatMode
+  /** Overrides for the purity effects (see PURITY_EFFECTS). */
+  purity?: Partial<PurityEffects>
   /** Imbalance on the table that costs nothing. */
   strainFree?: number
   /** Points of imbalance past the free amount per point of strain. */
@@ -75,7 +79,7 @@ export interface EndOutcome {
   removed?: TableEntry
   flare: number
   strain: number
-  /** Ward gathered over the term's casts. */
+  /** Ward gathered over the term's casts, plus any the commission's pure pools lend. */
   ward: number
   absorbed: number
   paid: number
@@ -233,7 +237,9 @@ function endOf(state: Pick<GameState, 'intent' | 'pools' | 'table' | 'termWard' 
   const flare = state.intent.flare
   const tableStrain = strain(acted.table, state.settings.strain, state.settings.strainFree ?? FREE_IMBALANCE, state.settings.strainRate ?? STRAIN_RATE)
   const incoming = flare + tableStrain
-  const absorbed = Math.min(state.termWard, incoming)
+  // The commission's own pure pools lend Ward alongside the term's sigils.
+  const ward = state.termWard + (state.intent.ward ?? 0)
+  const absorbed = Math.min(ward, incoming)
   const paid = Math.round((incoming - absorbed) * 10) / 10
   return {
     pools: acted.pools,
@@ -242,7 +248,7 @@ function endOf(state: Pick<GameState, 'intent' | 'pools' | 'table' | 'termWard' 
     removed: acted.removed,
     flare,
     strain: tableStrain,
-    ward: state.termWard,
+    ward,
     absorbed,
     paid,
     finished: inBand(acted.pools, state.target),

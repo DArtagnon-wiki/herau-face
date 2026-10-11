@@ -35,6 +35,8 @@ export interface Equation {
   share: number
   /** When true, power short of resistance scales the take down: min(1, power ÷ resistance). */
   gate: boolean
+  /** Whether each purifying step costs one more step of resistance (true unless set false). */
+  purifyStep?: boolean
 }
 
 /**
@@ -167,7 +169,7 @@ export function terms(sigil: Sigil, source: Pool, eq: Equation, path: Runepath):
   const { anchor, joins } = sigil
   const pure = purifies(path)
   const power = anchor.power + path.steps.reduce((p, s) => p + s.rune.power, 0)
-  const resistance = eq.base * GRADE_MULT[source.grade] * eq.step ** (path.flips + pure)
+  const resistance = eq.base * GRADE_MULT[source.grade] * eq.step ** (path.flips + (eq.purifyStep === false ? 0 : pure))
   const out = outputs(sigil)
   const reachUp = (anchor.power + joins.filter((j) => j.kind === 'side').reduce((p, j) => p + j.rune.power, 0)) * out.reachMult
   const reachDown = anchor.power + joins.filter((j) => j.kind === 'tangent').reduce((p, j) => p + j.rune.power, 0)

@@ -179,6 +179,19 @@ Everything a sigil transmutes comes out impure, so working the mud stirs it up a
 | Mid-run | 4 (18) | 3 | 0.5 |
 | Late-run | 0 (9) | 2 | 0.1 |
 
+### Purity effects (the default)
+
+Tuning's Combat switch picks between element moves (above) and purity effects, now the default (`--combat moves|purity` in the simulator). Under purity effects every pool stirs with the same chances, and its purity decides what it does, per 15 kg of it: impure flares 15; medium flares 5 and taints a tenth of itself to impure; pure and perfect lend Ward 3 against the term's flares. The intent panel lists what stirred and, below, every pool's chance and effect next term.
+
+| Fight | Deck | Result |
+| --- | --- | --- |
+| Mud | Opening | median 14 spent (p90 32); 37 and 3% lost if quoted per 10 kg |
+| Mud | Mid-run, late-run | median 6, 0 |
+| The Mire (per 30 kg, signature move a third of the time) | Late-run | 68% won, wins median 45 (p10 0, p90 92) |
+| The Mire | Mid-run, late+ | 0%, 98% |
+
+Purifying still rarely pays for the opening deck: its purifying sigils move 2–3 kg. `--free-purify` (no extra resistance step) changed nothing. Flags: `--purity-mass`, `--purity-flare`, `--purity-ward`, `--purity-taint`, `--boss-purity-mass`, `--boss-signature`.
+
 ### Boss: the Mire
 
 Pick it from the commission buttons on the start screen or in the sandbox (`--commission mire` in the simulator). A 180 kg bog to fire into brick, 80–90% earth with air and fire each 1–3%. It is restless: its elements act at 90/65/35/10% by purity (its water is impure, the rest medium). An element that acts flares two times in three; otherwise earth stiffens (resistance ×2 this term), water binds (one sigil this term) and fire throws slag (two power-1, no-link slag runes into your draw pile). Every move carries a flare of 14–18 scaled by the element's share.

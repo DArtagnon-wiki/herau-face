@@ -1,7 +1,7 @@
 import { ELEMENTALS, elementalKg, normalize, share, transfer } from './alchemy'
 import type { Rng } from './rng'
 import { slumpTarget, type TableEntry } from './table'
-import type { Elemental, Pool } from './types'
+import type { Elemental, Grade, Pool } from './types'
 
 // Commissions: a source (the opponent) to bring to a target (the puzzle).
 // Mud into clay is the everyday commission; the Mire into brick is a boss.
@@ -147,7 +147,33 @@ export function substanceName(pools: Pool[], target: Target = CLAY_TARGET, key: 
 // transmutes comes out impure, so working an amalgam stirs it up; purifying
 // is the defence.
 
-export type MoveKind = 'flare' | 'seep' | 'evaporate' | 'scorch' | 'slump' | 'stiffen' | 'bind' | 'slag'
+export type MoveKind = 'flare' | 'seep' | 'evaporate' | 'scorch' | 'slump' | 'stiffen' | 'bind' | 'slag' | 'taint' | 'settle'
+
+/**
+ * How the commission fights. 'purity': every pool may stir, and its purity
+ * decides what it does (impure flares, medium flares a little and taints,
+ * pure lends Ward), scaled by its kilos. 'moves': every element may act and
+ * draws a move from its own pool.
+ */
+export type CombatMode = 'purity' | 'moves'
+
+/** What a pool does when it stirs, by purity (impure, medium, pure, perfect), for every `mass` kilos of it. */
+export interface PurityEffects {
+  flare: number[]
+  /** Ward lent to the player against this term's flares. */
+  ward: number[]
+  /** The share of the pool adulterated one grade. */
+  taint: number[]
+  /** The kilos each effect is quoted for: a pool twice this size does twice as much. */
+  mass: number
+}
+
+/**
+ * Per 15 kg: impure flares 15; medium flares 5 and taints a tenth of itself to
+ * impure; pure and perfect lend Ward 3. Quoted per 10 kg, the opening deck
+ * paid a median of 37 against mud and lost 3%; per 15 kg it pays 14, as before.
+ */
+export const PURITY_EFFECTS: PurityEffects = { flare: [15, 5, 0, 0], ward: [0, 0, 3, 3], taint: [0, 0.1, 0, 0], mass: 15 }
 
 /** One elemental's move this term. */
 export interface Move {
@@ -156,9 +182,13 @@ export interface Move {
   name: string
   /** Instability this move adds, before Ward and table strain. */
   flare: number
-  /** Kg affected, for seep, evaporate and scorch. */
+  /** Kg affected, for seep, evaporate, scorch and taint. */
   kg: number
   detail: string
+  /** The pool that stirred, under purity effects. */
+  grade?: Grade
+  /** Ward a pure pool lends against this term's flares. */
+  ward?: number
   /** Boss buffs, in force for the term the move is revealed. */
   resistanceMult?: number
   castLimit?: number
@@ -171,6 +201,8 @@ export interface Intent {
   moves: Move[]
   /** Instability this term from every move, before Ward and table strain. */
   flare: number
+  /** Ward the commission's own pure pools lend against this term's flares. */
+  ward: number
   resistanceMult?: number
   castLimit?: number
   junk?: number
@@ -192,6 +224,10 @@ export interface IntentSettings {
   flareRise?: number
   /** Chance to act by purity, overriding ACT_CHANCE. */
   actChance?: number[]
+  /** How the commission fights (purity effects by default). */
+  combat?: CombatMode
+  /** Overrides for mud's purity effects. */
+  purity?: Partial<PurityEffects>
 }
 
 /** How hard a boss presses; the simulator and Tuning can override any of it. */
@@ -205,8 +241,12 @@ export interface BossTuning {
   stiffen: number
   /** Slag adds this many junk runes to the draw pile. */
   junk: number
-  /** A boss is restless: each of its elementals' chance to act, by purity. */
+  /** A boss is restless: each of its elementals' chance to act, by purity (element moves only). */
   act: number[]
+  /** Under purity effects, the boss's own effects: its pools are big, so each effect is quoted per more kilos. */
+  purity: Partial<PurityEffects>
+  /** Under purity effects, the chance an element that stirs also makes its signature move (earth stiffens, water binds, fire slags). */
+  signature: number
 }
 
 /**
@@ -222,6 +262,8 @@ export const MIRE_TUNING: BossTuning = {
   stiffen: 2,
   junk: 2,
   act: [0.9, 0.65, 0.35, 0.1],
+  purity: { mass: 30 },
+  signature: 1 / 3,
 }
 
 /** The material's resistance for the commission, before any stiffening. */
@@ -354,16 +396,81 @@ export function composeIntent(moves: Move[]): Intent {
     ...(mult !== 1 ? { resistanceMult: mult } : {}),
     ...(Number.isFinite(limit) ? { castLimit: limit } : {}),
     ...(junk ? { junk } : {}),
-    title: moves.length ? moves.map((x) => `${NAME[x.element]}: ${x.name}${x.flare ? ` ${x.flare}` : ''}`).join(' · ') : 'Calm',
+    ward: Math.round(moves.reduce((sum, x) => sum + (x.ward ?? 0), 0) * 10) / 10,
+    title: moves.length ? moves.map((x) => `${NAME[x.element]}: ${x.name}${x.flare ? ` ${x.flare}` : ''}${x.ward ? ` Ward ${x.ward}` : ''}`).join(' · ') : 'Calm',
     detail: moves.length ? moves.map((x) => `${x.detail}${x.flare ? ` Flare ${x.flare}.` : ''}`).join(' ') : 'Nothing stirs this term.',
   }
 }
 
-/** The chances to act by purity for this commission: a boss's own, or the settings'. */
+/** The chances to act by purity for this commission: a boss's own under element moves, or the settings'. */
 export const chancesFor = (settings: Settings, key: CommissionKey): number[] =>
-  key === 'mud' ? (settings.actChance ?? ACT_CHANCE) : (settings.boss?.act ?? MIRE_TUNING.act)
+  key === 'mud' || combatOf(settings) === 'purity' ? (settings.actChance ?? ACT_CHANCE) : (settings.boss?.act ?? MIRE_TUNING.act)
+
+export const combatOf = (settings: Settings): CombatMode => settings.combat ?? 'purity'
+
+/** The purity effects for this commission: mud's, or a boss's own on top. */
+export function effectsFor(settings: Settings, key: CommissionKey): PurityEffects {
+  const base = { ...PURITY_EFFECTS, ...settings.purity }
+  return key === 'mud' ? base : { ...base, ...MIRE_TUNING.purity, ...settings.boss?.purity }
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10
+
+/** What one pool does if it stirs, under purity effects. */
+export function poolEffect(p: Pool, fx: PurityEffects, flareScale = 1): { flare: number; ward: number; taint: number } {
+  const scale = p.kg / fx.mass
+  return {
+    flare: Math.round((fx.flare[p.grade] ?? 0) * scale * flareScale),
+    ward: round1((fx.ward[p.grade] ?? 0) * scale),
+    taint: p.grade > 0 ? round1((fx.taint[p.grade] ?? 0) * p.kg) : 0,
+  }
+}
+
+/** Every pool's chance to stir next term and what it would do, for the intent panel. */
+export function poolOdds(pools: Pool[], settings: Settings, key: CommissionKey = 'mud') {
+  const fx = effectsFor(settings, key)
+  const chances = chancesFor(settings, key)
+  return pools.filter((p) => p.kg > 0).map((p) => ({ pool: p, chance: chances[p.grade] ?? 0, ...poolEffect(p, fx, settings.flareScale) }))
+}
+
+const SIGNATURE: Partial<Record<Elemental, MoveSpec>> = {
+  earth: { kind: 'stiffen', name: 'Stiffen', weight: 1 },
+  water: { kind: 'bind', name: 'Bind', weight: 1 },
+  fire: { kind: 'slag', name: 'Slag', weight: 1 },
+}
+
+/** Purity effects: every pool rolls by its purity and does what its purity does. */
+function rollPurity(rng: Rng, term: number, pools: Pool[], settings: Settings, key: CommissionKey): Intent {
+  const fx = effectsFor(settings, key)
+  const chances = chancesFor(settings, key)
+  const moves: Move[] = []
+  const stirred = new Set<Elemental>()
+  for (const e of ELEMENTALS) {
+    for (const p of pools.filter((q) => q.elemental === e && q.kg > 0).sort((a, b) => a.grade - b.grade)) {
+      if (rng.float() >= (chances[p.grade] ?? 0)) continue
+      const { flare, ward, taint } = poolEffect(p, fx, settings.flareScale)
+      if (!flare && !ward && !taint) continue
+      stirred.add(e)
+      const grade = GRADE_WORD[p.grade]
+      if (p.grade === 0) moves.push({ element: e, kind: 'flare', name: 'Flare', grade: p.grade, flare, kg: 0, detail: `${fmtKg(p.kg)} of ${grade} ${e} flares.` })
+      else if (taint > 0) moves.push({ element: e, kind: 'taint', name: 'Taint', grade: p.grade, flare, kg: taint, detail: `${fmtKg(p.kg)} of ${grade} ${e} stirs, and ${fmtKg(taint)} of it turns ${GRADE_WORD[p.grade - 1]}.` })
+      else moves.push({ element: e, kind: 'settle', name: 'Settle', grade: p.grade, flare, kg: 0, ward, detail: `${fmtKg(p.kg)} of ${grade} ${e} settles, lending Ward ${ward} against this term’s flares.` })
+    }
+  }
+  if (key !== 'mud') {
+    const chance = settings.boss?.signature ?? MIRE_TUNING.signature
+    for (const e of stirred) {
+      const spec = SIGNATURE[e]
+      if (spec && rng.float() < chance) moves.push(buildMove(rng, e, spec, term, pools, { ...settings, boss: { ...settings.boss, flareMin: 0, flareMax: 0 } }, key))
+    }
+  }
+  return composeIntent(moves)
+}
+
+const GRADE_WORD = ['impure', 'medium', 'pure', 'perfect']
 
 export function rollIntent(rng: Rng, term: number, pools: Pool[], table: TableEntry[], settings: Settings, key: CommissionKey = 'mud'): Intent {
+  if (combatOf(settings) === 'purity') return rollPurity(rng, term, pools, settings, key)
   const moves: Move[] = []
   const chances = chancesFor(settings, key)
   for (const e of ELEMENTALS) {
@@ -392,6 +499,7 @@ export function rollIntent(rng: Rng, term: number, pools: Pool[], table: TableEn
  * What the simulated player weighs when it decides whether purifying pays.
  */
 export function expectedThreat(pools: Pool[], table: TableEntry[], settings: Settings, key: CommissionKey = 'mud', term = 1): number {
+  if (combatOf(settings) === 'purity') return poolOdds(pools, settings, key).reduce((sum, o) => sum + o.chance * (o.flare - o.ward), 0)
   let total = 0
   const chances = chancesFor(settings, key)
   for (const e of ELEMENTALS) {
@@ -428,7 +536,14 @@ export function applyIntent(intent: Intent, pools: Pool[], table: TableEntry[]):
       pools = transfer(pools, source, kg, { elemental: to, grade: 0 }, kg)
       notes.push(`${m.name}: ${fmtKg(kg)} of ${from} ${verb} impure ${to}.`)
     }
-    if (m.kind === 'seep') shift('earth', 'water', 'seeped into')
+    if (m.kind === 'taint' && m.grade) {
+      const source = pools.find((p) => p.elemental === m.element && p.grade === m.grade)
+      if (source) {
+        const kg = Math.min(m.kg, source.kg)
+        pools = transfer(pools, source, kg, { elemental: m.element, grade: (m.grade - 1) as Grade }, kg)
+        notes.push(`Taint: ${fmtKg(kg)} of ${GRADE_WORD[m.grade]} ${m.element} turned ${GRADE_WORD[m.grade - 1]}.`)
+      }
+    } else if (m.kind === 'seep') shift('earth', 'water', 'seeped into')
     else if (m.kind === 'evaporate') shift('water', 'air', 'evaporated into')
     else if (m.kind === 'scorch') shift('earth', 'fire', 'burned into')
     else if (m.kind === 'slump') {

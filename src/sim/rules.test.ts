@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { normalize, poolKey, stepsBetween } from './alchemy'
-import { ACT_CHANCE, CLAY_TARGET, COMMISSIONS, MIRE_TUNING, actChance, applyIntent, composeIntent, inBand, miss, rollIntent, substanceName, type Move } from './commission'
+import { ACT_CHANCE, CLAY_TARGET, COMMISSIONS, MIRE_TUNING, PURITY_EFFECTS, actChance, applyIntent, composeIntent, inBand, miss, poolEffect, rollIntent, substanceName, type Move } from './commission'
 import { makeRng } from './rng'
 import { DEFAULT_FORGE, GUARD_MOTE, LINK_MOTE, REACH_MOTE, cloneForge, elementMote, makeRune, startingDeck } from './deck'
 import { addRune, deckSpecs, editRune, removeRune, setComposition, setForge, setTarget } from './sandbox'
@@ -253,7 +253,7 @@ describe('combat by purity', () => {
       let moves = 0
       let four = 0
       for (let i = 0; i < 2000; i++) {
-        const n = rollIntent(rng, 1, at(grade), [], DEFAULT_SETTINGS).moves.length
+        const n = rollIntent(rng, 1, at(grade), [], { ...DEFAULT_SETTINGS, combat: 'moves' }).moves.length
         moves += n
         if (n === 4) four++
       }
@@ -264,6 +264,25 @@ describe('combat by purity', () => {
     expect(impure.moves).toBeCloseTo(4 * ACT_CHANCE[0], 1)
     expect(pure.moves).toBeCloseTo(4 * ACT_CHANCE[2], 1)
     expect(impure.four).toBeGreaterThan(0)
+  })
+
+  it('under purity effects, impure pools flare, medium pools flare a little and taint, pure pools lend Ward, all by mass', () => {
+    const fx = PURITY_EFFECTS
+    expect(poolEffect({ elemental: 'water', grade: 0, kg: 30 }, fx)).toEqual({ flare: 30, ward: 0, taint: 0 })
+    expect(poolEffect({ elemental: 'earth', grade: 1, kg: 30 }, fx)).toEqual({ flare: 10, ward: 0, taint: 3 })
+    expect(poolEffect({ elemental: 'earth', grade: 2, kg: 30 }, fx)).toEqual({ flare: 0, ward: 6, taint: 0 })
+  })
+
+  it('applies a taint and lets a pure pool’s Ward absorb the term’s flares', () => {
+    const taint: Move = { element: 'earth', kind: 'taint', name: 'Taint', grade: 1, flare: 9, kg: 1.8, detail: '' }
+    const after = applyIntent(composeIntent([taint]), mud(18, 18), []).pools
+    expect(kgOf(after, 'earth:0')).toBeCloseTo(1.8)
+    expect(kgOf(after, 'earth:1')).toBeCloseTo(16.2)
+    const settle: Move = { element: 'air', kind: 'settle', name: 'Settle', grade: 2, flare: 0, kg: 0, ward: 6, detail: '' }
+    const flare: Move = { element: 'water', kind: 'flare', name: 'Flare', grade: 0, flare: 10, kg: 0, detail: '' }
+    const s = { ...newGame({ ...DEFAULT_SETTINGS, strain: false }, 42), intent: composeIntent([settle, flare]) }
+    expect(previewEnd(s).absorbed).toBe(6)
+    expect(previewEnd(s).paid).toBe(4)
   })
 
   it('sums every move’s flare and lets a calm term pass with none', () => {
@@ -291,7 +310,7 @@ describe('a commission', () => {
     expect(s.hand).toHaveLength(6)
     expect(s.draw).toHaveLength(8)
     expect(s.quintessence).toBe(100)
-    expect(s.intent.moves.every((m) => ['flare', 'seep', 'evaporate', 'scorch', 'slump'].includes(m.kind))).toBe(true)
+    expect(s.intent.moves.every((m) => ['flare', 'taint', 'settle'].includes(m.kind))).toBe(true)
     expect(s.intent.flare).toBe(s.intent.moves.reduce((sum, m) => sum + m.flare, 0))
   })
 
@@ -561,7 +580,7 @@ describe('the equation’s neutral take', () => {
 })
 
 describe('the Mire, a boss', () => {
-  const settings = { ...DEFAULT_SETTINGS, equation: { ...DEFAULT_EQUATION } }
+  const settings = { ...DEFAULT_SETTINGS, equation: { ...DEFAULT_EQUATION }, combat: 'moves' as const }
   const boss = (kind: 'stiffen' | 'bind' | 'slag' | 'flare', seed = 50) => {
     const has = (g: ReturnType<typeof newGame>) => g.intent.moves.some((m) => m.kind === kind)
     const start = (n: number) => newGame(settings, n, { ...standardSetup(), commission: 'mire', start: COMMISSIONS.mire.start.map((p) => ({ ...p })), target: COMMISSIONS.mire.target })
