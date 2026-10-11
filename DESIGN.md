@@ -151,7 +151,7 @@ Sigils don't vanish after a term. Each one takes effect, then joins a growing di
 - **The table is the vessel circle.** It has a boundary, so running out of room becomes its own pressure.
 - **Balance must be legible.** It comes from a few properties players can judge by eye, such as mirror symmetry, opposite pairs and filled quadrants, never an opaque geometric score.
 - **Commissions attack the table.** Disruptions unravel joins, slide sigils, scorch runes or lock them in place, so defence is partly spatial. Entwined sigils resist displacement.
-- **Imbalance feeds instability.** In the prototype, runes on the table are tallied Earth against Air and Water against Fire, and every 2 points of imbalance past the first 2 add 1 instability a term.
+- **Imbalance feeds instability.** In the prototype, runes on the table are tallied Earth against Air and Water against Fire, and every point of imbalance past the first adds 1 instability a term.
 - **Which measure of balance is open.** The prototype tracks three on the table and across the commission: runes by element, elemental motes, and sides (circle 1, crescent 2, triangle 3), alongside how many of each body were played. Strain still counts runes.
 
 ## Classes
@@ -320,7 +320,7 @@ The commission's flares are the main threat. Ward from the term's sigils absorbs
 - **Spend the hand.** The player casts until the hand is spent, or ends the term early. Most runes go into one or two large sigils; a leftover rune waits in hand or makes a small warding sigil. With the starting deck's links, a careful simulated player casts about two a term.
 - **Quintessence does one job.** It is spent only to stabilize, so it never competes with upgrades.
 - **Defending has a hidden cost.** A rune spent on Ward moves no material, so the commission takes more terms and faces more actions.
-- **Units.** A stock of 100, with flares of 11–15 rising by 1 a term in the prototype, gives partial coverage room to matter.
+- **Units.** A stock of 100, with flares of 16–20 and small flares of 4–6 on mud's other moves in the prototype, gives partial coverage room to matter.
 - **Overshoot costs quintessence.** A corrective term faces the commission's next action like any other.
 
 | Situation | Target quintessence cost |
@@ -329,7 +329,7 @@ The commission's flares are the main threat. Ward from the term's sigils absorbs
 | Early commission, a few upgrades | Rarely anything |
 | Boss, inadequate deck | Half to three quarters of the stock |
 
-In the prototype, with a 6-rune hand, a careful simulated player usually pays a little against mud (median 5), about one commission in five costs nothing, and one in eight costs more than 15. A player who never defends pays a median of 30. A 5-rune hand proved too punishing once mud held traces: a median of 16, with 7% of commissions lost.
+In the prototype, under the equation with the 4-circle, 8-crescent deck, a careful simulated player pays a median of 8 against mud (90th percentile 15) and finishes every commission: 3% cost nothing, 23% cost 1–5, 67% cost 6–15 and 7% cost 16–30. The mid-run deck pays a median of 2 and the late-run deck nothing.
 
 A partial refill after each boss (proposed) keeps a weak deck's slide from feeling like a slow death sentence.
 
@@ -339,7 +339,7 @@ Each commission pairs a source material, the opponent, with a target material, t
 
 - **A shallow weighted pool.** Each source draws three to five actions from a shared library, weighted to its personality. Players learn likelihoods, not a script.
 - **Roll, then compose.** Each term's action is revealed before the player builds, so reacting is accessible without planning ahead.
-- **Escalation lives in the weights (proposed).** Later terms shift weight toward bigger flares.
+- **Escalation punishes the unlucky.** Letting flares grow by even half a point a term turned the opening deck's long commissions into losses (7% lost, one in ten costing over 50) while barely moving the median, so the prototype's flares don't escalate.
 - **Bosses use the same template**, with heavier weights and nastier signature moves.
 
 | Family | Examples |
@@ -425,7 +425,7 @@ Circumgician is built on Pixi.js, TypeScript and Vite, and most of its look is g
 | Do links on joined runes ever count? | No, only the anchor's, so starting sigils stay at two or three runes |
 | Floating sigils, the table, or both? | Both: each sigil takes effect, then stays on the table |
 | Should table imbalance itself cause instability? | Yes, on top of the flares a commission rolls |
-| How big are the quintessence stock and flares? | Prototype: a stock of 100, flares of 11–15 |
+| How big are the quintessence stock and flares? | Prototype: a stock of 100, flares of 16–20 that don't escalate, and 4–6 on mud's other moves |
 | How is quintessence restored? | A partial refill after each boss; small refills from efficient commissions |
 | How does product convert to reward? | Currency in proportion to product made |
 | Are non-target stable states worth anything? | Tracked, not rewarded, in the first cut; decide from playtest data |

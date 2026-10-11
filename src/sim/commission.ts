@@ -99,6 +99,15 @@ export interface Intent {
 
 export interface IntentSettings {
   flareScale: number
+  /** A small flare on seep, harden and slump turns: this to this + 2, plus half a point a term. 0 for none. */
+  debuffFlare?: number
+  /** A flare's size before escalation: flareMin to flareMax (11–15). */
+  flareMin?: number
+  flareMax?: number
+  /** How much a flare grows each term (1). */
+  flareRise?: number
+  /** How much more likely a flare becomes each term (weight +5 against seep 20, harden 15, slump 15). */
+  flareWeightRise?: number
 }
 
 const SEEP_KG = 0.5
@@ -107,7 +116,7 @@ const HARDEN_KG = 2
 export function rollIntent(rng: Rng, term: number, pools: Pool[], table: TableEntry[], settings: IntentSettings): Intent {
   const weakWater = pools.find((p) => p.elemental === 'water' && p.grade === 0)?.kg ?? 0
   const weights: [IntentKind, number][] = [
-    ['flare', 60 + 5 * (term - 1)],
+    ['flare', 60 + (settings.flareWeightRise ?? 5) * (term - 1)],
     ['seep', elementalKg(pools, 'earth') > 0.5 ? 20 : 0],
     ['harden', weakWater >= 0.5 ? 15 : 0],
     ['slump', slumpTarget(table) ? 15 : 0],
@@ -124,18 +133,22 @@ export function rollIntent(rng: Rng, term: number, pools: Pool[], table: TableEn
   }
 
   if (kind === 'flare') {
-    const flare = Math.max(1, Math.round((rng.int(11, 15) + (term - 1)) * settings.flareScale))
+    const flare = Math.max(1, Math.round((rng.int(settings.flareMin ?? 11, settings.flareMax ?? 15) + (settings.flareRise ?? 1) * (term - 1)) * settings.flareScale))
     return { kind, flare, kg: 0, title: `Flare ${flare}`, detail: 'The mud destabilizes. Ward absorbs it; the rest costs quintessence.' }
   }
+  const d = settings.debuffFlare ?? 0
+  const small = d > 0 ? Math.max(1, Math.round((rng.int(d, d + 2) + (term - 1) / 2) * settings.flareScale)) : 0
+  const plus = small ? ` Flare ${small} with it.` : ''
+  const titled = (t: string) => (small ? `${t} + flare ${small}` : t)
   if (kind === 'seep') {
     const kg = Math.min(SEEP_KG, elementalKg(pools, 'earth'))
-    return { kind, flare: 0, kg, title: 'Seep', detail: `${fmtKg(kg)} of earth turns back to weak water.` }
+    return { kind, flare: small, kg, title: titled('Seep'), detail: `${fmtKg(kg)} of earth turns back to weak water.${plus}` }
   }
   if (kind === 'harden') {
     const kg = Math.min(HARDEN_KG, weakWater)
-    return { kind, flare: 0, kg, title: 'Harden', detail: `${fmtKg(kg)} of weak water firms up to medium.` }
+    return { kind, flare: small, kg, title: titled('Harden'), detail: `${fmtKg(kg)} of weak water firms up to medium.${plus}` }
   }
-  return { kind, flare: 0, kg: 0, title: 'Slump', detail: 'The rune holding the table most level slips off. Entwined runes hold.' }
+  return { kind, flare: small, kg: 0, title: titled('Slump'), detail: `The rune holding the table most level slips off. Entwined runes hold.${plus}` }
 }
 
 export interface IntentResult {

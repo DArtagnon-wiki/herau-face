@@ -88,6 +88,14 @@ const joinList = (equation: boolean) => (equation ? EQUATION_JOINS : CLASSIC_JOI
 /** Whether the commission in progress (or the next one) uses the equation. */
 const eqOn = () => !!(ui.game ? ui.game.settings.equation : ui.settings.equation)
 
+/** How hard table imbalance bites: free imbalance, then points of imbalance per point of strain. */
+const STRAIN_LEVELS = [
+  { key: 'firm', label: 'Firm: 1 a point past 1', free: 1, rate: 1 },
+  { key: 'gentle', label: 'Gentle: 1 per 2 past 2', free: 2, rate: 2 },
+  { key: 'harsh', label: 'Harsh: 1 a point', free: 0, rate: 1 },
+]
+const strainKey = (s: Settings) => STRAIN_LEVELS.find((l) => l.free === (s.strainFree ?? 2) && l.rate === (s.strainRate ?? 2))?.key ?? 'firm'
+
 /** The neutral take options Tuning offers: a share of the source pool, or flat kilos. */
 const NEUTRAL_TAKES: { key: string; label: string; neutral: number; share: number }[] = [
   { key: 'flat-1', label: '1 kg flat', neutral: 1, share: 0 },
@@ -324,6 +332,9 @@ function tuningView(): string {
       <label class="check"><input type="checkbox" id="tune-strain" ${s.strain ? 'checked' : ''}> Table imbalance adds strain</label>
       <label class="check"><input type="checkbox" id="tune-surplus" ${s.surplusForce ? 'checked' : ''}> Surplus Force multiplies Reach</label>
       <label>Flare size <select id="tune-flare">${opt(0.75, s.flareScale, '×0.75')}${opt(1, s.flareScale, '×1')}${opt(1.25, s.flareScale, '×1.25')}${opt(1.5, s.flareScale, '×1.5')}</select></label>
+      <label>Flares grow <select id="tune-rise">${[0, 0.5, 1].map((v) => opt(v, s.flareRise ?? 0, v ? `+${v} a term` : 'no')).join('')}</select></label>
+      <label>Flares on other moves <select id="tune-debuff">${[0, 2, 4, 6].map((v) => opt(v, s.debuffFlare ?? 0, v ? `${v}–${v + 2}` : 'none')).join('')}</select></label>
+      <label>Table strain <select id="tune-strain-level">${STRAIN_LEVELS.map((l) => optS(l.key, strainKey(s), l.label)).join('')}</select></label>
       <label>Quintessence <select id="tune-stock">${opt(60, s.stock)}${opt(100, s.stock)}${opt(140, s.stock)}</select></label>
       <label>Hand size <select id="tune-hand">${[4, 5, 6, 7, 8, 9, 10].map((v) => opt(v, s.handSize)).join('')}</select></label>
       <label>Sigils a term <select id="tune-casts">${opt(1, s.castsPerTerm)}${opt(2, s.castsPerTerm)}${opt(3, s.castsPerTerm)}${opt(0, s.castsPerTerm, 'Any number')}</select></label>
@@ -1111,6 +1122,13 @@ function readTuning() {
   s.handSize = n('tune-hand', s.handSize)
   s.discards = n('tune-discards', s.discards)
   s.castsPerTerm = n('tune-casts', s.castsPerTerm)
+  s.flareRise = n('tune-rise', s.flareRise ?? 0)
+  s.debuffFlare = n('tune-debuff', s.debuffFlare ?? 0)
+  const level = STRAIN_LEVELS.find((l) => l.key === (val('tune-strain-level')?.value ?? strainKey(s)))
+  if (level) {
+    s.strainFree = level.free
+    s.strainRate = level.rate
+  }
   const rules = val('tune-rules')
   if (rules) {
     if (rules.value === 'classic') s.equation = null

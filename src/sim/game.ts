@@ -3,7 +3,7 @@ import { CLAY_TARGET, MUD_START, applyIntent, cloneTarget, inBand, rollIntent, t
 import { DEFAULT_FORGE, buildDeck, cloneForge, standardDeck, type Forge, type RuneSpec } from './deck'
 import { makeRng, type Rng } from './rng'
 import { canJoin, openLinks, resolve, runesOf, type Resolution } from './sigil'
-import { strain, type TableEntry } from './table'
+import { FREE_IMBALANCE, STRAIN_RATE, strain, type TableEntry } from './table'
 import type { Pool, Rune, Sigil } from './types'
 import { resolveEquation, type Equation } from './equation'
 
@@ -18,6 +18,16 @@ export interface Settings {
   discards: number
   /** Most sigils a term; 0 means as many as the hand allows. */
   castsPerTerm: number
+  /** A small flare on mud's seep, harden and slump turns (see rollIntent); 0 for none. */
+  debuffFlare?: number
+  flareMin?: number
+  flareMax?: number
+  flareRise?: number
+  flareWeightRise?: number
+  /** Imbalance on the table that costs nothing. */
+  strainFree?: number
+  /** Points of imbalance past the free amount per point of strain. */
+  strainRate?: number
   /** When set, sigils resolve by the alchemical equation instead of Reach × Force. */
   equation?: Equation | null
 }
@@ -30,6 +40,16 @@ export const DEFAULT_SETTINGS: Settings = {
   handSize: 6,
   discards: 2,
   castsPerTerm: 0,
+  // Mud's pressure, tuned with the equation and the 4-circle, 8-crescent deck:
+  // flares of 16–20 that don't escalate, small flares on its other moves, and
+  // a point of strain for every point of imbalance past the first.
+  flareMin: 16,
+  flareMax: 20,
+  flareRise: 0,
+  flareWeightRise: 0,
+  debuffFlare: 4,
+  strainFree: 1,
+  strainRate: 1,
   equation: null,
 }
 
@@ -192,7 +212,7 @@ export { canJoin }
 function endOf(state: Pick<GameState, 'intent' | 'pools' | 'table' | 'termWard' | 'settings'>): EndOutcome {
   const acted = applyIntent(state.intent, state.pools, state.table)
   const flare = state.intent.flare
-  const tableStrain = strain(acted.table, state.settings.strain)
+  const tableStrain = strain(acted.table, state.settings.strain, state.settings.strainFree ?? FREE_IMBALANCE, state.settings.strainRate ?? STRAIN_RATE)
   const incoming = flare + tableStrain
   const absorbed = Math.min(state.termWard, incoming)
   const paid = Math.round((incoming - absorbed) * 10) / 10

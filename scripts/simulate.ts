@@ -48,6 +48,15 @@ const settings: Settings = {
   castsPerTerm: Number(arg('--casts') ?? DEFAULT_SETTINGS.castsPerTerm),
   strain: !args.includes('--no-strain'),
   surplusForce: !args.includes('--capped'),
+  /** --debuff-flare N: a small flare on seep, harden and slump turns. --strain-free, --strain-rate: table strain. */
+  debuffFlare: Number(arg('--debuff-flare') ?? DEFAULT_SETTINGS.debuffFlare ?? 0),
+  strainFree: Number(arg('--strain-free') ?? DEFAULT_SETTINGS.strainFree ?? 2),
+  strainRate: Number(arg('--strain-rate') ?? DEFAULT_SETTINGS.strainRate ?? 2),
+  /** --flare-min, --flare-max, --flare-rise, --flare-weight-rise: mud's flares. */
+  flareMin: Number(arg('--flare-min') ?? DEFAULT_SETTINGS.flareMin ?? 11),
+  flareMax: Number(arg('--flare-max') ?? DEFAULT_SETTINGS.flareMax ?? 15),
+  flareRise: Number(arg('--flare-rise') ?? DEFAULT_SETTINGS.flareRise ?? 1),
+  flareWeightRise: Number(arg('--flare-weight-rise') ?? DEFAULT_SETTINGS.flareWeightRise ?? 5),
 }
 /**
  * --equation resolves sigils by the alchemical equation (src/sim/equation.ts),
@@ -357,7 +366,8 @@ const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.le
 const f1 = (n: number) => n.toFixed(1)
 
 const eqNote = settings.equation ? ` · equation: base ${settings.equation.base}, step ×${settings.equation.step}, ring ×${settings.equation.ring}, neutral ${settings.equation.neutral} kg + ${settings.equation.share * 100}% of the pool${settings.equation.gate ? ', power gate' : ''}` : ''
-const forgeNote = eqNote + (mix ? ` · deck ${mix} (circles:crescents:triangles)` : '') + (preset ? ` · ${preset.name.toLowerCase()}` : '') + (power || extraLinks ? ` · power ${power ?? 'default'} · +${extraLinks} links` : '') + (farm ? ` · farming to ${farm} kg` : '')
+ const mudNote = ` · flares ${settings.flareMin}–${settings.flareMax} +${settings.flareRise}/term (weight +${settings.flareWeightRise}) · debuff flare ${settings.debuffFlare} · strain past ${settings.strainFree}, 1 per ${settings.strainRate}`
+const forgeNote = eqNote + mudNote + (mix ? ` · deck ${mix} (circles:crescents:triangles)` : '') + (preset ? ` · ${preset.name.toLowerCase()}` : '') + (power || extraLinks ? ` · power ${power ?? 'default'} · +${extraLinks} links` : '') + (farm ? ` · farming to ${farm} kg` : '')
 console.log(
   `${games} commissions${forgeNote} · hand ${settings.handSize} · ${settings.castsPerTerm || 'any number of'} sigil${settings.castsPerTerm === 1 ? '' : 's'} a term · flare ×${settings.flareScale} · stock ${settings.stock} · strain ${settings.strain ? 'on' : 'off'} · surplus Force ${settings.surplusForce ? 'multiplies' : 'capped'}${naive ? ' · naive player' : ''}${noOrganics ? ' · no organics' : ''}\n`,
 )

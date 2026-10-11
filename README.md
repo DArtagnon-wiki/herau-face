@@ -58,7 +58,7 @@ The Sandbox panel changes the commission in progress, live: the mud's starting c
 ### Rules the doc leaves open
 
 - **Floating sigils and the table, both.** Each cast sigil takes effect, then stays in a slot around the amalgam.
-- **Table imbalance adds strain.** Runes on the table are tallied Earth against Air and Water against Fire. Every 2 points of imbalance past the first 2 add 1 instability a term.
+- **Table imbalance adds strain.** Runes on the table are tallied Earth against Air and Water against Fire. Every point of imbalance past the first adds 1 instability a term (Tuning has gentler and harsher settings).
 - **Surplus Force multiplies Reach.** This departs from the doc's formula, which caps Force at the requirement. Under the cap, the standard deck wins only half its commissions against mud (see below).
 - **Reach × Force.** Kilos converted = Reach × Force ÷ the Force the change needs. The preview spells this out, runes show what they'd add under the selected join, and a tip compares the best side link and best circumscribe left in hand.
 - **Inscribe.** An inscribed rune of the anchor's own element condenses the selected pool. Any other halves Reach, for small precise casts.
@@ -71,9 +71,9 @@ The Sandbox panel changes the commission in progress, live: the mud's starting c
 | Reach | 0.2 kg per point of power (anchor and side links) |
 | Force | 1 per point (anchor, circumscribes, inscribes) |
 | Ward | 1 per point (entwines), plus guard motes |
-| Mud's moves | Flare 60 (+5 a term), seep 20, harden 15, slump 15 |
+| Mud's moves | Flare 60, seep 20, harden 15, slump 15; seep, harden and slump bring a flare of 4–6 (+½ a term) |
 | Seep, harden | 0.5 kg of earth back to water; 2 kg of weak water to medium |
-| Flare size | 11–15, +1 a term |
+| Flare size | 16–20, no escalation |
 | Quintessence, hand, discards | 100, 6, 2 |
 | Sigils a term | As many as the hand allows |
 
@@ -138,3 +138,16 @@ Against mud, 60 commissions each:
 | Late-run, +1 link on every rune | 10 | 1 | 75% | 100% | 0 |
 
 A one-link anchor plus its seal always takes the neutral 1 kg, so the deck mix matters. At base 5, 8 circles and 4 crescents took a median 18 terms and lost 30% of commissions; 4 and 8 took 13; all crescents took 9. A share-of-pool take instead (`--neutral 0 --share 0.2`) makes every pool fall in the same number of casts whatever it weighs.
+
+### Mud's pressure
+
+With the equation and the 4-circle, 8-crescent deck, the old mud (flares of 11–15 rising a point a term, nothing on its other moves, strain of 1 per 2 points past 2) cost the opening deck a median of only 4 quintessence. Raising pressure by escalation fattened the tail instead of the middle. Flares of 16–20 that don't escalate, small flares of 4–6 on seep, harden and slump turns, and a point of strain per point of imbalance past the first give the shape the design doc asks for (60 commissions each):
+
+| Mud | Opening: median spent (p90) | Won | Median terms | Mid-run spent | Late-run spent |
+| --- | --- | --- | --- | --- | --- |
+| Old | 4 (11) | 100% | 6–7 | 0 | 0 |
+| New | 8 (15) | 100% | 9 | 2 | 0 |
+| New, flares +½ a term | 12 (54) | 93% | 9 | 3 | 0 |
+
+Under the new mud, 3% of opening commissions cost nothing, 23% cost 1–5, 67% cost 6–15 and 7% cost 16–30. Flags: `--flare-min`, `--flare-max`, `--flare-rise`, `--flare-weight-rise`, `--debuff-flare`, `--strain-free`, `--strain-rate`.
+

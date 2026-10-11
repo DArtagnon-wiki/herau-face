@@ -22,12 +22,13 @@ export function imbalance(table: TableEntry[]): number {
   return Math.abs(t.earth - t.air) + Math.abs(t.water - t.fire)
 }
 
-/** A little lopsidedness is free; past that, every 2 points add 1 instability a term. */
+/** A little lopsidedness is free; past that, every STRAIN_RATE points add 1 instability a term. */
 export const FREE_IMBALANCE = 2
+export const STRAIN_RATE = 2
 
-export function strain(table: TableEntry[], enabled = true): number {
+export function strain(table: TableEntry[], enabled = true, free = FREE_IMBALANCE, rate = STRAIN_RATE): number {
   if (!enabled) return 0
-  return Math.floor(Math.max(0, imbalance(table) - FREE_IMBALANCE) / 2)
+  return Math.floor(Math.max(0, imbalance(table) - free) / rate)
 }
 
 export const isEntwined = (entry: TableEntry) => entry.sigil.joins.some((j) => j.kind === 'entwine')
