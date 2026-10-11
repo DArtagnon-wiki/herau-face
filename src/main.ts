@@ -8,7 +8,7 @@ import { REACH_PER_POWER, WARD_PER_POWER, candidatePools, canJoin, openLinks, re
 import { slumpTarget, tally } from './sim/table'
 import type { Body, Elemental, Grade, JoinKind, Pool, Rune, Sigil } from './sim/types'
 import type { TableEntry } from './sim/table'
-import { AFFINITY_VAR, bodyIcon, moteColor, runeSvg, sigilSvg, vesselSvg } from './ui/draw'
+import { AFFINITY_VAR, bodyIcon, joinSketch, moteColor, runeSvg, sigilSvg, vesselSvg } from './ui/draw'
 import { AFFINITIES, SIDES, balance, metricsOf, type Measure } from './sim/metrics'
 import { PRESETS, presetByKey } from './sim/presets'
 import { DEFAULT_EQUATION, runepath, take, terms, type Equation } from './sim/equation'
@@ -275,7 +275,7 @@ function startView(): string {
       <h2>Your deck</h2>
       ${presetView()}
       <ul class="deck-groups">${deckGroups(ui.setup)}</ul>
-      <p class="fine">Gems set the element: ${Object.entries(GEMS).map(([e, g]) => `${g.toLowerCase()} is ${e}`).join(', ')}. A link mote adds a link, a reach mote multiplies the sigil’s Reach, and a guard mote adds Ward. The deck is the same each time; the shuffle is not, though your opening hand always has a water and an earth. Once you begin, the Sandbox panel can change any of it.</p>
+      <p class="fine">Gems set the element: ${Object.entries(GEMS).map(([e, g]) => `${g.toLowerCase()} is ${e}`).join(', ')}. Each shows as a drop of its colour. Ability motes show as marks: a ring is a link mote, adding a link; an arrowhead is a reach mote, multiplying the sigil’s reach up; a lozenge is a guard mote, adding Ward; a cross is a boost mote, adding to its rune’s multiplier. The deck is the same each time; the shuffle is not, though your opening hand always has a water and an earth. Once you begin, the Sandbox panel can change any of it.</p>
       <button class="primary wide" data-act="start">Begin the commission</button>
     </section>
 
@@ -289,8 +289,8 @@ function startView(): string {
       <h2>Reading a rune</h2>
       <p>The number is its power. The pips are its links: how many runes it can hold as the anchor. Its bowls hold motes, and the motes give it an element and any abilities.</p>
       <dl class="join-key">
-        <div><dt>Anchor</dt><dd>${eqOn() ? 'Its element is what changes. Its power counts toward power, reach up and reach down alike.' : `Its element is what changes. Adds its power as Force, and power × ${REACH_PER_POWER} kg of Reach.`}</dd></div>
-        ${joinList(eqOn()).map((j) => `<div><dt>${j.label}</dt><dd>${joinHelp(j.kind, eqOn())}</dd></div>`).join('')}
+        <div>${joinSketch('anchor')}<dt>Anchor</dt><dd>${eqOn() ? 'Drawn innermost, with a dot at its heart. Its element is what changes. Its power counts toward power, reach up and reach down alike.' : `Its element is what changes. Adds its power as Force, and power × ${REACH_PER_POWER} kg of Reach.`}</dd></div>
+        ${joinList(eqOn()).map((j) => `<div>${joinSketch(j.kind)}<dt>${j.label}</dt><dd>${joinHelp(j.kind, eqOn())}</dd></div>`).join('')}
       </dl>
       ${
         eqOn()
@@ -308,15 +308,15 @@ function joinHelp(kind: JoinKind, equation = false): string {
     const eq = ui.game?.settings.equation ?? ui.settings.equation ?? DEFAULT_EQUATION
     switch (kind) {
       case 'circumscribe':
-        return `Rings the anchor: a step on the runepath. Adds its power, and multiplies the output by ${eq.ring} (plus boost motes).`
+        return `Drawn around the anchor: a step on the runepath. Adds its power, and multiplies the output by ${eq.ring} (plus boost motes). The runepath’s last step is the seal, drawn with a double line: its element is what you make.`
       case 'inscribe':
-        return `Sits inside: a step on the runepath. Adds its power, and divides the output by ${eq.inscribe}. An inscribed seal of the anchor’s own element condenses.`
+        return `Drawn inside the anchor: a step on the runepath. Adds its power, and divides the output by ${eq.inscribe}. An inscribed seal of the anchor’s own element condenses.`
       case 'side':
-        return 'Hangs beside the anchor: adds its power to reach up, for more kilos.'
+        return 'Hangs outside, pointing out: adds its power to reach up, for more kilos.'
       case 'tangent':
-        return 'Touches the anchor at a point: adds its power to reach down, for fewer kilos.'
+        return 'Sits inside, pointing in, touching the anchor’s edge: adds its power to reach down, for fewer kilos.'
       case 'entwine':
-        return 'Laces through the anchor. Adds its power as Ward against this term’s flare.'
+        return 'Laces through the anchor, dashed. Adds its power as Ward against this term’s flare.'
     }
   }
   switch (kind) {

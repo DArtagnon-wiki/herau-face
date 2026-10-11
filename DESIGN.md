@@ -343,6 +343,10 @@ A sigil's drawing reads as its equation: nesting gives the runepath, and the way
 
 In the sketch, a blue square anchors, a red triangle circumscribes it as the seal, three green crescents hang outside for +reach, and four yellow triangles sit inside for −reach. Eventually a reach rune is sigilized: turned to point in or out, and its direction gives the sign. Until then the side and tangent joins stand in.
 
+**The prototype draws every sigil this way**, on the table and as it is composed. Where the sketch left room, a crescent holds what it rings in its hollow, a triangle inside a triangle is inverted like half a hexagram, tangents sit in a triangle's corners, side links hang off a triangle's edges or a crescent's back, and a circle that points is drawn as a drop. On cards, motes are marks: a drop of colour for an element, a ring for a link, an arrowhead for reach, a lozenge for guard, a cross for boost.
+
+![Sigils as the prototype draws them](docs/sigil-gallery.png)
+
 ## Instability and quintessence
 
 The commission's flares are the main threat. Ward from the term's sigils absorbs part of each flare and the rest is paid in quintessence; when quintessence runs out, the run is over.

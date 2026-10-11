@@ -66,6 +66,18 @@ The Sandbox panel changes the commission in progress, live: the mud's starting c
 - **Slump** knocks loose the table sigil whose loss leaves the table most lopsided. Entwined sigils hold.
 - **A commission finishes in range.** It ends the moment the amalgam is in range, whether a cast or the commission's own move at the end of a term put it there; that term's instability is paid first.
 
+### Sigil art
+
+Every sigil is drawn the way the design doc's notation reads (`src/ui/draw.ts`): the anchor innermost with a dot at its heart; circumscribed runes nest outward and inscribed runes inward, in runepath order; the seal has a double line; side links hang outside on stems, pointing out; tangents sit inside, pointing in, on stems to the edge they touch; entwined runes lace through, dashed. Where the sketch left room:
+
+- A crescent holds what it rings, or what is inscribed in it, in its hollow.
+- A triangle inside a triangle is inverted, so nested triangles read as halves of a hexagram rather than as a seal's double line.
+- Tangents sit in a triangle's corners, in a crescent's band and around a circle. Side links hang off a triangle's edges, a crescent's back, or below a circle.
+- A circle can't point, so a circle that points is drawn as a drop.
+- On cards, motes are marks: a drop of colour for an element, a ring for a link, an arrowhead for reach, a lozenge for guard, a cross for boost. Slag is a dotted grey circle.
+
+![Sigils as the prototype draws them](docs/sigil-gallery.png)
+
 ### Numbers
 
 | Constant | Value |
