@@ -70,7 +70,7 @@ The Sandbox panel changes the commission in progress, live: the mud's starting c
 
 Every sigil is drawn the way the design doc's notation reads (`src/ui/draw.ts`): the anchor innermost with a dot at its heart; circumscribed runes nest outward and inscribed runes inward, in runepath order; the seal has a double line; side links hang outside on stems, pointing out; tangents sit inside, pointing in, on stems to the edge they touch; entwined runes lace through, dashed. Where the sketch left room:
 
-- A crescent holds what it rings, or what is inscribed in it, in its hollow.
+- A crescent holds what it rings, or what is inscribed in it, in its hollow. As a seal, its second line runs parallel to both arcs, the back and the hollow, and closes in shorter horns.
 - A triangle inside a triangle is inverted, so nested triangles read as halves of a hexagram rather than as a seal's double line.
 - Tangents sit in a triangle's corners, in a crescent's band and around a circle. Side links hang off a triangle's edges, a crescent's back, or below a circle.
 - A circle can't point, so a circle that points is drawn as a drop.

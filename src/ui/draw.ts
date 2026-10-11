@@ -55,6 +55,27 @@ export function bodyPath(body: Body, r: number, rotDeg = 0, cx = 0, cy = 0): str
   return `M ${atC(top)} A ${f(r)} ${f(r)} 0 1 0 ${atC(bottom)} A ${f(ri)} ${f(ri)} 0 1 1 ${atC(top)} Z`
 }
 
+/**
+ * The seal's second line inside a crescent: the outer arc drawn smaller and the
+ * hollow's arc drawn larger, both about their own centres, so the line runs
+ * parallel to the first all the way round and meets itself in shorter horns.
+ * Empty when the crescent is too thin to hold it.
+ */
+function crescentInset(r: number, gap: number, rotDeg: number, cx: number, cy: number): string {
+  const d = CRESCENT_INNER.dx * r
+  const outer = r - gap
+  const hollow = CRESCENT_INNER.r * r + gap
+  const x = (d * d + outer * outer - hollow * hollow) / (2 * d)
+  const yy = outer * outer - x * x
+  if (outer <= 0 || yy <= 0) return ''
+  const y = Math.sqrt(yy)
+  const at = (p: Pt) => {
+    const [px, py] = rotate(p, rotDeg - 90)
+    return `${f(cx + px)} ${f(cy + py)}`
+  }
+  return `M ${at([x, -y])} A ${f(outer)} ${f(outer)} 0 ${x > 0 ? 1 : 0} 0 ${at([x, y])} A ${f(hollow)} ${f(hollow)} 0 ${x > d ? 1 : 0} 1 ${at([x, -y])} Z`
+}
+
 /** Where each bowl sits on a body, in unit coordinates (horns up for a crescent), by how many bowls it has. */
 function bowlSpots(body: Body, n: number): { at: Pt[]; r: number } {
   if (body === 'circle') {
@@ -325,9 +346,11 @@ function paint(prims: Prim[], scale: number, ox: number, oy: number): string {
       }
       const main = `<path d="${bodyPath(p.body, r, p.rot, cx, cy)}" fill="${p.fill ? p.c : 'none'}"${p.fill ? ` fill-opacity="${p.fill}"` : ''} stroke="${p.c}" stroke-width="${w(p.w)}"${p.dash ? ` stroke-dasharray="${f(4 * scale + 1)} ${f(2.5 * scale + 1)}"` : ''} ${ln}/>`
       if (!p.seal) return main
-      // The seal's second line, just inside the first: a triangle's edges sit half its radius in, so it shrinks twice as far.
-      const inset = SEAL_GAP * scale * (p.body === 'triangle' ? 2 : 1)
-      return main + `<path d="${bodyPath(p.body, Math.max(r * 0.4, r - inset), p.rot, cx, cy)}" fill="none" stroke="${p.c}" stroke-width="${w(p.w * 0.75)}" ${ln}/>`
+      // The seal's second line, just inside the first. A triangle's edges sit half its radius in, so it shrinks twice as far;
+      // a crescent's two arcs move apart from their own centres.
+      const gap = SEAL_GAP * scale
+      const second = p.body === 'crescent' ? crescentInset(r, gap, p.rot, cx, cy) : bodyPath(p.body, Math.max(r * 0.4, r - gap * (p.body === 'triangle' ? 2 : 1)), p.rot, cx, cy)
+      return second ? main + `<path d="${second}" fill="none" stroke="${p.c}" stroke-width="${w(p.w * 0.75)}" ${ln}/>` : main
     })
     .join('')
 }

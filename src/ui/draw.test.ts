@@ -19,6 +19,14 @@ describe('drawing a sigil', () => {
     expect(strokes(sigilBody(two).markup, 'earth')).toBe(1)
   })
 
+  it('runs a crescent seal\'s second line parallel to both of its arcs', () => {
+    const m = sigilBody(sigil(rune('triangle', 'fire'), ['circumscribe', rune('crescent', 'water')])).markup
+    const paths = m.split('<path ').filter((x) => x.includes('stroke="var(--water)"'))
+    expect(paths).toHaveLength(2)
+    // Each outline is two arcs: the back and the hollow.
+    for (const path of paths) expect(path.match(/ A /g)).toHaveLength(2)
+  })
+
   it('marks the anchor with a dot and draws side links and tangents on stems', () => {
     const s = sigil(rune('triangle', 'water'), ['side', rune('crescent', 'earth')], ['tangent', rune('triangle', 'air')], ['circumscribe', rune('circle', 'fire')])
     const m = sigilBody(s).markup
