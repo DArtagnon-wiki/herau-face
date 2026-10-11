@@ -422,7 +422,8 @@ describe('decks along a run', () => {
 })
 
 describe('the alchemical equation', () => {
-  const eq = DEFAULT_EQUATION
+  // Round numbers for readable arithmetic; the game's defaults live in DEFAULT_EQUATION.
+  const eq = { ...DEFAULT_EQUATION, base: 10, step: 2, ring: 1.1, inscribe: 1.1, neutral: 1 }
   const weakWater: Pool = { elemental: 'water', grade: 0, kg: 18 }
 
   it('walks the square easiest step first and ends at the seal', () => {

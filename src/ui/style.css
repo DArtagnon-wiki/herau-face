@@ -190,6 +190,7 @@ button.wide { width: 100%; }
 .good { color: var(--good); }
 .flash { color: var(--warn); font-size: 16px; }
 .modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.modes.five .mode:last-child { grid-column: span 2; }
 .mode { display: grid; gap: 1px; text-align: left; padding: 8px 10px; }
 .mode.is-on { border-color: var(--gilt-bright); background: rgba(217, 184, 114, 0.16); }
 .mode-name { font-size: 12.5px; }
@@ -263,6 +264,8 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--gilt); }
   .vessel-svg { max-width: 360px; }
   .hand { grid-template-columns: repeat(7, minmax(0, 1fr)); }
   .modes { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .modes.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .modes.five .mode:last-child { grid-column: auto; }
 }
 
 @media (prefers-reduced-motion: no-preference) {

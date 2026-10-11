@@ -11,6 +11,7 @@ import type { TableEntry } from './sim/table'
 import { AFFINITY_VAR, bodyIcon, moteColor, runeSvg, sigilSvg, vesselSvg } from './ui/draw'
 import { AFFINITIES, SIDES, balance, metricsOf, type Measure } from './sim/metrics'
 import { PRESETS, presetByKey } from './sim/presets'
+import { DEFAULT_EQUATION, runepath, terms } from './sim/equation'
 
 // ---------------------------------------------------------------------------
 // State
@@ -48,7 +49,7 @@ const ui: UI = {
   preset: 'opening',
   editing: null,
   draft: { body: 'circle', motes: [{ kind: 'element', elemental: 'water' }] },
-  settings: { ...DEFAULT_SETTINGS },
+  settings: { ...DEFAULT_SETTINGS, equation: { ...DEFAULT_EQUATION } },
   seed: 0,
   anchorId: null,
   joins: [],
@@ -62,12 +63,24 @@ const ui: UI = {
   copied: false,
 }
 
-const JOINS: { kind: JoinKind; label: string; gives: string }[] = [
+type JoinOption = { kind: JoinKind; label: string; gives: string }
+const CLASSIC_JOINS: JoinOption[] = [
   { kind: 'circumscribe', label: 'Circumscribe', gives: 'Force · sets target' },
   { kind: 'side', label: 'Side link', gives: 'Reach' },
   { kind: 'entwine', label: 'Entwine', gives: 'Ward' },
   { kind: 'inscribe', label: 'Inscribe', gives: 'Fine · or condense' },
 ]
+/** Under the equation: rings and inscriptions make the runepath, side links and tangents aim the reach. */
+const EQUATION_JOINS: JoinOption[] = [
+  { kind: 'circumscribe', label: 'Circumscribe', gives: 'Path · ×output' },
+  { kind: 'inscribe', label: 'Inscribe', gives: 'Path · ÷output' },
+  { kind: 'side', label: 'Side link', gives: 'Reach up' },
+  { kind: 'tangent', label: 'Tangent', gives: 'Reach down' },
+  { kind: 'entwine', label: 'Entwine', gives: 'Ward' },
+]
+const joinList = (equation: boolean) => (equation ? EQUATION_JOINS : CLASSIC_JOINS)
+/** Whether the commission in progress (or the next one) uses the equation. */
+const eqOn = () => !!(ui.game ? ui.game.settings.equation : ui.settings.equation)
 
 const ELEMENT_NAME: Record<string, string> = { earth: 'Earth', water: 'Water', air: 'Air', fire: 'Fire', none: 'No element' }
 
@@ -157,7 +170,7 @@ function pips(n: number): string {
 function roleOf(id: number): string | null {
   if (id === ui.anchorId) return 'Anchor'
   const j = ui.joins.find((x) => x.id === id)
-  return j ? JOINS.find((x) => x.kind === j.kind)!.label : null
+  return j ? [...EQUATION_JOINS, ...CLASSIC_JOINS].find((x) => x.kind === j.kind)!.label : null
 }
 
 // ---------------------------------------------------------------------------
@@ -226,17 +239,36 @@ function startView(): string {
       <h2>Reading a rune</h2>
       <p>The number is its power. The pips are its links: how many runes it can hold as the anchor. Its bowls hold motes, and the motes give it an element and any abilities.</p>
       <dl class="join-key">
-        <div><dt>Anchor</dt><dd>Its element is what changes. Adds its power as Force, and power × ${REACH_PER_POWER} kg of Reach.</dd></div>
-        ${JOINS.map((j) => `<div><dt>${j.label}</dt><dd>${joinHelp(j.kind)}</dd></div>`).join('')}
+        <div><dt>Anchor</dt><dd>${eqOn() ? 'Its element is what changes. Its power counts toward power, reach up and reach down alike.' : `Its element is what changes. Adds its power as Force, and power × ${REACH_PER_POWER} kg of Reach.`}</dd></div>
+        ${joinList(eqOn()).map((j) => `<div><dt>${j.label}</dt><dd>${joinHelp(j.kind, eqOn())}</dd></div>`).join('')}
       </dl>
-      <p><b>Reach × Force.</b> Reach is how many kilos the sigil grabs; Force is how hard it pushes. Each change needs some Force (weak water to earth needs 5), and what converts is Reach × Force ÷ that need. They multiply, so give each new rune to whichever total is smaller.</p>
+      ${
+        eqOn()
+          ? `<p><b>The equation.</b> A sigil takes ${num(ui.settings.equation!.neutral)} kg when reach up equals reach down. Side links aim for more and tangents for less, and power against the pool’s resistance decides how far you get: kilos = ${num(ui.settings.equation!.neutral)} × (reach up ÷ reach down)<sup>ln(1 + power ÷ resistance)</sup>. Resistance doubles for every quality the runepath flips. Switch to Reach × Force in Tuning.</p>`
+          : `<p><b>Reach × Force.</b> Reach is how many kilos the sigil grabs; Force is how hard it pushes. Each change needs some Force (weak water to earth needs 5), and what converts is Reach × Force ÷ that need. They multiply, so give each new rune to whichever total is smaller.</p>`
+      }
       <p class="fine">Cast sigils stay on the table. Keep it level, Earth against Air and Water against Fire, or the lopsidedness adds strain every term.</p>
     </section>
     ${tuningView()}
   </main>`
 }
 
-function joinHelp(kind: JoinKind): string {
+function joinHelp(kind: JoinKind, equation = false): string {
+  if (equation) {
+    const eq = ui.game?.settings.equation ?? ui.settings.equation ?? DEFAULT_EQUATION
+    switch (kind) {
+      case 'circumscribe':
+        return `Rings the anchor: a step on the runepath. Adds its power, and multiplies the output by ${eq.ring} (plus boost motes).`
+      case 'inscribe':
+        return `Sits inside: a step on the runepath. Adds its power, and divides the output by ${eq.inscribe}. An inscribed seal of the anchor’s own element condenses.`
+      case 'side':
+        return 'Hangs beside the anchor: adds its power to reach up, for more kilos.'
+      case 'tangent':
+        return 'Touches the anchor at a point: adds its power to reach down, for fewer kilos.'
+      case 'entwine':
+        return 'Laces through the anchor. Adds its power as Ward against this term’s flare.'
+    }
+  }
   switch (kind) {
     case 'circumscribe':
       return 'Rings the anchor. Its element is where the change goes. Adds its power as Force.'
@@ -254,10 +286,20 @@ function joinHelp(kind: JoinKind): string {
 function tuningView(): string {
   const s = ui.settings
   const opt = (v: number, cur: number, label = String(v)) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${label}</option>`
+  const optS = (v: string, cur: string, label: string) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${label}</option>`
   return `
   <details class="panel tuning" data-panel="tuning" ${ui.open.has('tuning') ? 'open' : ''}>
     <summary>Tuning</summary>
     <div class="tune-grid">
+      <label>Rules <select id="tune-rules">${optS('equation', s.equation ? 'equation' : 'classic', 'Alchemical equation')}${optS('classic', s.equation ? 'equation' : 'classic', 'Reach × Force')}</select></label>
+      ${
+        s.equation
+          ? `<label>Base resistance <select id="tune-eq-base">${[1.5, 2.5, 5, 10].map((v) => opt(v, s.equation!.base)).join('')}</select></label>
+      <label>Step factor <select id="tune-eq-step">${[1.5, 2, 3].map((v) => opt(v, s.equation!.step, `×${v}`)).join('')}</select></label>
+      <label>Neutral kilos <select id="tune-eq-neutral">${[1, 1.5, 2, 3].map((v) => opt(v, s.equation!.neutral, `${v} kg`)).join('')}</select></label>
+      <label>Ring and inscribe <select id="tune-eq-ring">${[1.05, 1.1, 1.2, 1.5].map((v) => opt(v, s.equation!.ring, `×${v}`)).join('')}</select></label>`
+          : ''
+      }
       <label class="check"><input type="checkbox" id="tune-strain" ${s.strain ? 'checked' : ''}> Table imbalance adds strain</label>
       <label class="check"><input type="checkbox" id="tune-surplus" ${s.surplusForce ? 'checked' : ''}> Surplus Force multiplies Reach</label>
       <label>Flare size <select id="tune-flare">${opt(0.75, s.flareScale, '×0.75')}${opt(1, s.flareScale, '×1')}${opt(1.25, s.flareScale, '×1.25')}${opt(1.5, s.flareScale, '×1.5')}</select></label>
@@ -266,7 +308,7 @@ function tuningView(): string {
       <label>Sigils a term <select id="tune-casts">${opt(1, s.castsPerTerm)}${opt(2, s.castsPerTerm)}${opt(3, s.castsPerTerm)}${opt(0, s.castsPerTerm, 'Any number')}</select></label>
       <label>Discards <select id="tune-discards">${opt(1, s.discards)}${opt(2, s.discards)}${opt(3, s.discards)}</select></label>
     </div>
-    <p class="fine">Unticking surplus Force uses the design doc’s formula, where Force past the requirement does nothing. ${ui.game ? `Seed ${ui.seed}.` : ''}</p>
+    <p class="fine">${s.equation ? 'The equation: kilos = neutral × (reach up ÷ reach down)^ln(1 + power ÷ resistance), output × each ring ÷ each inscribe.' : 'Unticking surplus Force uses the design doc’s formula, where Force past the requirement does nothing.'} Changing the rules takes effect on restart. ${ui.game ? `Seed ${ui.seed}.` : ''}</p>
     ${ui.game ? `<div class="row"><button data-act="restart">Restart with these</button><button data-act="replay">Replay seed ${ui.seed}</button></div>` : ''}
   </details>`
 }
@@ -361,7 +403,9 @@ function composerView(g: GameState, sigil: Sigil | null, preview: CastPreview | 
   const anchor = sigil?.anchor
   const used = sigil?.joins.length ?? 0
   let stats = `<p class="hint">${ui.discarding ? 'Tap the runes to discard, then confirm.' : 'Tap a rune in your hand to make it the anchor.'}</p>`
-  if (sigil && preview) {
+  if (sigil && preview && g.settings.equation) {
+    stats = equationStats(g, sigil, preview)
+  } else if (sigil && preview) {
     const r = preview.cast.resolution
     const o = r.outputs
     const route = o.route ? o.route.map((e) => ELEMENT_NAME[e]).join(' → ') : 'Neutral'
@@ -401,8 +445,8 @@ function composerView(g: GameState, sigil: Sigil | null, preview: CastPreview | 
       <div class="stats">${stats}</div>
     </div>
     ${ui.flash ? `<p class="flash">${esc(ui.flash)}</p>` : ''}
-    <div class="modes" role="group" aria-label="Join">
-      ${JOINS.map(
+    <div class="modes ${g.settings.equation ? 'five' : ''}" role="group" aria-label="Join">
+      ${joinList(!!g.settings.equation).map(
         (j) => `<button class="mode ${ui.mode === j.kind ? 'is-on' : ''}" data-act="mode" data-kind="${j.kind}" aria-pressed="${ui.mode === j.kind}" ${!anchor || ui.discarding ? 'disabled' : ''}>
           <span class="mode-name">${j.label}</span>
           <span class="mode-gives">${j.gives}</span>
@@ -412,12 +456,63 @@ function composerView(g: GameState, sigil: Sigil | null, preview: CastPreview | 
   </section>`
 }
 
+/** What a sigil under the equation will do: its runepath, the terms, and the arithmetic. */
+function equationStats(g: GameState, sigil: Sigil, preview: CastPreview): string {
+  const eq = g.settings.equation!
+  const r = preview.cast.resolution
+  const path = runepath(sigil)
+  const a = sigil.anchor.affinity
+  const route =
+    a === 'none' ? 'No element' : path ? [ELEMENT_NAME[a], ...path.steps.map((s) => ELEMENT_NAME[s.to])].join(' → ') + (r.mode === 'condense' ? ' · condense' : ' · sealed') : `${ELEMENT_NAME[a]} → no seal yet`
+  const t = path && r.source ? terms(sigil, r.source, eq, path) : null
+  const extras = [r.outputs.reachMult > 1 ? `Reach up ×${r.outputs.reachMult} from motes` : '', r.outputs.guard ? `+${r.outputs.guard} Ward from motes` : ''].filter(Boolean)
+  let change = r.mode === 'none' ? `<p class="note">${esc(r.mode === 'none' && !path && a !== 'none' ? 'Circumscribe or inscribe a rune to seal the equation: its element is the output.' : r.note)}</p>` : ''
+  if (t && r.mode !== 'none') {
+    const src = `${GRADE_NAMES[r.source!.grade]} ${r.source!.elemental}`
+    const tgt = `${r.mode === 'condense' ? GRADE_NAMES[r.target!.grade] + ' ' : ''}${r.target!.elemental}`
+    const wanted = eq.neutral * (t.reachUp / t.reachDown) ** t.authority
+    change = `<p class="formula num">${num(eq.neutral)} kg <span class="op">×</span> (${num(t.reachUp)} <span class="op">÷</span> ${num(t.reachDown)})<sup>${t.authority.toFixed(2)}</sup> <span class="op">=</span> <b>${kg(r.converted)}</b></p>
+      <p class="fine">Exponent ln(1 + ${num(t.power)} ÷ ${num(t.resistance)}): power against resistance. Resistance ${num(eq.base)} base × ${GRADE_NAMES[r.source!.grade]} × ${eq.step}<sup>${t.path.flips + (t.condense ? 1 : 0)}</sup> for the steps flipped.</p>
+      <p class="change">${src} → <b class="num">${kg(r.produced)}</b> ${tgt} <span class="of">· output ×${t.multiplier.toFixed(2)}</span>${wanted > r.source!.kg + 1e-9 ? ' <span class="warn">· all there is</span>' : ''}</p>`
+  }
+  if (extras.length) change += `<p class="motes-note">${extras.join(' · ')}</p>`
+  const after = preview.cast.finished
+    ? `<p class="after win">This cast makes clay and finishes the commission.</p>`
+    : `<p class="after">After this cast: ${shareLine(g, preview.cast.pools)}</p>`
+  const e = preview.end
+  const cost = !e
+    ? ''
+    : e.flare + e.strain > 0
+      ? `<p class="cost">End the term after it: ${e.flare ? `flare ${e.flare}` : ''}${e.flare && e.strain ? ' + ' : ''}${e.strain ? `strain ${e.strain}` : ''} − Ward ${num(e.absorbed)} → <b class="${e.paid > 0 ? 'warn' : 'good'}">${e.paid > 0 ? `pay ${num(e.paid)}` : 'nothing to pay'}</b></p>`
+      : `<p class="cost">End the term after it: no instability.</p>`
+  return `
+      <p class="route">${route}</p>
+      <div class="outputs">
+        <div><span class="label">Power</span><span class="num big">${t ? `${num(t.power)} <span class="of">/ ${num(t.resistance)}</span>` : '—'}</span></div>
+        <div><span class="label">Reach</span><span class="num big">${t ? `↑${num(t.reachUp)} ↓${num(t.reachDown)}` : '—'}</span></div>
+        <div><span class="label">Ward</span><span class="num big">${num(r.outputs.ward)}</span></div>
+      </div>
+      ${change}${after}${cost}`
+}
+
 /** What a rune would add to the sigil under the selected join; otherwise its abilities. */
 function cardHint(r: Rune): string {
   const own = abilities(r)
   const sigil = currentSigil()
   if (ui.discarding || !sigil) return own.join(', ') || BODY_NAMES[r.body]
   if (!canJoin(sigil, r)) return 'No open link'
+  const eq = ui.game?.settings.equation
+  if (eq) {
+    const same = r.affinity === sigil.anchor.affinity && r.affinity !== 'none'
+    const hint: Record<JoinKind, string> = {
+      circumscribe: `+${r.power} power · ×${num(eq.ring + r.boost)}`,
+      inscribe: same ? `+${r.power} power · condense` : `+${r.power} power · ÷${num(eq.inscribe + r.boost)}`,
+      side: `+${r.power} reach up`,
+      tangent: `+${r.power} reach down`,
+      entwine: `+${num(r.power * WARD_PER_POWER)} Ward`,
+    }
+    return [hint[ui.mode], ...own].join(', ')
+  }
   let add: string
   switch (ui.mode) {
     case 'circumscribe':
@@ -666,9 +761,10 @@ function recordCsv(g: GameState): string {
 const BOUNDS: Record<string, [number, number, number]> = {
   power: [1, 15, 1],
   links: [0, 4, 1],
-  bowls: [0, 4, 1],
+  bowls: [0, 6, 1],
   reach: [1, 3, 0.25],
   guard: [0, 12, 1],
+  boost: [0, 1, 0.05],
 }
 
 function stepper(target: string, value: number, field: string, label: string): string {
@@ -791,6 +887,7 @@ function sandboxView(g: GameState): string {
       <div class="mote-values">
         <span class="mv"><span class="mote-dot" style="background:var(--opal)"></span>Reach mote ×${stepper('values.reach', f.values.reach, 'reach', 'reach mote multiplier')}</span>
         <span class="mv"><span class="mote-dot" style="background:var(--opal)"></span>Guard mote +${stepper('values.guard', f.values.guard, 'guard', 'guard mote Ward')} Ward</span>
+        <span class="mv"><span class="mote-dot" style="background:var(--opal)"></span>Boost mote +${stepper('values.boost', f.values.boost, 'boost', 'boost mote multiplier')} multiplier</span>
       </div>
       <p class="fine">Shrinking a body’s bowls drops the motes that no longer fit. <button class="link-btn" data-act="sb-reset-forge">Reset shapes and motes</button></p>
     </div>
@@ -838,7 +935,7 @@ function stepForge(target: string, delta: number) {
   const [group, field] = target.split('.')
   const [lo, hi, step] = BOUNDS[field]
   const clamp = (v: number) => Math.min(hi, Math.max(lo, Math.round((v + delta * step) * 100) / 100))
-  if (group === 'values') forge.values[field as 'reach' | 'guard'] = clamp(forge.values[field as 'reach' | 'guard'])
+  if (group === 'values') forge.values[field as 'reach' | 'guard' | 'boost'] = clamp(forge.values[field as 'reach' | 'guard' | 'boost'])
   else forge.bodies[group as Body][field as 'power' | 'links' | 'bowls'] = clamp(forge.bodies[group as Body][field as 'power' | 'links' | 'bowls'])
   ui.game = setForge(g, forge)
   if (forge.bodies[ui.draft.body].bowls < ui.draft.motes.length) ui.draft = { ...ui.draft, motes: ui.draft.motes.slice(0, forge.bodies[ui.draft.body].bowls) }
@@ -964,6 +1061,15 @@ function readTuning() {
   s.handSize = n('tune-hand', s.handSize)
   s.discards = n('tune-discards', s.discards)
   s.castsPerTerm = n('tune-casts', s.castsPerTerm)
+  const rules = val('tune-rules')
+  if (rules) {
+    if (rules.value === 'classic') s.equation = null
+    else {
+      const prev = s.equation ?? DEFAULT_EQUATION
+      const ring = n('tune-eq-ring', prev.ring)
+      s.equation = { base: n('tune-eq-base', prev.base), step: n('tune-eq-step', prev.step), neutral: n('tune-eq-neutral', prev.neutral), ring, inscribe: ring }
+    }
+  }
 }
 
 root.addEventListener(

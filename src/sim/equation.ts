@@ -27,7 +27,8 @@ export interface Equation {
   neutral: number
 }
 
-export const DEFAULT_EQUATION: Equation = { base: 10, step: 2, ring: 1.1, inscribe: 1.1, neutral: 1 }
+/** Fitted against mud: the opening deck takes a median 5 terms and 5 quintessence, as before. */
+export const DEFAULT_EQUATION: Equation = { base: 2.5, step: 2, ring: 1.1, inscribe: 1.1, neutral: 2 }
 
 /** How ties on the square break: earth, fire, air (wind), water. */
 export const PREFERENCE: Elemental[] = ['earth', 'fire', 'air', 'water']

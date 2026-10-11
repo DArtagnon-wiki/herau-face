@@ -117,9 +117,9 @@ The power arc's target: by the end of a run of 20 or more commissions, mud to cl
 
 The simulated player plans each term for big hands and high-link anchors: it tries the best sigil of every anchor and size, plus every ring chain of two or three, plays the rest of the term out greedily from each, and starts with the one that ends best. The opening deck still uses the exhaustive greedy player, so its numbers match those above.
 
-### The alchemical equation (simulator only, for now)
+### The alchemical equation
 
-`src/sim/equation.ts` is a second model for what a sigil does, run with `--equation`:
+`src/sim/equation.ts` is a second model for what a sigil does. The page now plays by it (Tuning switches back to Reach × Force), and the simulator runs it with `--equation`:
 
 - **Resistance** = the material's base × the pool's grade multiplier × the step factor for every quality flipped along the runepath (a diagonal flips two).
 - **Runepath:** from the anchor, walk the elemental square through the circumscribed and inscribed runes, easiest step first, ties going earth, fire, air, water. It ends at the seal, the last of those runes placed, whose element is the output.

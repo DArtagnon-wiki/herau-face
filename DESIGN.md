@@ -280,7 +280,7 @@ R is the sigil's Reach and F its Force. W is the selected pool's weight in kg an
 
 ## The alchemical equation (in testing)
 
-A second model for what a sigil does, now running in the prototype's simulator beside Reach × Force. The reach ratio sets whether you reach for a lot or a little; power against the material's resistance sets how far you get. Base 2.5, step ×2 and a neutral 2 kg fit the opening deck's turn target.
+A second model for what a sigil does. The prototype now plays by it by default, with a Tuning switch back to Reach × Force, and its simulator runs both. The reach ratio sets whether you reach for a lot or a little; power against the material's resistance sets how far you get. Base 2.5, step ×2 and a neutral 2 kg fit the opening deck's turn target.
 
 ```math
 \begin{aligned}
