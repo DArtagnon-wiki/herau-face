@@ -1,6 +1,6 @@
 # Circumgician Deckbuilder — Design Doc
 
-Last updated Oct 9, 2026. Started Oct 7, 2026.
+Last updated Oct 11, 2026. Started Oct 7, 2026.
 
 ## Overview
 
@@ -51,7 +51,7 @@ A roguelike deckbuilder in the spirit of Balatro: each term you compose sigils f
 | Term | One cycle: the commission reveals its action, the player casts as many sigils as the hand allows, then ends the term and the commission acts. |
 | Currency (name open) | What the workshop takes; earned from commissions in proportion to product made. |
 | Reach, Force, Vector, Ward | A sigil's four outputs: kg it can affect, inertia it can overcome, the from→to change, and defence. |
-| Apparatus (proposed) | Passive run modifiers in limited slots, such as an athanor or alembic. Balatro's jokers. |
+| Catalyst (proposed) | A passive run modifier in a limited slot, like Balatro's jokers or another roguelike's relics. It changes every cast without being used up. |
 
 ## Core loop
 
@@ -61,9 +61,9 @@ A run is a chain of commissions. Each commission repeats terms until it is done.
 2. Draw up to hand size (prototype: 6 runes).
 3. Compose a sigil: an anchor plus joined runes, up to the anchor's links. Or spend a discard to redraw.
 4. Read the preview: the sigil's Reach, Force, Vector and Ward against the selected pool, and what ending the term after it would cost.
-5. Cast. The sigil resolves at once: the amalgam changes, mote and apparatus effects trigger, its Ward adds to the term's, and it stays on the table. If the amalgam now meets the target, the commission is done.
+5. Cast. The sigil resolves at once: the amalgam changes, mote and catalyst effects trigger, its Ward adds to the term's, and it stays on the table. If the amalgam now meets the target, the commission is done.
 6. Compose and cast again while runes remain, or end the term.
-7. End the term. The commission acts: the term's Ward absorbs part of any flare and the rest is paid in quintessence; disruptions hit the table. Unplayed runes stay in hand; played runes go to the discard pile.
+7. End the term. The commission acts: the term's Ward absorbs part of any flare and the rest is paid in quintessence; disruptions hit the table. Unplayed runes stay in hand; played runes go to the discard pile. If the commission's own move leaves the amalgam in range, the commission is done once the term is paid.
 
 A commission is done when the main amalgam meets the target and every required lump is stable. Rewards scale with the product made, so overkill pays and a poor commission still makes progress. Between commissions the player attaches motes, takes new runes and spends currency at the workshop.
 
@@ -81,15 +81,18 @@ A rune is a body holding motes. The body sets power, links and bowls; the motes 
 | Crescent | 5 | 1 | 2 | 2 |
 | Triangle | 5 | 1 | 3 | 3 |
 
-| Mote | Effect |
-| --- | --- |
-| Basic sapphire | Water |
-| Basic emerald | Earth |
-| Basic topaz | Air |
-| Basic ruby | Fire |
-| Link mote | +1 link |
-| Reach mote | The sigil's Reach ×1.5 |
-| Guard mote | +4 Ward |
+| Mote | Effect | Adds or multiplies |
+| --- | --- | --- |
+| Basic sapphire | Water | Sets the element |
+| Basic emerald | Earth | Sets the element |
+| Basic topaz | Air | Sets the element |
+| Basic ruby | Fire | Sets the element |
+| Link mote | +1 link | Adds |
+| Reach mote | The sigil's reach up ×1.5 | Multiplies |
+| Guard mote | +4 Ward | Adds |
+| Boost mote | +0.1 to its rune's multiplier in the equation | Adds |
+
+**A mote defines its own effect:** what it changes, and whether it adds or multiplies. Both kinds will exist for the same stat, such as a reach mote that adds beside one that multiplies. The prototype keeps reach motes multiplicative.
 
 **Standard starting deck: 14 runes.** It should handle an easy commission with some difficulty.
 
@@ -178,7 +181,7 @@ Runes improve by changing what their bowls hold; the deck grows by earning new r
 - **Currency.** The workshop takes an ordinary currency (name open), earned from commissions in proportion to product made. Quintessence is never spent here.
 - **Dissolving (proposed).** Retire a rune and recover its motes. Thinning lets players focus a deck, and recovering motes makes it feel like a gain.
 - **Formulae (proposed).** Consumables that level up a join type, like Balatro's planet cards.
-- **Apparatus (proposed).** Passive modifiers in limited slots, like Balatro's jokers, named for alchemical vessels. Examples: an athanor that adds Force to changes ending in Fire; an alembic that raises Water→Air yield.
+- **Catalysts (proposed).** The game's jokers and relics: passive modifiers in limited slots. A catalyst speeds a reaction without being used up, as these change every cast and stay. Examples: vitriol adds 2 power to runepaths that end in fire; sal ammoniac counts tangents twice in reach down; the alkahest, a rare one, skips the first flip of every runepath. Alchemical vessels, such as the athanor and alembic, could name the slots that hold them.
 
 ## Power arc
 
@@ -212,6 +215,17 @@ Mid-run, each crescent becomes a triangle with two link motes, so it anchors fou
 - **Raw power hurts precision.** Power 8 instead of 5 cut one-term finishes from 85% to 52%, because the smallest sigil then overshoots a 2 kg trace. Fine tools must grow with power.
 - **The counter-curve** is later commissions' weight and grade: heavy ×2 and inert ×4 raise the Force every change needs.
 - **Greed is cheap so far.** Flares rising by 1 a term barely tax a long commission. If extra product should carry risk, escalation needs teeth.
+
+**Scaling compared.** A commission's job grows about 7× from mud to the Mire, but a deck's throughput grows 13× by the late run, and 50× with one more link and a 10-rune hand. So late in a run mass stops mattering, and only flares and the boss's debuffs hold. Balatro grows its target about 330×, exponentially; Slay the Spire grows enemy HP about 18× and leans on enemy damage and mechanics.
+
+| Measure | Early | Late | Growth |
+| --- | --- | --- | --- |
+| Balatro: score to beat, white stake (approximate) | 300 chips, Ante 1 small blind | 100,000, Ante 8 boss blind | ~330× |
+| Slay the Spire: enemy HP | Jaw Worm, 40–44 | Corrupt Heart, 750 (800 on Ascension 9+) | ~18× |
+| Here: kilos the job needs moved | Mud, ~15 kg | The Mire, ~100 kg | ~7× |
+| Here: kilos a deck moves in a term (median) | Opening deck, 6 kg | Late deck, 83 kg; late+, 310 kg | 13–50× |
+
+Throughput is from `scripts/power.ts`: the best sigils from 200 hands per deck against an unlimited weak pool, ignoring aim and defence. Sources: [Jaw Worm](https://slaythespire.gg/monsters/Jaw_Worm), [Corrupt Heart](https://slaythespire.gg/bosses/The_Corrupt_Heart), [Balatro blind multipliers](https://steamcommunity.com/app/2379780/discussions/0/596263353496658219).
 
 ## Challenge system: transmutation
 
@@ -293,7 +307,7 @@ R &= R_{\text{base}} \times g \times s^{\,\text{flips}} \\
 - **Resistance** is the material's base, possibly raised during combat, times the pool's grade multiplier g, times the step factor s for every quality flipped along the runepath. A diagonal flips two.
 - **The runepath** starts at the anchor and walks the elemental square through the circumscribed and inscribed runes, easiest step first. Ties go earth, fire, air, water: the Planeteers' order, which is also a walk around the square. It ends at the seal, the last of those runes placed, and the output is the seal's element.
 - **The neutral take** N is a flat amount, a property of the material (mud: 1 kg), so weight is difficulty: emptying a pool needs a multiplier of the pool's weight ÷ N. Power short of resistance shrinks the take: earth to air flips both qualities, so medium earth resists 14 against a two-rune sigil's 10, and the take shrinks to 0.7 kg.
-- **Aiming.** Reach up is the anchor plus side links, times reach motes. Reach down is the anchor plus tangents, a proposed join that touches the anchor at a point. Power P is the anchor plus circumscribes and inscribes.
+- **Aiming.** Reach up is the anchor plus side links, times reach motes. Reach down is the anchor plus tangents, a join that touches the anchor at a point, kept for the prototype. Power P is the anchor plus circumscribes and inscribes.
 - **Output.** Each circumscribe multiplies by 1.1 and each inscribe divides by 1.1. A boost mote adds a flat 0.1 to its rune's multiplier. Element yields no longer apply. A seal that is an inscribe of the anchor's element condenses, at one extra step.
 
 Simulated against mud with those numbers, 60 commissions each:
@@ -311,6 +325,23 @@ Simulated against mud with those numbers, 60 commissions each:
 - **The arc** runs 7, 4, 2 and 1 terms.
 - **Mass grows slowly.** With rings at ×1.1, extra product comes a little at a time. Huge product late in a run needs boost motes or bigger multipliers.
 - **The opening deck can't overkill.** Asked to finish with 45 kg, it never got there in 30 tries, spending the whole stock over about 26 terms.
+
+## Drawing a sigil
+
+A sigil's drawing reads as its equation: nesting gives the runepath, and the way a rune points gives its reach. This is notation for mechanics only; a later pass aligns symbols and mechanics with alchemical tradition.
+
+![Sketch of a sigil: a blue anchor square, a red circumscribed triangle as the seal, three green crescents outside and four yellow triangles inside](docs/sigil-notation-sketch.jpg)
+
+| Mark | Meaning | Join in the prototype |
+| --- | --- | --- |
+| Innermost shape, with a dot | The anchor | — |
+| A shape drawn around the anchor | A circumscribed rune | Circumscribe |
+| A shape drawn inside it | An inscribed rune | Inscribe |
+| A double line | The seal: the runepath ends here, and its element is the output | The last circumscribe or inscribe with an element |
+| A rune hung outside, pointing out | Reach up (+) | Side |
+| A rune set inside, pointing in | Reach down (−) | Tangent |
+
+In the sketch, a blue square anchors, a red triangle circumscribes it as the seal, three green crescents hang outside for +reach, and four yellow triangles sit inside for −reach. Eventually a reach rune is sigilized: turned to point in or out, and its direction gives the sign. Until then the side and tangent joins stand in.
 
 ## Instability and quintessence
 
@@ -421,6 +452,8 @@ A run is 20 or more commissions across four material tiers, five or six to a tie
 | 3. Noble | Tin to silver | Four elementals; narrow bands |
 | 4. Great Work | Lead to gold | Inert grades throughout |
 
+**Concentricity (proposed).** The player picks each commission's scale, from grains of mined ore to tons of polluted water. The neutral take scales with it (1 g, 1 kg, 1 t), so the same deck works at every scale and terms stay comparable. What the choice trades is open: a bigger scale could pay more but bring harsher moves or more traces.
+
 Boss sources use the same action template as everything else, with heavier weights and nastier signature moves, such as:
 
 - **Volatile:** produced Air escapes the vessel.
@@ -446,6 +479,17 @@ Circumgician is built on Pixi.js, TypeScript and Vite, and most of its look is g
 | Audio | A generative D-minor pad and bell bed, plus code-synthesized effects; no audio files | Reuse the bed; add transmutation sounds |
 | Framing | Levels follow the tarot: 22 major arcana and four suits of 14 | A possible run or map structure |
 
+**The Emerald Tablet.** Its lines can sit on loading screens and other pauses. Isaac Newton's translation (Keynes MS. 28) is public domain; candidates, quoted from [Wikipedia](https://en.wikipedia.org/wiki/Emerald_Tablet):
+
+| Where | Line |
+| --- | --- |
+| Title screen | Tis true without lying, certain and most true. |
+| Loading screen | That which is below is like that which is above and that which is above is like that which is below to do the miracle of one only thing. |
+| A separation commission | Separate thou the earth from the fire, the subtle from the gross sweetly with great industry. |
+| A boss arrives | Its force is above all force, for it vanquishes every subtle thing and penetrates every solid thing. |
+| The Mire, fired into brick | Its force or power is entire if it be converted into earth. |
+| A finished run | So was the world created. |
+
 ## Open questions
 
 | Question | Current proposal |
@@ -465,4 +509,7 @@ Circumgician is built on Pixi.js, TypeScript and Vite, and most of its look is g
 | What is condensing's yield? | 2 kg in, 1 kg out per grade |
 | Is routing through chained circumscribes too strong? | They are the late-run mass engine: earth → air → fire → earth is ×40. Links gate them; tune step costs and yields if loops arrive too early |
 | Names: working title, the currency? | Open. Settled: a card is a rune; what you cast is a sigil |
-| Does a commission finish the moment it is in band, or when the player seals it? | Prototype: the moment it is in band, so making extra product means working off-spec and landing at the end. A seal action would let players grow product in band while flares keep rising |
+| Does a commission finish the moment it is in band, or when the player seals it? | Settled: the moment the amalgam is in range, whether a cast or the commission's own move put it there. Extra product means working off-spec and landing at the end |
+| Does a shape's side count cap the reach runes it carries? | Open. The notation sketch hangs three crescents off a triangle and sets four triangles inside a square; the prototype limits joins only by the anchor's links |
+| What does a bigger concentricity trade? | Open: more pay against harsher moves or more traces |
+| How should difficulty scale over a run? | Open: grow jobs with throughput (Balatro), keep jobs flatter and grow the commission's damage and mechanics (Slay the Spire), or narrow bands so big decks must aim |

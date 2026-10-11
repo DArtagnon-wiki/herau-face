@@ -382,7 +382,7 @@ function intentView(g: GameState, end: EndOutcome): string {
       <span class="intent-strain">${end.strain ? `+${end.strain}` : '0'}</span>
       <span class="label">${g.settings.strain ? 'from the table' : 'off'}</span>
     </div>
-    <p class="intent-term">${g.casts.length ? `${g.casts.length} sigil${g.casts.length === 1 ? '' : 's'} cast this term · Ward <b class="num">${num(g.termWard)}</b>` : 'No sigils cast this term yet'} · ending now ${end.paid > 0 ? `costs <b class="num warn">${num(end.paid)}</b>` : 'costs nothing'}</p>
+    <p class="intent-term">${g.casts.length ? `${g.casts.length} sigil${g.casts.length === 1 ? '' : 's'} cast this term · Ward <b class="num">${num(g.termWard)}</b>` : 'No sigils cast this term yet'} · ending now ${end.paid > 0 ? `costs <b class="num warn">${num(end.paid)}</b>` : 'costs nothing'}${end.finished ? finishNote : ''}</p>
   </section>`
 }
 
@@ -470,14 +470,14 @@ function composerView(g: GameState, sigil: Sigil | null, preview: CastPreview | 
       (extras.length ? `<p class="motes-note">${extras.join(' · ')}</p>` : '') +
       (r.mode === 'none' ? '' : tipView(g, sigil, r))
     const after = preview.cast.finished
-      ? `<p class="after win">This cast makes clay and finishes the commission.</p>`
+      ? `<p class="after win">This cast makes ${COMMISSIONS[g.commission].product.toLowerCase()} and finishes the commission.</p>`
       : `<p class="after">After this cast: ${shareLine(g, preview.cast.pools)}</p>`
     const e = preview.end
     const cost = !e
       ? ''
       : e.flare + e.strain > 0
-        ? `<p class="cost">End the term after it: ${e.flare ? `flare ${e.flare}` : ''}${e.flare && e.strain ? ' + ' : ''}${e.strain ? `strain ${e.strain}` : ''} − Ward ${num(e.absorbed)} → <b class="${e.paid > 0 ? 'warn' : 'good'}">${e.paid > 0 ? `pay ${num(e.paid)}` : 'nothing to pay'}</b></p>`
-        : `<p class="cost">End the term after it: no instability.</p>`
+        ? `<p class="cost">End the term after it: ${e.flare ? `flare ${e.flare}` : ''}${e.flare && e.strain ? ' + ' : ''}${e.strain ? `strain ${e.strain}` : ''} − Ward ${num(e.absorbed)} → <b class="${e.paid > 0 ? 'warn' : 'good'}">${e.paid > 0 ? `pay ${num(e.paid)}` : 'nothing to pay'}</b>${e.finished ? finishNote : ''}</p>`
+        : `<p class="cost">End the term after it: no instability.${e.finished ? finishNote : ''}</p>`
     stats = `
       <p class="route">${route}</p>
       <div class="outputs">
@@ -526,14 +526,14 @@ function equationStats(g: GameState, sigil: Sigil, preview: CastPreview): string
   }
   if (extras.length) change += `<p class="motes-note">${extras.join(' · ')}</p>`
   const after = preview.cast.finished
-    ? `<p class="after win">This cast makes clay and finishes the commission.</p>`
+    ? `<p class="after win">This cast makes ${COMMISSIONS[g.commission].product.toLowerCase()} and finishes the commission.</p>`
     : `<p class="after">After this cast: ${shareLine(g, preview.cast.pools)}</p>`
   const e = preview.end
   const cost = !e
     ? ''
     : e.flare + e.strain > 0
-      ? `<p class="cost">End the term after it: ${e.flare ? `flare ${e.flare}` : ''}${e.flare && e.strain ? ' + ' : ''}${e.strain ? `strain ${e.strain}` : ''} − Ward ${num(e.absorbed)} → <b class="${e.paid > 0 ? 'warn' : 'good'}">${e.paid > 0 ? `pay ${num(e.paid)}` : 'nothing to pay'}</b></p>`
-      : `<p class="cost">End the term after it: no instability.</p>`
+      ? `<p class="cost">End the term after it: ${e.flare ? `flare ${e.flare}` : ''}${e.flare && e.strain ? ' + ' : ''}${e.strain ? `strain ${e.strain}` : ''} − Ward ${num(e.absorbed)} → <b class="${e.paid > 0 ? 'warn' : 'good'}">${e.paid > 0 ? `pay ${num(e.paid)}` : 'nothing to pay'}</b>${e.finished ? finishNote : ''}</p>`
+      : `<p class="cost">End the term after it: no instability.${e.finished ? finishNote : ''}</p>`
   return `
       <p class="route">${route}</p>
       <div class="outputs">
@@ -724,9 +724,12 @@ function actionsView(g: GameState, sigil: Sigil | null, preview: CastPreview | n
     <button data-act="clear" ${sigil ? '' : 'disabled'}>Clear</button>
     <button data-act="discard-mode" ${g.discardsLeft > 0 && !sigil ? '' : 'disabled'}>Discard <span class="num">(${g.discardsLeft})</span></button>
     <button class="primary" data-act="cast" ${invalid ? 'disabled' : ''}>${castLabel}</button>
-    <button class="end-term" data-act="end-term" ${g.phase === 'compose' ? '' : 'disabled'}>End term<span class="sub num">${end.paid > 0 ? `pay ${num(end.paid)}` : 'no cost'}</span></button>
+    <button class="end-term" data-act="end-term" ${g.phase === 'compose' ? '' : 'disabled'}>End term<span class="sub num">${end.paid > 0 ? `pay ${num(end.paid)}` : 'no cost'}${end.finished ? ' · finishes' : ''}</span></button>
   </div>`
 }
+
+/** Said wherever ending the term would leave the amalgam in range. */
+const finishNote = ', and the commission\'s move leaves the amalgam in range: the commission finishes'
 
 function endView(g: GameState): string {
   if (g.phase === 'compose') return ''

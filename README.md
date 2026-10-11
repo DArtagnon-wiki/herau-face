@@ -19,6 +19,7 @@ npm run simulate -- --deck late --farm 250  # grow the clay to 250 kg before fin
 npm run simulate -- --trace 3             # print the first 3 commissions cast by cast
 npm run simulate -- --farm 400 --ignore-spec --planner  # how fast the opening deck can grow mass at all
 npm run simulate -- --equation             # the alchemical equation instead of Reach × Force
+npm run power      # kilos each deck along the run can move in a term
 npm run build      # dist/index.html, one self-contained page
 ```
 
@@ -63,6 +64,7 @@ The Sandbox panel changes the commission in progress, live: the mud's starting c
 - **Reach × Force.** Kilos converted = Reach × Force ÷ the Force the change needs. The preview spells this out, runes show what they'd add under the selected join, and a tip compares the best side link and best circumscribe left in hand.
 - **Inscribe.** An inscribed rune of the anchor's own element condenses the selected pool. Any other halves Reach, for small precise casts.
 - **Slump** knocks loose the table sigil whose loss leaves the table most lopsided. Entwined sigils hold.
+- **A commission finishes in range.** It ends the moment the amalgam is in range, whether a cast or the commission's own move at the end of a term put it there; that term's instability is paid first.
 
 ### Numbers
 
@@ -163,3 +165,15 @@ Pick it from the commission buttons on the start screen or in the sandbox (`--co
 
 Tuning flags: `--boss-resistance`, `--boss-flare-min`, `--boss-flare-max`, `--boss-stiffen`, `--boss-junk`, `--boss-mass`. The simulated player now values progress twice as much as before (`--miss-weight 60`); at 30 it warded forever in cornered boss fights. With it, mud costs the opening deck a median of 13 (p90 24), mid-run 4 and late-run 0.
 
+### Throughput
+
+`npm run power` deals 200 hands from each deck and finds the most kilos its best sigils can take in one term from an unlimited weak pool, ignoring aim and defence: the game's damage per turn.
+
+| Deck | Hand | Best sigil (p10 / p50 / p90) | Whole term (p10 / p50 / p90) |
+| --- | --- | --- | --- |
+| Opening | 6 | 2.5 / 4.4 / 4.4 | 4.4 / 6.3 / 7.0 |
+| Mid-run | 7 | 4.4 / 7.6 / 13.2 | 7.0 / 10.2 / 15.7 |
+| Late-run | 8 | 38.8 / 82.1 / 177.8 | 39.8 / 83.1 / 178.8 |
+| Late-run, +1 link | 10 | 142 / 307 / 703 | 145 / 310 / 706 |
+
+Throughput grows 13× to 50× over a run while the job grows about 7× (mud needs about 15 kg moved, the Mire about 100 kg), so late fights are decided by flares and the boss's moves, not mass.

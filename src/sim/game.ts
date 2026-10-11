@@ -77,6 +77,8 @@ export interface EndOutcome {
   ward: number
   absorbed: number
   paid: number
+  /** The commission's own move left the amalgam in range, so the commission finishes once this term is paid. */
+  finished: boolean
 }
 
 export interface TermOutcome extends EndOutcome {
@@ -224,7 +226,7 @@ export function invalidReason(state: GameState, sigil: Sigil): string | null {
 export { canJoin }
 
 /** The end of the term as things stand: the commission acts, and the term's Ward meets it. */
-function endOf(state: Pick<GameState, 'intent' | 'pools' | 'table' | 'termWard' | 'settings'>): EndOutcome {
+function endOf(state: Pick<GameState, 'intent' | 'pools' | 'table' | 'termWard' | 'settings' | 'target'>): EndOutcome {
   const acted = applyIntent(state.intent, state.pools, state.table)
   const flare = state.intent.flare
   const tableStrain = strain(acted.table, state.settings.strain, state.settings.strainFree ?? FREE_IMBALANCE, state.settings.strainRate ?? STRAIN_RATE)
@@ -241,6 +243,7 @@ function endOf(state: Pick<GameState, 'intent' | 'pools' | 'table' | 'termWard' 
     ward: state.termWard,
     absorbed,
     paid,
+    finished: inBand(acted.pools, state.target),
   }
 }
 
@@ -303,6 +306,8 @@ export function endTerm(state: GameState): GameState {
     termWard: 0,
   }
   if (quintessence <= 0) return { ...next, phase: 'lost', seed: rng.state() }
+  // A commission finishes the moment the amalgam is in range, even when its own move put it there.
+  if (e.finished) return { ...next, phase: 'won', seed: rng.state() }
   if (state.intent.junk) {
     let id = Math.max(0, ...[...next.hand, ...next.draw, ...next.discard].map((r) => r.id))
     const draw = next.draw.slice()

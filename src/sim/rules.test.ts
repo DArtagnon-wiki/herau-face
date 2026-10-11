@@ -233,6 +233,17 @@ describe('mud', () => {
 })
 
 describe('a commission', () => {
+  it('finishes when its own move leaves the amalgam in range', () => {
+    // 90% earth is out of range; seeping 1 kg of earth into water brings it to 80%.
+    const seep: Intent = { kind: 'seep', flare: 0, kg: 1, title: '', detail: '' }
+    const s = { ...newGame(undefined, 42), pools: mud(9, 0.6, 0.2, 0.2), intent: seep }
+    expect(inBand(s.pools)).toBe(false)
+    expect(previewEnd(s).finished).toBe(true)
+    expect(endTerm(s).phase).toBe('won')
+    const held = { ...s, intent: { ...seep, kind: 'flare' as const } }
+    expect(endTerm(held).phase).toBe('compose')
+  })
+
   it('deals a 6-rune hand from the 14-rune deck and reveals the first move', () => {
     const s = newGame(undefined, 42)
     expect(s.hand).toHaveLength(6)
