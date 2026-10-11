@@ -1,6 +1,6 @@
-import { cloneForge, DEFAULT_FORGE, elementMote, LINK_MOTE, REACH_MOTE, GUARD_MOTE, standardDeck, type RuneSpec } from './deck'
+import { cloneForge, DEFAULT_FORGE, elementMote, LINK_MOTE, REACH_MOTE, standardDeck, type RuneSpec } from './deck'
 import { standardSetup, type Setup } from './game'
-import type { Elemental } from './types'
+import type { Elemental, Mote } from './types'
 
 // Decks from points along a run, for feeling and simulating the power arc.
 // Each keeps the standard deck's 14 runes and upgrades a few of them, about
@@ -15,9 +15,18 @@ export interface Preset {
   setup: () => Setup
 }
 
-const FOUR: Elemental[] = ['water', 'earth', 'air', 'fire']
-const circles = (): RuneSpec[] => FOUR.flatMap((e) => [0, 1].map(() => ({ body: 'circle' as const, motes: [elementMote(e)] })))
-const plainTriangles = (): RuneSpec[] => [0, 1].map(() => ({ body: 'triangle' as const, motes: [LINK_MOTE, REACH_MOTE, GUARD_MOTE] }))
+const elementOf = (spec: RuneSpec): Elemental | undefined => spec.motes.find((m) => m.kind === 'element')?.elemental
+
+/** Upgrade the first crescent of each element into a triangle holding these motes. */
+function upgradeCrescents(deck: RuneSpec[], motes: (e: Elemental) => Mote[]): RuneSpec[] {
+  const done = new Set<Elemental>()
+  return deck.map((spec) => {
+    const e = elementOf(spec)
+    if (spec.body !== 'crescent' || !e || done.has(e)) return spec
+    done.add(e)
+    return { body: 'triangle', motes: motes(e) }
+  })
+}
 
 export const PRESETS: Preset[] = [
   {
@@ -30,17 +39,14 @@ export const PRESETS: Preset[] = [
   {
     key: 'mid',
     name: 'Mid-run deck',
-    note: 'About ten upgrades: each crescent becomes a triangle with two link motes, so it anchors four-rune sigils, and the hand holds 7.',
+    note: 'About ten upgrades: one crescent of each element becomes a triangle with two link motes, so it anchors four-rune sigils, and the hand holds 7.',
     handSize: 7,
-    setup: () => ({
-      ...standardSetup(),
-      deck: [...circles(), ...FOUR.map((e) => ({ body: 'triangle' as const, motes: [elementMote(e), LINK_MOTE, LINK_MOTE] })), ...plainTriangles()],
-    }),
+    setup: () => ({ ...standardSetup(), deck: upgradeCrescents(standardDeck(), (e) => [elementMote(e), LINK_MOTE, LINK_MOTE]) }),
   },
   {
     key: 'late',
     name: 'Late-run deck',
-    note: 'About twenty upgrades: triangles hold 6 bowls, each elemental triangle carries four link motes and a reach mote, so it anchors six-rune sigils, and the hand holds 8.',
+    note: 'About twenty upgrades: triangles hold 6 bowls, and one triangle of each element carries four link motes and a reach mote, so it anchors six-rune sigils, and the hand holds 8.',
     handSize: 8,
     setup: () => {
       const forge = cloneForge(DEFAULT_FORGE)
@@ -48,11 +54,7 @@ export const PRESETS: Preset[] = [
       return {
         ...standardSetup(),
         forge,
-        deck: [
-          ...circles(),
-          ...FOUR.map((e) => ({ body: 'triangle' as const, motes: [elementMote(e), LINK_MOTE, LINK_MOTE, LINK_MOTE, LINK_MOTE, REACH_MOTE] })),
-          ...plainTriangles(),
-        ],
+        deck: upgradeCrescents(standardDeck(), (e) => [elementMote(e), LINK_MOTE, LINK_MOTE, LINK_MOTE, LINK_MOTE, REACH_MOTE]),
       }
     },
   },

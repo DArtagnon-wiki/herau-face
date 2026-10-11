@@ -46,10 +46,10 @@ describe('the elemental square', () => {
 })
 
 describe('the starting deck', () => {
-  it('holds 8 circles, 4 crescents and 2 triangles, all power 5', () => {
+  it('holds 4 circles, 8 crescents and 2 triangles, all power 5', () => {
     const deck = startingDeck()
     const count = (b: Body) => deck.filter((r) => r.body === b).length
-    expect([count('circle'), count('crescent'), count('triangle')]).toEqual([8, 4, 2])
+    expect([count('circle'), count('crescent'), count('triangle')]).toEqual([4, 8, 2])
     expect(deck.every((r) => r.power === 5)).toBe(true)
     expect(deck.every((r) => r.motes.length === r.bowls)).toBe(true)
   })
@@ -83,8 +83,8 @@ describe('links', () => {
 
   it('refuses a sigil with more joins than links', () => {
     const s = newGame(undefined, 5)
-    const [a, b, c] = s.hand.filter((r) => r.links === 1)
-    const state = { ...s, hand: [a, b, c, ...s.hand.filter((r) => r.links !== 1)] }
+    const [a, b, c] = [rune('water'), rune('earth'), rune('fire')]
+    const state = { ...s, hand: [a, b, c, ...s.hand] }
     expect(invalidReason(state, sigil(a, ['side', b], ['side', c]))).toMatch(/links/)
     expect(invalidReason(state, sigil(a, ['side', b]))).toBeNull()
   })
@@ -319,7 +319,7 @@ describe('the sandbox', () => {
     forge.bodies.circle = { power: 8, links: 2, bowls: 1 }
     const next = setForge(s, forge)
     const circles = [...next.hand, ...next.draw, ...next.discard].filter((r) => r.body === 'circle')
-    expect(circles).toHaveLength(8)
+    expect(circles).toHaveLength(4)
     expect(circles.every((r) => r.power === 8 && r.links === 2)).toBe(true)
   })
 
@@ -412,7 +412,7 @@ describe('decks along a run', () => {
     const late = presetByKey('late')!.setup()
     const deck = buildDeck(late.deck, late.forge)
     const find = (e: Affinity, body: Body) => deck.find((r) => r.affinity === e && r.body === body)!
-    const s = sigil(find('earth', 'triangle'), ['circumscribe', find('air', 'circle')], ['circumscribe', find('fire', 'circle')], ['circumscribe', find('earth', 'circle')], ...deck.filter((x) => x.affinity === 'water' && x.body === 'circle').map((x): [JoinKind, Rune] => ['side', x]))
+    const s = sigil(find('earth', 'triangle'), ['circumscribe', find('air', 'circle')], ['circumscribe', find('fire', 'circle')], ['circumscribe', find('earth', 'circle')], ...deck.filter((x) => x.affinity === 'water').slice(0, 2).map((x): [JoinKind, Rune] => ['side', x]))
     const r = resolve(s, late.start)
     expect(r.yieldFactor).toBe(40)
     expect(r.produced).toBeCloseTo(r.converted * 40)

@@ -32,11 +32,11 @@ export interface Equation {
 }
 
 /**
- * Fitted against mud: the neutral take is a fifth of the source pool, and power
- * short of resistance shrinks it. The opening deck takes a median 5 terms and
- * 3 quintessence; a 2 kg trace gives 0.4 kg takes.
+ * Fitted against mud with the standard deck of 4 circles and 8 crescents: a
+ * flat 1 kg neutral take, gated by power. The opening deck takes a median 6
+ * terms and 4 quintessence.
  */
-export const DEFAULT_EQUATION: Equation = { base: 5, step: 2, ring: 1.1, inscribe: 1.1, neutral: 0, share: 0.2, gate: true }
+export const DEFAULT_EQUATION: Equation = { base: 3.5, step: 2, ring: 1.1, inscribe: 1.1, neutral: 1, share: 0, gate: true }
 
 /** How ties on the square break: earth, fire, air (wind), water. */
 export const PREFERENCE: Elemental[] = ['earth', 'fire', 'air', 'water']

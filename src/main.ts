@@ -90,14 +90,14 @@ const eqOn = () => !!(ui.game ? ui.game.settings.equation : ui.settings.equation
 
 /** The neutral take options Tuning offers: a share of the source pool, or flat kilos. */
 const NEUTRAL_TAKES: { key: string; label: string; neutral: number; share: number }[] = [
+  { key: 'flat-1', label: '1 kg flat', neutral: 1, share: 0 },
   { key: 'share-0.2', label: '20% of the pool', neutral: 0, share: 0.2 },
   { key: 'share-0.25', label: '25% of the pool', neutral: 0, share: 0.25 },
   { key: 'share-0.15', label: '15% of the pool', neutral: 0, share: 0.15 },
   { key: 'share-0.1', label: '10% of the pool', neutral: 0, share: 0.1 },
   { key: 'flat-2', label: '2 kg flat', neutral: 2, share: 0 },
-  { key: 'flat-1', label: '1 kg flat', neutral: 1, share: 0 },
 ]
-const takeKey = (eq: Equation) => NEUTRAL_TAKES.find((t) => t.neutral === eq.neutral && t.share === eq.share)?.key ?? 'share-0.2'
+const takeKey = (eq: Equation) => NEUTRAL_TAKES.find((t) => t.neutral === eq.neutral && t.share === eq.share)?.key ?? 'flat-1'
 const neutralWords = (eq: Equation) =>
   eq.share ? `${Math.round(eq.share * 100)}% of the pool it works${eq.neutral ? ` plus ${num(eq.neutral)} kg` : ''}` : `${num(eq.neutral)} kg`
 
@@ -314,7 +314,7 @@ function tuningView(): string {
       <label>Rules <select id="tune-rules">${optS('equation', s.equation ? 'equation' : 'classic', 'Alchemical equation')}${optS('classic', s.equation ? 'equation' : 'classic', 'Reach × Force')}</select></label>
       ${
         s.equation
-          ? `<label>Base resistance <select id="tune-eq-base">${[2.5, 5, 10, 20].map((v) => opt(v, s.equation!.base)).join('')}</select></label>
+          ? `<label>Base resistance <select id="tune-eq-base">${[2.5, 3.5, 5, 10, 20].map((v) => opt(v, s.equation!.base)).join('')}</select></label>
       <label>Step factor <select id="tune-eq-step">${[1.5, 2, 3].map((v) => opt(v, s.equation!.step, `×${v}`)).join('')}</select></label>
       <label>Neutral take <select id="tune-eq-take">${NEUTRAL_TAKES.map((t) => optS(t.key, takeKey(s.equation!), t.label)).join('')}</select></label>
       <label class="check"><input type="checkbox" id="tune-eq-gate" ${s.equation!.gate ? 'checked' : ''}> Power short of resistance shrinks the take</label>

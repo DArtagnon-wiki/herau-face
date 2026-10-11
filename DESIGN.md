@@ -93,8 +93,8 @@ A rune is a body holding motes. The body sets power, links and bowls; the motes 
 
 **Standard starting deck: 14 runes.** It should handle an easy commission with some difficulty.
 
-- **8 circles,** two of each element: the plain workhorses.
-- **4 crescents,** one of each element, each with a link mote: they show how a rune gains links.
+- **4 circles,** one of each element: a one-link anchor can only seal, so circles serve as cheap rings and seals.
+- **8 crescents,** two of each element, each with a link mote: the workhorses, since a two-link anchor can both seal and aim.
 - **2 triangles** with a link, a reach and a guard mote, and no element. Anchored, they make a pure defence sigil; joined, they bring Reach ×1.5 and +4 Ward.
 
 **Links count only on the anchor.** A circle anchor makes a two-rune sigil; a crescent or triangle anchor makes three. The prototype first treated links as connections, so a 2-link rune anywhere carried the sigil one step deeper. Every crescent and triangle became a free extender, and a simulated player built five- and six-rune sigils that finished mud in one term.
@@ -280,37 +280,37 @@ R is the sigil's Reach and F its Force. W is the selected pool's weight in kg an
 
 ## The alchemical equation (in testing)
 
-A second model for what a sigil does. The prototype plays by it by default, with a Tuning switch back to Reach × Force, and its simulator runs both. The reach ratio sets whether you reach for a lot or a little; power against the material's resistance sets how far you get, and whether you get the neutral take at all. Base 5, step ×2 and a neutral take of a fifth of the source pool fit the opening deck's turn target.
+A second model for what a sigil does. The prototype plays by it by default, with a Tuning switch back to Reach × Force, and its simulator runs both. The reach ratio sets whether you reach for a lot or a little; power against the material's resistance sets how far you get, and whether you get the neutral take at all. A flat 1 kg take, base 3.5 and step ×2, with a starting deck of mostly two-link runes, fit the opening deck's turn target.
 
 ```math
 \begin{aligned}
 R &= R_{\text{base}} \times g \times s^{\,\text{flips}} \\
-\text{input} &= \sigma W \times \min\!\left(1, \frac{P}{R}\right) \times \left(\frac{\text{reach}_{\uparrow}}{\text{reach}_{\downarrow}}\right)^{\ln(1 + P/R)} \\
+\text{input} &= N \times \min\!\left(1, \frac{P}{R}\right) \times \left(\frac{\text{reach}_{\uparrow}}{\text{reach}_{\downarrow}}\right)^{\ln(1 + P/R)} \\
 \text{output} &= \text{input} \times \frac{\prod \text{circumscribe multipliers}}{\prod \text{inscribe multipliers}}
 \end{aligned}
 ```
 
 - **Resistance** is the material's base, possibly raised during combat, times the pool's grade multiplier g, times the step factor s for every quality flipped along the runepath. A diagonal flips two.
 - **The runepath** starts at the anchor and walks the elemental square through the circumscribed and inscribed runes, easiest step first. Ties go earth, fire, air, water: the Planeteers' order, which is also a walk around the square. It ends at the seal, the last of those runes placed, and the output is the seal's element.
-- **The neutral take** is a share σ of the source pool's weight W (prototype: 20%), so an 18 kg pool gives 3.6 kg and a 2 kg trace 0.4 kg. Power short of resistance shrinks it: earth to air flips both qualities, so medium earth resists 20 against a two-rune sigil's power of 10, and the take halves.
+- **The neutral take** N is a flat amount, a property of the material (mud: 1 kg), so weight is difficulty: emptying a pool needs a multiplier of the pool's weight ÷ N. Power short of resistance shrinks the take: earth to air flips both qualities, so medium earth resists 14 against a two-rune sigil's 10, and the take shrinks to 0.7 kg.
 - **Aiming.** Reach up is the anchor plus side links, times reach motes. Reach down is the anchor plus tangents, a proposed join that touches the anchor at a point. Power P is the anchor plus circumscribes and inscribes.
 - **Output.** Each circumscribe multiplies by 1.1 and each inscribe divides by 1.1. A boost mote adds a flat 0.1 to its rune's multiplier. Element yields no longer apply. A seal that is an inscribe of the anchor's element condenses, at one extra step.
 
-Simulated against mud with those numbers:
+Simulated against mud with those numbers, 60 commissions each:
 
 | Deck | Hand | Median terms | Done in 1 term | In 2 or fewer | Quintessence spent (median) |
 | --- | --- | --- | --- | --- | --- |
-| Opening | 6 | 5 | 0% | 0% | 3 |
-| Mid-run | 7 | 3 | 0% | 23% | 0 |
-| Late-run | 8 | 2 | 0% | 63% | 0 |
-| Late-run, +1 link on every rune | 10 | 2 | 35% | 100% | 0 |
+| Opening | 6 | 7 | 0% | 0% | 3 |
+| Mid-run | 7 | 4 | 0% | 17% | 0 |
+| Late-run | 8 | 2 | 5% | 95% | 0 |
+| Late-run, +1 link on every rune | 10 | 1 | 75% | 100% | 0 |
 
-- **A flat neutral can't serve both bulk and traces.** A flat 2 kg wiped a 2 kg trace in one cast. With the power gate, 1 kg or 0.5 kg made the opening deck lose 30% and 100% of commissions. A share of the pool scales itself.
-- **One-link runes can't aim.** A circle anchor plus its seal always takes the neutral share, so small, precise casts need multi-link anchors with tangents.
-- **The arc** runs 5, 3 and 2 terms. Takes shrink as a pool empties, so finishing in one cast needs a big reach ratio: the strongest late deck finishes in one term 35% of the time, and always within two.
-- **Mass grows slowly.** With rings at ×1.1, the strongest late deck took a median 13 terms to double the mud to 80 kg. Huge product late in a run needs boost motes or bigger multipliers.
-- **The opening deck can't overkill.** Finishing with 45 kg took about 25 terms and the whole stock, and only 10% got there.
-- **Raising resistance slows everything.** At base 10, even with a 25% share, the opening deck took a median 12 terms.
+- **A share of the pool trivializes weight.** With takes of 20% of a pool, a 180 kg boss pool falls in as many casts as 18 kg of mud, and emptying any pool needs only a ×5 multiplier. A flat take makes that ×18 for mud's water and ×180 for a boss pool.
+- **One-link runes can't aim.** A circle anchor plus its seal always takes the neutral 1 kg. At base 5, the old deck of 8 circles and 4 crescents took a median 18 terms and lost 30% of commissions; 4 circles and 8 crescents took 13; all crescents took 9. The elementless triangles matter too: without them the all-crescent deck took 16.
+- **Base resistance trades the gate against aiming.** Lower base gives more authority to aim: the standard deck takes 13 terms at base 5, 6–7 at 3.5 and 5 at 2.5. At 3.5, earth to air against medium earth still shrinks a two-rune sigil's take.
+- **The arc** runs 7, 4, 2 and 1 terms.
+- **Mass grows slowly.** With rings at ×1.1, extra product comes a little at a time. Huge product late in a run needs boost motes or bigger multipliers.
+- **The opening deck can't overkill.** Asked to finish with 45 kg, it never got there in 30 tries, spending the whole stock over about 26 terms.
 
 ## Instability and quintessence
 

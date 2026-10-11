@@ -128,15 +128,25 @@ const FOUR: Elemental[] = ['water', 'earth', 'air', 'fire']
 
 /**
  * The standard starting deck, 14 runes:
- * 8 circles, two of each element;
- * 4 crescents, one of each element, each with a link mote;
+ * 4 circles, one of each element;
+ * 8 crescents, two of each element, each with a link mote;
  * 2 elementless triangles with a link, a reach and a guard mote.
+ * Mostly two-link runes: a one-link anchor can only seal, never aim.
  */
 export function standardDeck(): RuneSpec[] {
+  return mixedDeck(1, 2)
+}
+
+/**
+ * A starting deck with this many circles and crescents of each element (the
+ * crescents carry a link mote), plus elementless triangles with a link, a
+ * reach and a guard mote.
+ */
+export function mixedDeck(circlesEach: number, crescentsEach: number, triangles = 2): RuneSpec[] {
   const deck: RuneSpec[] = []
-  for (const e of FOUR) for (let i = 0; i < 2; i++) deck.push({ body: 'circle', motes: [elementMote(e)] })
-  for (const e of FOUR) deck.push({ body: 'crescent', motes: [elementMote(e), LINK_MOTE] })
-  for (let i = 0; i < 2; i++) deck.push({ body: 'triangle', motes: [LINK_MOTE, REACH_MOTE, GUARD_MOTE] })
+  for (const e of FOUR) for (let i = 0; i < circlesEach; i++) deck.push({ body: 'circle', motes: [elementMote(e)] })
+  for (const e of FOUR) for (let i = 0; i < crescentsEach; i++) deck.push({ body: 'crescent', motes: [elementMote(e), LINK_MOTE] })
+  for (let i = 0; i < triangles; i++) deck.push({ body: 'triangle', motes: [LINK_MOTE, REACH_MOTE, GUARD_MOTE] })
   return deck
 }
 

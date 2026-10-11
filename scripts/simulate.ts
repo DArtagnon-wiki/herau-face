@@ -31,6 +31,7 @@ import { imbalance } from '../src/sim/table'
 import type { JoinKind, Rune, Sigil } from '../src/sim/types'
 import { ELEMENTALS, poolKey } from '../src/sim/alchemy'
 import { presetByKey } from '../src/sim/presets'
+import { mixedDeck } from '../src/sim/deck'
 import { DEFAULT_EQUATION } from '../src/sim/equation'
 
 const args = process.argv.slice(2)
@@ -75,6 +76,12 @@ const preset = arg('--deck') ? presetByKey(arg('--deck')!) : undefined
 if (arg('--deck') && !preset) throw new Error(`No deck called ${arg('--deck')}: try opening, mid or late.`)
 if (preset && !arg('--hand')) settings.handSize = preset.handSize
 const setup = preset ? preset.setup() : standardSetup()
+/** --mix C:K[:T] starts from C circles and K crescents of each element, plus T plain triangles (default 2). */
+const mix = arg('--mix')
+if (mix) {
+  const [c, k, t] = mix.split(':').map(Number)
+  setup.deck = mixedDeck(c, k, Number.isFinite(t) ? t : 2)
+}
 /** --power N sets every body's power; --links N adds N links to every body. */
 const power = arg('--power')
 const extraLinks = Number(arg('--links') ?? 0)
@@ -350,7 +357,7 @@ const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.le
 const f1 = (n: number) => n.toFixed(1)
 
 const eqNote = settings.equation ? ` · equation: base ${settings.equation.base}, step ×${settings.equation.step}, ring ×${settings.equation.ring}, neutral ${settings.equation.neutral} kg + ${settings.equation.share * 100}% of the pool${settings.equation.gate ? ', power gate' : ''}` : ''
-const forgeNote = eqNote + (preset ? ` · ${preset.name.toLowerCase()}` : '') + (power || extraLinks ? ` · power ${power ?? 'default'} · +${extraLinks} links` : '') + (farm ? ` · farming to ${farm} kg` : '')
+const forgeNote = eqNote + (mix ? ` · deck ${mix} (circles:crescents:triangles)` : '') + (preset ? ` · ${preset.name.toLowerCase()}` : '') + (power || extraLinks ? ` · power ${power ?? 'default'} · +${extraLinks} links` : '') + (farm ? ` · farming to ${farm} kg` : '')
 console.log(
   `${games} commissions${forgeNote} · hand ${settings.handSize} · ${settings.castsPerTerm || 'any number of'} sigil${settings.castsPerTerm === 1 ? '' : 's'} a term · flare ×${settings.flareScale} · stock ${settings.stock} · strain ${settings.strain ? 'on' : 'off'} · surplus Force ${settings.surplusForce ? 'multiplies' : 'capped'}${naive ? ' · naive player' : ''}${noOrganics ? ' · no organics' : ''}\n`,
 )

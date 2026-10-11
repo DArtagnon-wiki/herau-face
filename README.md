@@ -18,7 +18,7 @@ npm run simulate -- --links 4 --hand 10   # every body +4 links, a 10-rune hand 
 npm run simulate -- --deck late --farm 250  # grow the clay to 250 kg before finishing
 npm run simulate -- --trace 3             # print the first 3 commissions cast by cast
 npm run simulate -- --farm 400 --ignore-spec --planner  # how fast the opening deck can grow mass at all
-npm run simulate -- --equation --gate --neutral 0 --share 0.2   # the alchemical equation instead of Reach × Force
+npm run simulate -- --equation             # the alchemical equation instead of Reach × Force
 npm run build      # dist/index.html, one self-contained page
 ```
 
@@ -41,7 +41,7 @@ A rune is a body holding motes. The body sets power, links and bowls; the motes 
 | Reach mote | The sigil's Reach ×1.5 |
 | Guard mote | +4 Ward |
 
-The standard deck is 14 runes: 8 circles (two of each element), 4 crescents (one of each element, each with a link mote) and 2 elementless triangles (a link, a reach and a guard mote). The opening hand always holds a water and an earth; the rest of the shuffle is random.
+The standard deck is 14 runes: 4 circles (one of each element), 8 crescents (two of each element, each with a link mote) and 2 elementless triangles (a link, a reach and a guard mote). It used to be 8 circles and 4 crescents; under the equation a one-link anchor can only seal, never aim, so the deck leans on two-link runes. The opening hand always holds a water and an earth; the rest of the shuffle is random.
 
 **Links** are how many runes the anchor holds, so a circle anchor makes a two-rune sigil and a crescent or triangle anchor makes three. Links on joined runes do nothing until that rune anchors. A first version treated links as connections, so 2-link runes extended any sigil for free; the simulator showed typical hands building five- and six-rune sigils and finishing in one term.
 
@@ -123,20 +123,18 @@ The simulated player plans each term for big hands and high-link anchors: it tri
 
 - **Resistance** = the material's base × the pool's grade multiplier × the step factor for every quality flipped along the runepath (a diagonal flips two).
 - **Runepath:** from the anchor, walk the elemental square through the circumscribed and inscribed runes, easiest step first, ties going earth, fire, air, water. It ends at the seal, the last of those runes placed, whose element is the output.
-- **Input kg** = neutral take × min(1, power ÷ resistance) × (reach up ÷ reach down) ^ ln(1 + power ÷ resistance). The neutral take is a share of the source pool (20%), so traces give small takes. Reach up is the anchor plus side links, times reach motes; reach down is the anchor plus tangents, a join that touches at a point; power is the anchor plus circumscribes and inscribes.
+- **Input kg** = neutral take × min(1, power ÷ resistance) × (reach up ÷ reach down) ^ ln(1 + power ÷ resistance). The neutral take is a flat 1 kg, a property of the material, so a heavier pool takes more work. Reach up is the anchor plus side links, times reach motes; reach down is the anchor plus tangents, a join that touches at a point; power is the anchor plus circumscribes and inscribes.
 - **Output kg** = input × 1.1 per circumscribe ÷ 1.1 per inscribe. A boost mote adds 0.1 to its rune's multiplier. Element yields don't apply. A seal that's an inscribe of the anchor's element condenses.
 
-```sh
-npm run simulate -- --equation --gate --base 5 --step 2 --neutral 0 --share 0.2
-```
+Defaults: base 3.5, step ×2, a flat 1 kg take, power gate on. `--mix C:K[:T]` tries a starting deck of C circles and K crescents per element (and T plain triangles).
 
-Against mud with those numbers (60 commissions each; the opening deck 40):
+Against mud, 60 commissions each:
 
 | Deck | Hand | Median terms | Done in 1 term | In 2 or fewer | Median spent |
 | --- | --- | --- | --- | --- | --- |
-| Opening | 6 | 5 | 0% | 0% | 3 |
-| Mid-run | 7 | 3 | 0% | 23% | 0 |
-| Late-run | 8 | 2 | 0% | 63% | 0 |
-| Late-run, +1 link on every rune | 10 | 2 | 35% | 100% | 0 |
+| Opening | 6 | 7 | 0% | 0% | 3 |
+| Mid-run | 7 | 4 | 0% | 17% | 0 |
+| Late-run | 8 | 2 | 5% | 95% | 0 |
+| Late-run, +1 link on every rune | 10 | 1 | 75% | 100% | 0 |
 
-A flat neutral can't serve both bulk and traces: 2 kg wipes a 2 kg trace in one cast, and 1 kg or 0.5 kg makes the opening deck lose 30% and 100% of commissions. A one-link anchor plus its seal always takes the neutral share, so aiming small needs multi-link anchors with tangents.
+A one-link anchor plus its seal always takes the neutral 1 kg, so the deck mix matters. At base 5, 8 circles and 4 crescents took a median 18 terms and lost 30% of commissions; 4 and 8 took 13; all crescents took 9. A share-of-pool take instead (`--neutral 0 --share 0.2`) makes every pool fall in the same number of casts whatever it weighs.
