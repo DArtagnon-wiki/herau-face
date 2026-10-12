@@ -3,13 +3,10 @@ import { GRADE_NAMES, poolKey, totalKg } from './sim/alchemy'
 import { COMMISSIONS, actChances, chancesFor, cloneTarget, combatOf, effectsFor, elementOdds, constrained, inBand, shares, substanceName, within, type CommissionKey, type Range } from './sim/commission'
 import { BODY_LIST, BODY_NAMES, DEFAULT_FORGE, GEMS, MOTE_OPTIONS, buildDeck, cloneForge, moteEffect, moteFromKey, moteKey, moteName, type Forge, type RuneSpec } from './sim/deck'
 import { addRune, deckSpecs, editRune, findRune, removeRune, setComposition, setForge, setTarget } from './sim/sandbox'
-import { DEFAULT_SETTINGS, resistanceMult, cast, castsLeft, discardRunes, endTerm, invalidReason, newGame, payment, previewCast, previewEnd, sigilsPlayed, standardSetup, termsUsed, type CastOutcome, type CastPreview, type EndOutcome, type GameState, type Settings, type Setup, type TermOutcome } from './sim/game'
+import { DEFAULT_SETTINGS, resistanceMult, cast, castsLeft, discardRunes, endTerm, invalidReason, newGame, payment, previewCast, previewEnd, standardSetup, termsUsed, type CastOutcome, type CastPreview, type EndOutcome, type GameState, type Settings, type Setup, type TermOutcome } from './sim/game'
 import { REACH_PER_POWER, WARD_PER_POWER, candidatePools, canJoin, openLinks, resolve, type Resolution } from './sim/sigil'
-import { slumpTarget, tally } from './sim/table'
 import type { Body, Elemental, Grade, JoinKind, Pool, Rune, Sigil } from './sim/types'
-import type { TableEntry } from './sim/table'
-import { AFFINITY_VAR, bodyIcon, joinSketch, moteColor, runeSvg, sigilSvg, vesselSvg } from './ui/draw'
-import { AFFINITIES, SIDES, balance, metricsOf, type Measure } from './sim/metrics'
+import { AFFINITY_VAR, joinSketch, moteColor, runeSvg, sigilSvg, starSvg, vesselSvg, type StarStep } from './ui/draw'
 import { PRESETS, presetByKey } from './sim/presets'
 import { DEFAULT_EQUATION, runepath, sourcePools, take, terms, type Equation } from './sim/equation'
 
@@ -36,8 +33,6 @@ interface UI {
   flash: string
   /** Which collapsible panels are open, so re-rendering keeps them open. */
   open: Set<string>
-  /** Table metrics: what is on the table now, or everything played this commission. */
-  scope: 'table' | 'played'
   /** The per-term record, shown as text when the clipboard refuses it. */
   csv: string
   copied: boolean
@@ -62,7 +57,6 @@ const ui: UI = {
   marked: new Set(),
   flash: '',
   open: new Set(['sandbox']),
-  scope: 'table',
   csv: '',
   copied: false,
   radial: null,
@@ -87,14 +81,6 @@ const EQUATION_JOINS: JoinOption[] = [
 const joinList = (equation: boolean) => (equation ? EQUATION_JOINS : CLASSIC_JOINS)
 /** Whether the commission in progress (or the next one) uses the equation. */
 const eqOn = () => !!(ui.game ? ui.game.settings.equation : ui.settings.equation)
-
-/** How hard table imbalance bites: free imbalance, then points of imbalance per point of strain. */
-const STRAIN_LEVELS = [
-  { key: 'firm', label: 'Firm: 1 a point past 1', free: 1, rate: 1 },
-  { key: 'gentle', label: 'Gentle: 1 per 2 past 2', free: 2, rate: 2 },
-  { key: 'harsh', label: 'Harsh: 1 a point', free: 0, rate: 1 },
-]
-const strainKey = (s: Settings) => STRAIN_LEVELS.find((l) => l.free === (s.strainFree ?? 2) && l.rate === (s.strainRate ?? 2))?.key ?? 'firm'
 
 /** The neutral take options Tuning offers: a share of the source pool, or flat kilos. */
 const NEUTRAL_TAKES: { key: string; label: string; neutral: number; share: number }[] = [
@@ -302,7 +288,7 @@ function startView(): string {
           : `<p><b>Reach × Force.</b> Reach is how many kilos the sigil grabs; Force is how hard it pushes. Each change needs some Force (impure water to earth needs 5), and what converts is Reach × Force ÷ that need. They multiply, so give each new rune to whichever total is smaller.</p>`
       }
       <p><b>Purity.</b> Every element is impure, medium, pure or perfect. Purer elements resist change more, and when they stir in combat they do less harm: pure ones even lend you Ward. Anything a sigil transmutes comes out impure, so working the amalgam stirs it up. Inscribe the element the runepath is at to purify (one grade up, one more step of resistance); circumscribe it to adulterate (one grade down).</p>
-      <p class="fine">Cast sigils stay on the table. Keep it level, Earth against Air and Water against Fire, or the lopsidedness adds strain every term.</p>
+      <p class="fine">Cast sigils stay on the table around the amalgam, for show.</p>
     </section>
     ${tuningView()}
   </main>`
@@ -357,12 +343,10 @@ function tuningView(): string {
           : ''
       }
       <label>Combat <select id="tune-combat">${optS('purity', s.combat ?? 'purity', 'Purity effects')}${optS('moves', s.combat ?? 'purity', 'Element moves')}</select></label>
-      <label class="check"><input type="checkbox" id="tune-strain" ${s.strain ? 'checked' : ''}> Table imbalance adds strain</label>
       <label class="check"><input type="checkbox" id="tune-surplus" ${s.surplusForce ? 'checked' : ''}> Surplus Force multiplies Reach</label>
       <label>Flare size <select id="tune-flare">${opt(0.75, s.flareScale, '×0.75')}${opt(1, s.flareScale, '×1')}${opt(1.25, s.flareScale, '×1.25')}${opt(1.5, s.flareScale, '×1.5')}</select></label>
       <label>Flares grow <select id="tune-rise">${[0, 0.5, 1].map((v) => opt(v, s.flareRise ?? 0, v ? `+${v} a term` : 'no')).join('')}</select></label>
       <label>Flares on other moves <select id="tune-debuff">${[0, 2, 4, 6].map((v) => opt(v, s.debuffFlare ?? 0, v ? `${v}–${v + 2}` : 'none')).join('')}</select></label>
-      <label>Table strain <select id="tune-strain-level">${STRAIN_LEVELS.map((l) => optS(l.key, strainKey(s), l.label)).join('')}</select></label>
       <label>Quintessence <select id="tune-stock">${opt(60, s.stock)}${opt(100, s.stock)}${opt(140, s.stock)}</select></label>
       <label>Hand size <select id="tune-hand">${[4, 5, 6, 7, 8, 9, 10].map((v) => opt(v, s.handSize)).join('')}</select></label>
       <label>Sigils a term <select id="tune-casts">${opt(1, s.castsPerTerm)}${opt(2, s.castsPerTerm)}${opt(3, s.castsPerTerm)}${opt(0, s.castsPerTerm, 'Any number')}</select></label>
@@ -393,7 +377,6 @@ function intentView(g: GameState, end: EndOutcome, after: Pool[]): string {
     <div class="intent-side">
       <span class="label">Flare</span>
       <span class="intent-strain num">${i.flare}</span>
-      <span class="label">${g.settings.strain ? `strain ${end.strain ? `+${end.strain}` : '0'}` : 'strain off'}</span>
       ${i.ward ? `<span class="label good">Ward +${num(i.ward)}</span>` : ''}
     </div>
     ${
@@ -430,8 +413,7 @@ function describeCast(c: CastOutcome): string {
 }
 
 function describeEnd(t: TermOutcome): string {
-  const incoming = t.flare + t.strain
-  const fight = incoming > 0 ? ` ${t.flare ? `Flare ${t.flare}` : ''}${t.flare && t.strain ? ' + ' : ''}${t.strain ? `strain ${t.strain}` : ''}, Ward ${num(t.absorbed)}, paid ${num(t.paid)}.` : ''
+  const fight = t.flare > 0 ? ` Flare ${t.flare}, Ward ${num(t.absorbed)}, paid ${num(t.paid)}.` : ''
   return `Term ${t.term}: ${t.casts.length} sigil${t.casts.length === 1 ? '' : 's'} cast. ${t.intentNote}${fight}`.replace(/\s+/g, ' ').trim()
 }
 
@@ -463,23 +445,6 @@ function poolsView(g: GameState, sigil: Sigil | null, selected?: string): string
   </div>`
 }
 
-function balanceView(g: GameState, preview: CastPreview | null): string {
-  const t = tally(preview ? preview.table : g.table)
-  const bar = (a: Elemental, b: Elemental) => {
-    const total = Math.max(1, t[a] + t[b])
-    return `<div class="scale">
-      <span class="scale-end" style="--c:${AFFINITY_VAR[a]}">${ELEMENT_NAME[a]} <b class="num">${t[a]}</b></span>
-      <span class="scale-track"><span style="width:${(t[a] / total) * 100}%; background:${AFFINITY_VAR[a]}"></span><span style="width:${(t[b] / total) * 100}%; background:${AFFINITY_VAR[b]}"></span></span>
-      <span class="scale-end right" style="--c:${AFFINITY_VAR[b]}"><b class="num">${t[b]}</b> ${ELEMENT_NAME[b]}</span>
-    </div>`
-  }
-  return `<div class="balance">
-    <p class="label">Table balance${preview ? ' after this cast' : ''}</p>
-    ${bar('earth', 'air')}
-    ${bar('water', 'fire')}
-  </div>`
-}
-
 function composerView(g: GameState, sigil: Sigil | null, preview: CastPreview | null): string {
   const anchor = sigil?.anchor
   const used = sigil?.joins.length ?? 0
@@ -502,8 +467,8 @@ function composerView(g: GameState, sigil: Sigil | null, preview: CastPreview | 
     const e = preview.end
     const cost = !e
       ? ''
-      : e.flare + e.strain > 0
-        ? `<p class="cost">End the term after it: ${e.flare ? `flare ${e.flare}` : ''}${e.flare && e.strain ? ' + ' : ''}${e.strain ? `strain ${e.strain}` : ''} − Ward ${num(e.absorbed)} → <b class="${e.paid > 0 ? 'warn' : 'good'}">${e.paid > 0 ? `pay ${num(e.paid)}` : 'nothing to pay'}</b>${e.finished ? finishNote : ''}</p>`
+      : e.flare > 0
+        ? `<p class="cost">End the term after it: flare ${e.flare} − Ward ${num(e.absorbed)} → <b class="${e.paid > 0 ? 'warn' : 'good'}">${e.paid > 0 ? `pay ${num(e.paid)}` : 'nothing to pay'}</b>${e.finished ? finishNote : ''}</p>`
         : `<p class="cost">End the term after it: no instability.${e.finished ? finishNote : ''}</p>`
     stats = `
       <p class="route">${route}</p>
@@ -558,8 +523,8 @@ function equationStats(g: GameState, sigil: Sigil, preview: CastPreview): string
   const e = preview.end
   const cost = !e
     ? ''
-    : e.flare + e.strain > 0
-      ? `<p class="cost">End the term after it: ${e.flare ? `flare ${e.flare}` : ''}${e.flare && e.strain ? ' + ' : ''}${e.strain ? `strain ${e.strain}` : ''} − Ward ${num(e.absorbed)} → <b class="${e.paid > 0 ? 'warn' : 'good'}">${e.paid > 0 ? `pay ${num(e.paid)}` : 'nothing to pay'}</b>${e.finished ? finishNote : ''}</p>`
+    : e.flare > 0
+      ? `<p class="cost">End the term after it: flare ${e.flare} − Ward ${num(e.absorbed)} → <b class="${e.paid > 0 ? 'warn' : 'good'}">${e.paid > 0 ? `pay ${num(e.paid)}` : 'nothing to pay'}</b>${e.finished ? finishNote : ''}</p>`
       : `<p class="cost">End the term after it: no instability.${e.finished ? finishNote : ''}</p>`
   return `
       <p class="route">${route}</p>
@@ -764,15 +729,38 @@ function actionsView(g: GameState, sigil: Sigil | null, preview: CastPreview | n
 /** Said wherever ending the term would leave the amalgam in range. */
 const finishNote = ', and the commission\'s move leaves the amalgam in range: the commission finishes'
 
+/** Every cast of the commission in order, with the amalgam after it and after any term that ended there. */
+function levelSteps(g: GameState): StarStep[] {
+  const steps: StarStep[] = []
+  for (const t of g.history) {
+    t.casts.forEach((c) => steps.push({ sigil: c.sigil, term: t.term, after: c.pools }))
+    // The commission acts when the term ends; a term with no casts folds into the last cast before it.
+    const last = steps.at(-1)
+    if (last) last.endOfTerm = t.pools
+  }
+  g.casts.forEach((c) => steps.push({ sigil: c.sigil, term: g.term, after: c.pools }))
+  return steps
+}
+
 function endView(g: GameState): string {
   if (g.phase === 'compose') return ''
   const won = g.phase === 'won'
+  const c = COMMISSIONS[g.commission]
+  const steps = levelSteps(g)
+  const star = steps.length
+    ? `<figure class="end-star">${starSvg(g.start, steps, {
+        band: constrained(g.target.earth) ? g.target.earth : undefined,
+        title: won ? c.product : c.source.replace(/^The /, ''),
+        subtitle: `${kg(totalKg(g.pools))} · ${termsUsed(g)} term${termsUsed(g) === 1 ? '' : 's'}`,
+      })}<figcaption>Read clockwise from the top. Each point is a sigil you cast; between them, the amalgam after it: earth innermost, then water, air and fire, paler where less pure. The dotted rings are the earth band; ticks mark where terms ended.</figcaption></figure>`
+    : ''
   return `
   <div class="end" role="dialog" aria-modal="true" aria-labelledby="end-title">
     <div class="end-card">
       <p class="eyebrow">${won ? 'Commission complete' : 'Commission failed'}</p>
-      <h2 id="end-title">${won ? `${kg(totalKg(g.pools))} of ${COMMISSIONS[g.commission].product.toLowerCase()}` : 'The work came apart'}</h2>
-      <p>${won ? `The ${COMMISSIONS[g.commission].product.toLowerCase()} is set and paid for.` : `Your quintessence ran out at ${shareLine(g, g.pools)}.`}</p>
+      <h2 id="end-title">${won ? `${kg(totalKg(g.pools))} of ${c.product.toLowerCase()}` : 'The work came apart'}</h2>
+      ${star}
+      <p>${won ? `The ${c.product.toLowerCase()} is set and paid for.` : `Your quintessence ran out at ${shareLine(g, g.pools)}.`}</p>
       <dl class="end-stats">
         <div><dt>Terms</dt><dd class="num">${termsUsed(g)}</dd></div>
         <div><dt>Spent</dt><dd class="num">${num(g.spent)}</dd></div>
@@ -790,85 +778,23 @@ function endView(g: GameState): string {
 const ORDER = ['water', 'earth', 'air', 'fire', 'none']
 const BODY_ORDER: Body[] = ['circle', 'crescent', 'triangle']
 
-// ---------------------------------------------------------------------------
-// Table metrics
-
-const MEASURES: { key: Measure; label: string }[] = [
-  { key: 'runes', label: 'Runes' },
-  { key: 'motes', label: 'Gems' },
-  { key: 'sides', label: 'Sides' },
-]
-const signed = (n: number) => (n > 0 ? `+${n}` : String(n))
-
-function metricsView(g: GameState): string {
-  const sigils = ui.scope === 'table' ? g.table.map((e) => e.sigil) : sigilsPlayed(g)
-  const m = metricsOf(sigils)
-  const cell = (n: number) => `<td class="num ${n ? '' : 'zero'}">${n}</td>`
-  const rows = AFFINITIES.map((a) => {
-    const name = a === 'none' ? 'No element' : ELEMENT_NAME[a]
-    const gems = a === 'none' ? '<td class="zero">–</td>' : cell(m.motes[a])
-    return `<tr><th scope="row" style="color:${AFFINITY_VAR[a]}">${name}</th>${cell(m.runesBy[a])}${gems}${BODY_LIST.map((b) => cell(m.grid[a][b])).join('')}${cell(m.sidesBy[a])}</tr>`
-  }).join('')
-  const gemsTotal = Object.values(m.motes).reduce((x, y) => x + y, 0)
-  const totals = `<tr class="total"><th scope="row">Total</th>${cell(m.runes)}${cell(gemsTotal)}${BODY_LIST.map((b) => cell(m.bodies[b])).join('')}${cell(m.sides)}</tr>`
-  const bal = MEASURES.map((x) => ({ ...x, b: balance(m, x.key) }))
-  return `<details class="panel metrics" data-panel="metrics" ${ui.open.has('metrics') ? 'open' : ''}>
-    <summary>Table metrics <span class="summary-note num">· ${m.sigils} sigil${m.sigils === 1 ? '' : 's'}, ${m.runes} rune${m.runes === 1 ? '' : 's'}</span></summary>
-    <div class="seg two" role="group" aria-label="Count">
-      <button data-act="scope" data-scope="table" class="${ui.scope === 'table' ? 'is-on' : ''}" aria-pressed="${ui.scope === 'table'}">On the table</button>
-      <button data-act="scope" data-scope="played" class="${ui.scope === 'played' ? 'is-on' : ''}" aria-pressed="${ui.scope === 'played'}">Played this commission</button>
-    </div>
-    <div class="table-wrap">
-      <table class="mtable">
-        <thead><tr><th></th><th scope="col">Runes</th><th scope="col">Gems</th>${BODY_LIST.map((b) => `<th scope="col" title="${BODY_NAMES[b]}s">${bodyIcon(b)}<span class="sr">${BODY_NAMES[b]}s</span></th>`).join('')}<th scope="col">Sides</th></tr></thead>
-        <tbody>${rows}${totals}</tbody>
-      </table>
-    </div>
-    <div class="table-wrap">
-      <table class="mtable balance-table">
-        <thead><tr><th></th>${bal.map((x) => `<th scope="col">${x.label}</th>`).join('')}</tr></thead>
-        <tbody>
-          <tr><th scope="row">Earth − Air</th>${bal.map((x) => `<td class="num">${signed(x.b.earthAir)}</td>`).join('')}</tr>
-          <tr><th scope="row">Water − Fire</th>${bal.map((x) => `<td class="num">${signed(x.b.waterFire)}</td>`).join('')}</tr>
-          <tr class="total"><th scope="row">Imbalance</th>${bal.map((x) => `<td class="num">${x.b.total}</td>`).join('')}</tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="fine">Sides count circle 1, crescent ${SIDES.crescent}, triangle ${SIDES.triangle}. Gems counts every gem a rune holds; runes count by the first. Strain uses runes: every 2 points of imbalance past 2 add 1 a term.</p>
-    <div class="row"><button data-act="copy-csv" ${g.history.length || g.casts.length ? '' : 'disabled'}>${ui.copied ? 'Copied' : 'Copy the per-term record'}</button></div>
-    ${ui.csv ? `<textarea class="csv" id="csv-out" readonly rows="6" aria-label="Per-term record as CSV">${esc(ui.csv)}</textarea><p class="fine">Copying was blocked here, so the record is above: select it and copy.</p>` : ''}
-  </details>`
-}
-
 function sigilSummary(sg: Sigil): string {
   const name = (r: Rune) => `${r.affinity === 'none' ? '' : ELEMENT_NAME[r.affinity] + ' '}${BODY_NAMES[r.body].toLowerCase()}`
   const join: Record<JoinKind, string> = { circumscribe: 'circ', side: 'side', entwine: 'entwine', inscribe: 'insc', tangent: 'tangent' }
   return [name(sg.anchor), ...sg.joins.map((j) => `${join[j.kind]} ${name(j.rune)}`)].join(' + ')
 }
 
-/** One row per term: what was cast, what it cost, and every balance measure after it. */
+/** One row per term: what was cast, the shares after it, and what it cost. */
 function recordCsv(g: GameState): string {
   const els = ['water', 'earth', 'air', 'fire'] as const
-  const head = [
-    'term', 'sigils', 'casts', ...els.map((e) => `share_${e}`), 'flare', 'strain', 'ward', 'paid',
-    ...els.map((e) => `table_runes_${e}`), ...els.map((e) => `table_gems_${e}`), ...[...els, 'none'].map((e) => `table_sides_${e}`),
-    'table_circles', 'table_crescents', 'table_triangles', 'table_imb_runes', 'table_imb_gems', 'table_imb_sides',
-    ...els.map((e) => `played_gems_${e}`), 'played_circles', 'played_crescents', 'played_triangles', 'played_sides', 'played_imb_gems', 'played_imb_sides',
-  ]
-  const terms: { term: number; casts: CastOutcome[]; pools: Pool[]; table: TableEntry[]; end?: TermOutcome }[] = g.history.map((t) => ({ term: t.term, casts: t.casts, pools: t.pools, table: t.table, end: t }))
-  if (g.casts.length) terms.push({ term: g.term, casts: g.casts, pools: g.pools, table: g.table })
-  const played: Sigil[] = []
+  const head = ['term', 'sigils', 'casts', ...els.map((e) => `share_${e}`), 'flare', 'ward', 'paid']
+  const terms: { term: number; casts: CastOutcome[]; pools: Pool[]; end?: TermOutcome }[] = g.history.map((t) => ({ term: t.term, casts: t.casts, pools: t.pools, end: t }))
+  if (g.casts.length) terms.push({ term: g.term, casts: g.casts, pools: g.pools })
   const rows = terms.map((t) => {
-    played.push(...t.casts.map((c) => c.sigil))
-    const tm = metricsOf(t.table.map((e) => e.sigil))
-    const pm = metricsOf(played)
     const sh = shares(t.pools)
     return [
       t.term, `"${t.casts.map((c) => sigilSummary(c.sigil)).join(' | ')}"`, t.casts.length, ...els.map((e) => sh[e].toFixed(4)),
-      t.end?.flare ?? '', t.end?.strain ?? '', t.end ? num(t.end.ward) : num(g.termWard), t.end ? num(t.end.paid) : '',
-      ...els.map((e) => tm.runesBy[e]), ...els.map((e) => tm.motes[e]), ...[...els, 'none' as const].map((e) => tm.sidesBy[e]),
-      tm.bodies.circle, tm.bodies.crescent, tm.bodies.triangle, balance(tm, 'runes').total, balance(tm, 'motes').total, balance(tm, 'sides').total,
-      ...els.map((e) => pm.motes[e]), pm.bodies.circle, pm.bodies.crescent, pm.bodies.triangle, pm.sides, balance(pm, 'motes').total, balance(pm, 'sides').total,
+      t.end?.flare ?? '', t.end ? num(t.end.ward) : num(g.termWard), t.end ? num(t.end.paid) : '',
     ].join(',')
   })
   return [head.join(','), ...rows].join('\n')
@@ -1070,6 +996,8 @@ function historyView(g: GameState): string {
       .reverse()
       .map((t) => `<li><span class="h-end">${esc(describeEnd(t))}</span>${t.casts.length ? `<ul>${t.casts.map((c) => `<li>${esc(describeCast(c))}</li>`).join('')}</ul>` : ''}</li>`)
       .join('')}</ol>
+    <div class="row"><button data-act="copy-csv">${ui.copied ? 'Copied' : 'Copy the per-term record'}</button></div>
+    ${ui.csv ? `<textarea class="csv" id="csv-out" readonly rows="6" aria-label="Per-term record as CSV">${esc(ui.csv)}</textarea><p class="fine">Copying was blocked here, so the record is above: select it and copy.</p>` : ''}
   </details>`
 }
 
@@ -1078,7 +1006,6 @@ function gameView(g: GameState): string {
   const preview = sigil && g.phase === 'compose' && !ui.discarding && !invalidReason(g, sigil) ? previewCast(g, sigil, ui.poolKey) : null
   const end = previewEnd(g)
   const selected = preview?.cast.resolution.source ? poolKey(preview.cast.resolution.source) : undefined
-  const threatened = g.intent.moves.some((m) => m.kind === 'slump') ? (preview?.end ? preview.end.removed?.id : slumpTarget(g.table)?.id) : undefined
   const share = shares(g.pools).earth
   const name = substanceName(g.pools, g.target, g.commission)
   const qPct = Math.max(0, Math.min(100, (g.quintessence / g.settings.stock) * 100))
@@ -1101,14 +1028,13 @@ function gameView(g: GameState): string {
     ${intentView(g, end, preview?.end?.pools ?? preview?.cast.pools ?? end.pools)}
 
     <section class="vessel panel">
-      ${vesselSvg(g.pools, g.table, share, { previewShare: preview ? shares(preview.cast.pools).earth : undefined, selectedKey: selected, threatenedId: threatened, previewSigil: sigil, band: constrained(g.target.earth) ? g.target.earth : undefined })}
+      ${vesselSvg(g.pools, g.table, share, { previewShare: preview ? shares(preview.cast.pools).earth : undefined, selectedKey: selected, previewSigil: sigil, band: constrained(g.target.earth) ? g.target.earth : undefined })}
       <div class="vessel-read">
         <p class="substance ${name === COMMISSIONS[g.commission].product ? 'is-clay' : ''}">${name}</p>
         <p class="read-line"><span class="num">${kg(totalKg(g.pools))}</span> · target ${ELEMENT_ORDER.filter((e) => constrained(g.target[e])).map((e) => `${e} ${rangeText(g.target[e])}`).join(', ')}</p>
         <div class="tchips">${targetChips(g)}</div>
       </div>
       ${poolsView(g, sigil, selected)}
-      ${balanceView(g, preview)}
     </section>
 
     ${lastTermView(g)}
@@ -1117,7 +1043,6 @@ function gameView(g: GameState): string {
     ${actionsView(g, sigil, preview, end)}
     ${sandboxView(g)}
     ${historyView(g)}
-    ${metricsView(g)}
     ${tuningView()}
     ${endView(g)}
     ${radialView(g)}
@@ -1169,9 +1094,7 @@ function tapCard(id: number, rect?: DOMRect) {
 function readTuning() {
   const val = (id: string) => (document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)
   const s = ui.settings
-  const strainEl = val('tune-strain') as HTMLInputElement | null
   const surplusEl = val('tune-surplus') as HTMLInputElement | null
-  if (strainEl) s.strain = strainEl.checked
   if (surplusEl) s.surplusForce = surplusEl.checked
   const n = (id: string, fallback: number) => {
     const el = val(id)
@@ -1184,11 +1107,6 @@ function readTuning() {
   s.castsPerTerm = n('tune-casts', s.castsPerTerm)
   s.flareRise = n('tune-rise', s.flareRise ?? 0)
   s.debuffFlare = n('tune-debuff', s.debuffFlare ?? 0)
-  const level = STRAIN_LEVELS.find((l) => l.key === (val('tune-strain-level')?.value ?? strainKey(s)))
-  if (level) {
-    s.strainFree = level.free
-    s.strainRate = level.rate
-  }
   const combat = val('tune-combat')
   if (combat) s.combat = combat.value as 'purity' | 'moves'
   const rules = val('tune-rules')
@@ -1303,9 +1221,6 @@ root.addEventListener('click', (e) => {
       readTuning()
       startGame(ui.seed)
       window.scrollTo({ top: 0 })
-      break
-    case 'scope':
-      ui.scope = el.dataset.scope as 'table' | 'played'
       break
     case 'copy-csv': {
       if (!g) break

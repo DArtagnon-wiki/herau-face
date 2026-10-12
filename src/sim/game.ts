@@ -3,13 +3,11 @@ import { CLAY_TARGET, MUD_START, applyIntent, cloneTarget, inBand, materialResis
 import { DEFAULT_FORGE, buildDeck, cloneForge, makeRune, standardDeck, type Forge, type RuneSpec } from './deck'
 import { makeRng, type Rng } from './rng'
 import { canJoin, openLinks, resolve, runesOf, type Resolution } from './sigil'
-import { FREE_IMBALANCE, STRAIN_RATE, strain, type TableEntry } from './table'
+import type { TableEntry } from './table'
 import type { Pool, Rune, Sigil } from './types'
 import { resolveEquation, type Equation } from './equation'
 
 export interface Settings {
-  /** Whether a lopsided table adds instability each term. */
-  strain: boolean
   /** Whether Force past the requirement multiplies Reach. */
   surplusForce: boolean
   flareScale: number
@@ -30,10 +28,6 @@ export interface Settings {
   combat?: CombatMode
   /** Overrides for the purity effects (see PURITY_EFFECTS). */
   purity?: Partial<PurityEffects>
-  /** Imbalance on the table that costs nothing. */
-  strainFree?: number
-  /** Points of imbalance past the free amount per point of strain. */
-  strainRate?: number
   /** When set, sigils resolve by the alchemical equation instead of Reach × Force. */
   equation?: Equation | null
   /** Overrides for a boss's pressure (see MIRE_TUNING). */
@@ -41,7 +35,6 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  strain: true,
   surplusForce: true,
   flareScale: 1,
   stock: 100,
@@ -50,14 +43,11 @@ export const DEFAULT_SETTINGS: Settings = {
   castsPerTerm: 0,
   // Mud's pressure, tuned with the equation and the 4-circle, 8-crescent deck:
   // each elemental acts by its purity, flare moves of 13–16 scaled by the
-  // elemental's share, small flares on its other moves, and a point of strain
-  // for every point of imbalance past the first.
+  // elemental's share, and small flares on its other moves.
   flareMin: 13,
   flareMax: 16,
   flareRise: 0,
   debuffFlare: 4,
-  strainFree: 1,
-  strainRate: 1,
   equation: null,
 }
 
@@ -76,9 +66,7 @@ export interface EndOutcome {
   pools: Pool[]
   table: TableEntry[]
   intentNote: string
-  removed?: TableEntry
   flare: number
-  strain: number
   /** Ward gathered over the term's casts, plus any the commission's pure pools lend. */
   ward: number
   absorbed: number
@@ -235,8 +223,7 @@ export { canJoin }
 function endOf(state: Pick<GameState, 'intent' | 'pools' | 'table' | 'termWard' | 'settings' | 'target'>): EndOutcome {
   const acted = applyIntent(state.intent, state.pools, state.table)
   const flare = state.intent.flare
-  const tableStrain = strain(acted.table, state.settings.strain, state.settings.strainFree ?? FREE_IMBALANCE, state.settings.strainRate ?? STRAIN_RATE)
-  const incoming = flare + tableStrain
+  const incoming = flare
   // The commission's own pure pools lend Ward alongside the term's sigils.
   const ward = state.termWard + (state.intent.ward ?? 0)
   const absorbed = Math.min(ward, incoming)
@@ -245,9 +232,7 @@ function endOf(state: Pick<GameState, 'intent' | 'pools' | 'table' | 'termWard' 
     pools: acted.pools,
     table: acted.table,
     intentNote: acted.note,
-    removed: acted.removed,
     flare,
-    strain: tableStrain,
     ward,
     absorbed,
     paid,

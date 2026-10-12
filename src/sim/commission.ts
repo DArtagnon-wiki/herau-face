@@ -1,6 +1,6 @@
 import { ELEMENTALS, elementalKg, normalize, share, transfer } from './alchemy'
 import type { Rng } from './rng'
-import { slumpTarget, type TableEntry } from './table'
+import type { TableEntry } from './table'
 import type { Elemental, Grade, Pool } from './types'
 
 // Commissions: a source (the opponent) to bring to a target (the puzzle).
@@ -147,7 +147,7 @@ export function substanceName(pools: Pool[], target: Target = CLAY_TARGET, key: 
 // transmutes comes out impure, so working an amalgam stirs it up; purifying
 // is the defence.
 
-export type MoveKind = 'flare' | 'seep' | 'evaporate' | 'scorch' | 'slump' | 'stiffen' | 'bind' | 'slag' | 'taint' | 'settle'
+export type MoveKind = 'flare' | 'seep' | 'evaporate' | 'scorch' | 'stiffen' | 'bind' | 'slag' | 'taint' | 'settle'
 
 /**
  * How the commission fights. 'purity': every pool may stir, and its purity
@@ -175,16 +175,17 @@ export interface PurityEffects {
 }
 
 /**
- * Every element stirs half the time. Per 18 kg of a pool: impure flares 15;
+ * Every element stirs half the time. Per 17 kg of a pool: impure flares 15;
  * medium flares 5 and taints a tenth of itself to impure; pure and perfect
- * lend Ward 3.
+ * lend Ward 3. Tuned for a median of about 12 quintessence against mud with
+ * the opening deck.
  */
 export const PURITY_EFFECTS: PurityEffects = {
   chance: { earth: 0.5, water: 0.5, air: 0.5, fire: 0.5 },
   flare: [15, 5, 0, 0],
   ward: [0, 0, 3, 3],
   taint: [0, 0.1, 0, 0],
-  mass: 18,
+  mass: 17,
 }
 
 /** One elemental's move this term. */
@@ -227,7 +228,7 @@ export const ACT_CHANCE: number[] = [0.5, 0.25, 0.1, 0.03]
 
 export interface IntentSettings {
   flareScale: number
-  /** The small flare on moves that do something else (seep, evaporate, scorch, slump): this to this + 2. 0 for none. */
+  /** The small flare on moves that do something else (seep, evaporate, scorch): this to this + 2. 0 for none. */
   debuffFlare?: number
   /** A flare move's size before its elemental's share scales it: flareMin to flareMax. */
   flareMin?: number
@@ -293,10 +294,7 @@ interface MoveSpec {
 /** Each elemental's pool of moves, by commission. */
 const MOVES: Record<CommissionKey, Record<Elemental, MoveSpec[]>> = {
   mud: {
-    earth: [
-      { kind: 'flare', name: 'Tremor', weight: 2 },
-      { kind: 'slump', name: 'Slump', weight: 1, small: true },
-    ],
+    earth: [{ kind: 'flare', name: 'Tremor', weight: 1 }],
     water: [
       { kind: 'flare', name: 'Swell', weight: 2 },
       { kind: 'seep', name: 'Seep', weight: 1, small: true, kg: 0.5 },
@@ -342,10 +340,9 @@ export function actChance(pools: Pool[], e: Elemental, chances: number[] = ACT_C
 export const actChances = (pools: Pool[], chances: number[] = ACT_CHANCE): Record<Elemental, number> =>
   Object.fromEntries(ELEMENTALS.map((e) => [e, actChance(pools, e, chances)])) as Record<Elemental, number>
 
-function available(m: MoveSpec, pools: Pool[], table: TableEntry[]): boolean {
+function available(m: MoveSpec, pools: Pool[]): boolean {
   if (m.kind === 'seep' || m.kind === 'scorch') return elementalKg(pools, 'earth') >= 0.5
   if (m.kind === 'evaporate') return elementalKg(pools, 'water') >= 0.5
-  if (m.kind === 'slump') return !!slumpTarget(table)
   return true
 }
 
@@ -384,8 +381,6 @@ function buildMove(rng: Rng, e: Elemental, m: MoveSpec, term: number, pools: Poo
       const kg = Math.min(m.kg ?? 0.5, elementalKg(pools, 'earth'))
       return { ...base, kg, detail: `${fmtKg(kg)} of earth burns into impure fire.` }
     }
-    case 'slump':
-      return { ...base, detail: `The rune holding the table most level slips off; entwined runes hold.` }
     case 'stiffen':
       return { ...base, resistanceMult: t.stiffen, detail: `Resistance ×${t.stiffen} for every sigil this term.` }
     case 'bind':
@@ -497,14 +492,14 @@ function rollPurity(rng: Rng, term: number, pools: Pool[], settings: Settings, k
 
 const GRADE_WORD = ['impure', 'medium', 'pure', 'perfect']
 
-export function rollIntent(rng: Rng, term: number, pools: Pool[], table: TableEntry[], settings: Settings, key: CommissionKey = 'mud'): Intent {
+export function rollIntent(rng: Rng, term: number, pools: Pool[], _table: TableEntry[], settings: Settings, key: CommissionKey = 'mud'): Intent {
   if (combatOf(settings) === 'purity') return rollPurity(rng, term, pools, settings, key)
   const moves: Move[] = []
   const chances = chancesFor(settings, key)
   for (const e of ELEMENTALS) {
     if (elementalKg(pools, e) <= 0) continue
     if (rng.float() >= actChance(pools, e, chances)) continue
-    const specs = MOVES[key][e].filter((m) => available(m, pools, table))
+    const specs = MOVES[key][e].filter((m) => available(m, pools))
     const total = specs.reduce((sum, m) => sum + m.weight, 0)
     if (!total) continue
     let roll = rng.float() * total
@@ -526,14 +521,14 @@ export function rollIntent(rng: Rng, term: number, pools: Pool[], table: TableEn
  * amalgam: each elemental's chance to act times its moves' average flare.
  * What the simulated player weighs when it decides whether purifying pays.
  */
-export function expectedThreat(pools: Pool[], table: TableEntry[], settings: Settings, key: CommissionKey = 'mud', term = 1): number {
+export function expectedThreat(pools: Pool[], _table: TableEntry[], settings: Settings, key: CommissionKey = 'mud', term = 1): number {
   if (combatOf(settings) === 'purity') return poolOdds(pools, settings, key).reduce((sum, o) => sum + o.chance * (o.flare - o.ward), 0)
   let total = 0
   const chances = chancesFor(settings, key)
   for (const e of ELEMENTALS) {
     const p = actChance(pools, e, chances)
     if (!p) continue
-    const specs = MOVES[key][e].filter((m) => available(m, pools, table))
+    const specs = MOVES[key][e].filter((m) => available(m, pools))
     const w = specs.reduce((sum, m) => sum + m.weight, 0)
     if (!w) continue
     const strength = moveStrength(share(pools, e)) * settings.flareScale
@@ -548,13 +543,11 @@ export function expectedThreat(pools: Pool[], table: TableEntry[], settings: Set
 export interface IntentResult {
   pools: Pool[]
   table: TableEntry[]
-  removed?: TableEntry
   note: string
 }
 
 /** What the commission does at the end of a term: every move in turn. */
 export function applyIntent(intent: Intent, pools: Pool[], table: TableEntry[]): IntentResult {
-  let removed: TableEntry | undefined
   const notes: string[] = []
   for (const m of intent.moves) {
     const shift = (from: Elemental, to: Elemental, verb: string) => {
@@ -574,16 +567,8 @@ export function applyIntent(intent: Intent, pools: Pool[], table: TableEntry[]):
     } else if (m.kind === 'seep') shift('earth', 'water', 'seeped into')
     else if (m.kind === 'evaporate') shift('water', 'air', 'evaporated into')
     else if (m.kind === 'scorch') shift('earth', 'fire', 'burned into')
-    else if (m.kind === 'slump') {
-      const r = slumpTarget(table)
-      if (r) {
-        removed = r
-        table = table.filter((e) => e !== r)
-        notes.push('Slump: a sigil slipped off the table.')
-      } else notes.push('Slump: every sigil held.')
-    }
   }
-  return { pools, table, removed, note: notes.join(' ') }
+  return { pools, table, note: notes.join(' ') }
 }
 
 export const fmtKg = (kg: number) => `${kg.toFixed(1)} kg`

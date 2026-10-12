@@ -46,24 +46,24 @@ The standard deck is 14 runes: 4 circles (one of each element), 8 crescents (two
 
 **Links** are how many runes the anchor holds, so a circle anchor makes a two-rune sigil and a crescent or triangle anchor makes three. Links on joined runes do nothing until that rune anchors. A first version treated links as connections, so 2-link runes extended any sigil for free; the simulator showed typical hands building five- and six-rune sigils and finishing in one term.
 
-### Table metrics
+### The table and the level's star
 
-A Table metrics panel counts what's on the table, or everything played this commission, by element and body: runes, gems (every element mote, so a rune with two gems counts twice) and sides (circle 1, crescent 2, triangle 3). It shows Earth − Air, Water − Fire and total imbalance under each of the three measures; strain still uses runes. "Copy the per-term record" copies a CSV with one row per term: the sigil, what it cost, and every measure on the table and played so far. `npm run simulate` prints the same measures averaged over many commissions.
+Cast sigils stay on the table around the amalgam, for show only: table balance and the strain it added were dropped, because their only decision was whether to play a useless rune for its balance, and the point is to play every rune.
 
-With the standard deck, runes and gems always agree, because every elemental rune holds exactly one gem; they only diverge with multi-gem runes from the sandbox. Sides weight crescents and triangles more.
+When a commission ends, the end card draws its star: one point for every sigil cast, holding that sigil, and between the points the amalgam's composition after it (earth innermost, then water, air and fire, paler where less pure), so the level reads clockwise from twelve o'clock, start just right of the top and finish just left of it. Dotted rings mark the earth band and ticks mark where terms ended. "Copy the per-term record" in Term history copies a CSV of every term: the sigils, the shares after it, the flare, Ward and quintessence paid.
+
+![A level's star](docs/level-star.png)
 
 ### Sandbox
 
-The Sandbox panel changes the commission in progress, live: the mud's starting composition (kg and purity per element, which resets the amalgam) and the target bands; each body's power, links and bowls; the reach and guard mote values; any rune's body and motes, wherever it is in the deck; new runes straight into the hand; and removing runes. Restarting keeps every change, and "Restart with the standard deck" undoes them. "Decks along a run" loads the opening, mid-run or late-run deck, on the start screen too. The Tuning panel covers the rest: table strain, surplus Force, flare size, quintessence, hand size, sigils a term and discards.
+The Sandbox panel changes the commission in progress, live: the mud's starting composition (kg and purity per element, which resets the amalgam) and the target bands; each body's power, links and bowls; the reach and guard mote values; any rune's body and motes, wherever it is in the deck; new runes straight into the hand; and removing runes. Restarting keeps every change, and "Restart with the standard deck" undoes them. "Decks along a run" loads the opening, mid-run or late-run deck, on the start screen too. The Tuning panel covers the rest: rules, combat, surplus Force, flare size, quintessence, hand size, sigils a term and discards.
 
 ### Rules the doc leaves open
 
 - **Floating sigils and the table, both.** Each cast sigil takes effect, then stays in a slot around the amalgam.
-- **Table imbalance adds strain.** Runes on the table are tallied Earth against Air and Water against Fire. Every point of imbalance past the first adds 1 instability a term (Tuning has gentler and harsher settings).
 - **Surplus Force multiplies Reach.** This departs from the doc's formula, which caps Force at the requirement. Under the cap, the standard deck wins only half its commissions against mud (see below).
 - **Reach × Force.** Kilos converted = Reach × Force ÷ the Force the change needs. The preview spells this out, runes show what they'd add under the selected join, and a tip compares the best side link and best circumscribe left in hand.
 - **Inscribe.** An inscribed rune of the anchor's own element purifies the selected pool. Any other halves Reach, for small precise casts.
-- **Slump** knocks loose the table sigil whose loss leaves the table most lopsided. Entwined sigils hold.
 - **A commission finishes in range.** It ends the moment the amalgam is in range, whether a cast or the commission's own move at the end of a term put it there; that term's instability is paid first.
 
 ### Sigil art
@@ -86,7 +86,7 @@ Every sigil is drawn the way the design doc's notation reads (`src/ui/draw.ts`):
 | Force | 1 per point (anchor, circumscribes, inscribes) |
 | Ward | 1 per point (entwines), plus guard motes |
 | Chance to act | Each element, each term, by purity weighted by kilos: impure 50%, medium 25%, pure 10%, perfect 3% |
-| Mud's moves | Each element: a flare move (weight 2) or its own move (weight 1): earth slumps, water seeps 0.5 kg of earth into water, air evaporates 0.5 kg of water, fire scorches 0.5 kg of earth |
+| Mud's moves | Each element: a flare move (weight 2) or its own move (weight 1): earth only tremors, water seeps 0.5 kg of earth into water, air evaporates 0.5 kg of water, fire scorches 0.5 kg of earth |
 | Flare size | Flare moves 13–16, own moves 4–6, each × (0.4 + 1.2 × the element's share); no escalation |
 | Quintessence, hand, discards | 100, 6, 2 |
 | Sigils a term | As many as the hand allows |
@@ -163,7 +163,7 @@ With the equation and the 4-circle, 8-crescent deck, the old mud (flares of 11�
 | New | 8 (15) | 100% | 9 | 2 | 0 |
 | New, flares +½ a term | 12 (54) | 93% | 9 | 3 | 0 |
 
-Under the new mud, 3% of opening commissions cost nothing, 23% cost 1–5, 67% cost 6–15 and 7% cost 16–30. Flags: `--flare-min`, `--flare-max`, `--flare-rise`, `--debuff-flare`, `--strain-free`, `--strain-rate`, `--act`.
+Under the new mud, 3% of opening commissions cost nothing, 23% cost 1–5, 67% cost 6–15 and 7% cost 16–30. Flags: `--flare-min`, `--flare-max`, `--flare-rise`, `--debuff-flare`, `--act`. (Strain has since been dropped.)
 
 These numbers predate purity. Under purity-driven combat (next section) the opening deck spends a median of 13 (p90 33), mid-run 4 and late-run 0.
 
@@ -181,14 +181,14 @@ Everything a sigil transmutes comes out impure, so working the mud stirs it up a
 
 ### Purity effects (the default)
 
-Tuning's Combat switch picks between element moves (above) and purity effects, now the default (`--combat moves|purity` in the simulator). Under purity effects each element stirs half the time whatever its purity, and when it does, each of its pools does what its purity does, per 18 kg of it: impure flares 15; medium flares 5 and taints a tenth of itself to impure; pure and perfect lend Ward 3 against the term's flares. The intent panel lists what stirred and, below, each element's chance and what its pools would do next term.
+Tuning's Combat switch picks between element moves (above) and purity effects, now the default (`--combat moves|purity` in the simulator). Under purity effects each element stirs half the time whatever its purity, and when it does, each of its pools does what its purity does, per 17 kg of it: impure flares 15; medium flares 5 and taints a tenth of itself to impure; pure and perfect lend Ward 3 against the term's flares. The intent panel lists what stirred and, below, each element's chance and what its pools would do next term.
 
 | Fight | Deck | Result |
 | --- | --- | --- |
-| Mud | Opening | median 12 spent (p90 25); 18 (p90 41, 1% lost) if quoted per 15 kg |
-| Mud | Mid-run, late-run | median 5, 0 |
-| The Mire (per 35 kg, signature move a third of the time) | Late-run | 68% won, wins median 49 (p10 0, p90 85) |
-| The Mire | Mid-run, late+ | 0%, 93% |
+| Mud | Opening | median 12 spent (p90 27) |
+| Mud | Mid-run, late-run | median 4, 0 |
+| The Mire (per 35 kg, signature move a third of the time) | Late-run | 72% won, wins median 50 (p10 0, p90 88) |
+| The Mire | Mid-run, late+ | 0%, 95% |
 
 Purifying still rarely pays for the opening deck: its purifying sigils move 2–3 kg. `--free-purify` (no extra resistance step) changed nothing. Flags: `--purity-chance`, `--purity-mass`, `--purity-flare`, `--purity-ward`, `--purity-taint`, `--boss-chance`, `--boss-purity-mass`, `--boss-signature`.
 

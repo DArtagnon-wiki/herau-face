@@ -26,11 +26,10 @@ A roguelike deckbuilder in the spirit of Balatro: each term you compose sigils f
 | Mote | What gives a rune its nature. Gems set the element; ability motes add links, multiply Reach or add Ward. Earned motes fill or replace bowls to upgrade a rune for the rest of the run. |
 | Power | A rune's strength, set by its body. Each join turns it into Force, Reach or Ward. |
 | Links | How many runes a rune holds when it anchors a sigil. |
-| Sides | A count per body: circle 1, crescent 2, triangle 3. Tracked in the prototype as a candidate balance measure. |
 | Sigil | One cast: an anchor plus joined runes, up to the anchor's links. A term can hold several. |
 | Anchor | The rune a sigil is built from; its element is the source of the change. |
 | Join | How a rune attaches to the anchor: circumscribe, side link, entwine or inscribe. Each does something different. |
-| Table (leaning) | The diagram that collects every sigil cast in a commission; balance is measured from it. |
+| Table | The diagram that collects every sigil cast in a commission, around the amalgam. For show only. |
 | Class | A deck family defined by symmetry: Regular, Isosceles or Scalene. Parked while bodies and motes settle. |
 | Elemental | One of the four classical elements: Earth, Water, Air, Fire. |
 | Amalgam | The substance being worked, shown as one circle. Its constitution is the share and grade of each elemental. |
@@ -145,17 +144,17 @@ Links therefore compound, and the expected play is one or two high-link sigils a
 | Triangle anchor + two entwines | All-out defence: Ward 14, no change |
 | Anchor + inscribe of its own element | Purify |
 
-**Stabilizing patterns.** Entwines and guard motes give Ward directly. Balance across the table can add to it: whole-table symmetry, and opposites joined together, Earth with Air or Water with Fire.
+**Stabilizing patterns.** Entwines and guard motes give Ward directly.
 
-## The table (leaning)
+## The table
 
-Sigils don't vanish after a term. Each one takes effect, then joins a growing diagram that records the whole commission, and ideals like balance are calculated from what is actually on it.
+Sigils don't vanish after a term. Each one takes effect, then joins the table around the amalgam, and the table is for show only.
 
-- **The table is the vessel circle.** It has a boundary, so running out of room becomes its own pressure.
-- **Balance must be legible.** It comes from a few properties players can judge by eye, such as mirror symmetry, opposite pairs and filled quadrants, never an opaque geometric score.
-- **Commissions attack the table.** Disruptions unravel joins, slide sigils, scorch runes or lock them in place, so defence is partly spatial. Entwined sigils resist displacement.
-- **Imbalance feeds instability.** In the prototype, runes on the table are tallied Earth against Air and Water against Fire, and every point of imbalance past the first adds 1 instability a term.
-- **Which measure of balance is open.** The prototype tracks three on the table and across the commission: runes by element, elemental motes, and sides (circle 1, crescent 2, triangle 3), alongside how many of each body were played. Strain still counts runes.
+- **Balance was dropped.** Runes on the table were tallied Earth against Air and Water against Fire, and imbalance added strain each term. Its only decision was whether to play a useless rune for its balance; the point is to play every rune, so balance, strain and the slump that targeted it are gone.
+- **Seeing the runes on the table is fun,** so the table stays as the commission's growing diagram.
+- **Each level ends with its star.** The end card draws a star with one point for every sigil cast, holding that sigil, and between the points the amalgam's composition after it: earth innermost, then water, air and fire, paler where less pure. The level reads clockwise from twelve o'clock, the start just right of the top and the finish just left of it; dotted rings mark the earth band and ticks mark where terms ended.
+
+![The star of a mud commission: seven points holding seven sigils, the composition between them turning from half water to mostly earth, read clockwise](docs/level-star.png)
 
 ## Classes
 
@@ -364,7 +363,7 @@ The commission's flares are the main threat. Ward from the term's sigils absorbs
 | Early commission, a few upgrades | Rarely anything |
 | Boss, inadequate deck | Half to three quarters of the stock |
 
-In the prototype, under the equation with the 4-circle, 8-crescent deck, a simulated player pays a median of 13 against mud (90th percentile 33) and finishes every commission: 7% cost nothing, 17% cost 1–5, 35% cost 6–15, 29% cost 16–30, 10% cost 31–50 and 2% more. The mid-run deck pays a median of 4 and the late-run deck nothing.
+In the prototype, under the equation with the 4-circle, 8-crescent deck, a simulated player pays a median of 12 against mud (90th percentile 27) and finishes every commission: 13% cost nothing, 17% cost 1–5, 35% cost 6–15, 29% cost 16–30, 5% cost 31–50 and 1% more. The mid-run deck pays a median of 4 and the late-run deck nothing.
 
 A partial refill after each boss (proposed) keeps a weak deck's slide from feeling like a slow death sentence.
 
@@ -372,15 +371,15 @@ A partial refill after each boss (proposed) keeps a weak deck's slide from feeli
 
 The prototype now defaults to purity effects. Each element stirs with its own chance, the same whatever its purity: 50% each in the prototype. When it stirs, every one of its pools, an element at one purity, does what its purity does, scaled by its kilos:
 
-| Purity | When its element stirs, per 18 kg of the pool |
+| Purity | When its element stirs, per 17 kg of the pool |
 | --- | --- |
 | Impure | Flare 15 |
 | Medium | Flare 5, and a tenth of the pool turns impure |
 | Pure, perfect | Lends Ward 3 against this term's flares |
 
 - **The amalgam's purity is its threat.** Mud's 18 kg of impure water flares 15 half the time; its medium earth flares 5 half the time and slowly sours, so a long commission grows more volatile.
-- **The reference mass sets the pressure.** Quoted per 15 kg, the opening deck paid a median of 18 against mud (p90 41) and lost 1% of commissions. Per 18 kg it pays 12 (p90 25), the mid-run deck 5 and the late-run deck 0.
-- **The Mire** quotes its effects per 35 kg, and when its earth, water or fire stirs it makes its signature move a third of the time. The late-run deck wins 68% (wins cost a median of 49, p10 0, p90 85), the mid-run deck never wins, and late+ wins 93%.
+- **The reference mass sets the pressure.** Quoted per 15 kg, the opening deck paid a median of 18 against mud (p90 41) and lost 1% of commissions. Per 17 kg, now that table strain is gone, it pays 12 (p90 27), the mid-run deck 4 and the late-run deck 0.
+- **The Mire** quotes its effects per 35 kg, and when its earth, water or fire stirs it makes its signature move a third of the time. The late-run deck wins 72% (wins cost a median of 50, p10 0, p90 88), the mid-run deck never wins, and late+ wins 95%.
 - **Purifying still barely pays for the opening deck.** Purifying cuts a pool's flare from 15 to 5, and from medium to pure turns flare into Ward, but an opening purifying sigil moves 2–3 kg, worth about one flare a term, and the water is about to be transmuted anyway. Waiving purifying's extra step of resistance changed nothing.
 
 The element moves below, the first version, remain an option in Tuning.
@@ -389,7 +388,7 @@ Under element moves, each element in the amalgam may act each term, and the less
 
 | Element | Flare move | Its own move, with a small flare of 4–6 |
 | --- | --- | --- |
-| Earth | Tremor | Slump: knocks the sigil holding the table most level off it |
+| Earth | Tremor | None: earth only tremors since balance was dropped |
 | Water | Swell | Seep: 0.5 kg of earth into impure water |
 | Air | Gust | Evaporate: 0.5 kg of water into impure air |
 | Fire | Flare | Scorch: 0.5 kg of earth into impure fire |
@@ -531,13 +530,12 @@ Circumgician is built on Pixi.js, TypeScript and Vite, and most of its look is g
 
 | Question | Current proposal |
 | --- | --- |
-| Which measure of table balance: runes, elemental motes, or sides? | The prototype tracks all three; strain counts runes for now |
 | How do symmetry classes map onto bodies and motes? | Open |
 | How many sigils a term, and how big a hand? | Settled: as many as the hand allows, with one or two high-link sigils expected. Hand size is open: 6 in the prototype, where 5 was too punishing against mud with traces |
 | What purity are trace elementals? | Prototype: medium, so one basic sigil removes about 1 kg and lands in band |
 | Do links on joined runes ever count? | No, only the anchor's, so starting sigils stay at two or three runes |
 | Floating sigils, the table, or both? | Both: each sigil takes effect, then stays on the table |
-| Should table imbalance itself cause instability? | Yes, on top of the flares a commission rolls |
+| Should table imbalance itself cause instability? | Settled: no. Table balance was dropped; the table is for show |
 | How big are the quintessence stock and flares? | Prototype: a stock of 100; mud's flare moves draw 13–16 and its other moves 4–6, scaled by the acting element's share; the Mire's draw 14–18 |
 | How is quintessence restored? | A partial refill after each boss; small refills from efficient commissions |
 | How does product convert to reward? | Currency in proportion to product made |

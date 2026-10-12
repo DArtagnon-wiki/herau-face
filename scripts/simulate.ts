@@ -4,7 +4,7 @@
 // sigil while that beats ending the term, then ends it.
 //
 //   npm run simulate                       default settings
-//   npm run simulate -- --games 500 --hand 6 --casts 2 --flare 1.25 --no-strain --capped --naive
+//   npm run simulate -- --games 500 --hand 6 --casts 2 --flare 1.25 --capped --naive
 //   npm run simulate -- --power 8 --links 2 --hand 8   a stronger deck: every body's power and extra links
 
 import { totalKg } from '../src/sim/alchemy'
@@ -18,16 +18,13 @@ import {
   newGame,
   previewCast,
   previewEnd,
-  sigilsPlayed,
   termsUsed,
   type EndOutcome,
   type GameState,
   type Settings,
   standardSetup,
 } from '../src/sim/game'
-import { balance, metricsOf } from '../src/sim/metrics'
 import { candidatePools, canJoin } from '../src/sim/sigil'
-import { imbalance } from '../src/sim/table'
 import type { Grade, JoinKind, Rune, Sigil } from '../src/sim/types'
 import { ELEMENTALS, poolKey } from '../src/sim/alchemy'
 import { presetByKey } from '../src/sim/presets'
@@ -47,12 +44,9 @@ const settings: Settings = {
   stock: Number(arg('--stock') ?? DEFAULT_SETTINGS.stock),
   handSize: Number(arg('--hand') ?? DEFAULT_SETTINGS.handSize),
   castsPerTerm: Number(arg('--casts') ?? DEFAULT_SETTINGS.castsPerTerm),
-  strain: !args.includes('--no-strain'),
   surplusForce: !args.includes('--capped'),
-  /** --debuff-flare N: a small flare on seep, harden and slump turns. --strain-free, --strain-rate: table strain. */
+  /** --debuff-flare N: a small flare on seep, evaporate and scorch turns (element moves). */
   debuffFlare: Number(arg('--debuff-flare') ?? DEFAULT_SETTINGS.debuffFlare ?? 0),
-  strainFree: Number(arg('--strain-free') ?? DEFAULT_SETTINGS.strainFree ?? 2),
-  strainRate: Number(arg('--strain-rate') ?? DEFAULT_SETTINGS.strainRate ?? 2),
   /** --flare-min, --flare-max, --flare-rise: mud's flare moves. */
   flareMin: Number(arg('--flare-min') ?? DEFAULT_SETTINGS.flareMin ?? 11),
   flareMax: Number(arg('--flare-max') ?? DEFAULT_SETTINGS.flareMax ?? 15),
@@ -194,7 +188,7 @@ const threat = (state: GameState, end: EndOutcome) => (naive || !threatWeight ? 
 
 function evalEnd(state: GameState, end: EndOutcome): number {
   if (ignoreSpec) return farmBonus(end.pools) - end.paid * 3 - threat(state, end)
-  return farmBonus(end.pools) - miss(end.pools, state.target) * missWeight - centering(state, end.pools) * 2 - end.paid * (naive ? 0 : 3) - imbalance(end.table) * 0.3 - threat(state, end)
+  return farmBonus(end.pools) - miss(end.pools, state.target) * missWeight - centering(state, end.pools) * 2 - end.paid * (naive ? 0 : 3) - threat(state, end)
 }
 
 /** Every sigil the hand can make, within the link limits. */
@@ -433,13 +427,18 @@ const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.le
 const f1 = (n: number) => n.toFixed(1)
 
 const eqNote = settings.equation ? ` · equation: base ${settings.equation.base}, step ×${settings.equation.step}, ring ×${settings.equation.ring}, neutral ${settings.equation.neutral} kg + ${settings.equation.share * 100}% of the pool${settings.equation.gate ? ', power gate' : ''}` : ''
- const mudNote = ` · flares ${settings.flareMin}–${settings.flareMax} +${settings.flareRise}/term · act ${(settings.actChance ?? ACT_CHANCE).join('/')} · combat ${settings.combat ?? 'purity'}${settings.purity ? ' ' + JSON.stringify(settings.purity) : ''} · debuff flare ${settings.debuffFlare} · strain past ${settings.strainFree}, 1 per ${settings.strainRate}`
+ const mudNote = ` · flares ${settings.flareMin}–${settings.flareMax} +${settings.flareRise}/term · act ${(settings.actChance ?? ACT_CHANCE).join('/')} · combat ${settings.combat ?? 'purity'}${settings.purity ? ' ' + JSON.stringify(settings.purity) : ''} · debuff flare ${settings.debuffFlare}`
  const bossNote = commission !== 'mud' ? ` · ${COMMISSIONS[commission].source} ${JSON.stringify(settings.boss)}${arg('--boss-mass') ? ` ×${arg('--boss-mass')} mass` : ''}` : ''
 const forgeNote = bossNote + eqNote + mudNote + (mix ? ` · deck ${mix} (circles:crescents:triangles)` : '') + (preset ? ` · ${preset.name.toLowerCase()}` : '') + (power || extraLinks ? ` · power ${power ?? 'default'} · +${extraLinks} links` : '') + (farm ? ` · farming to ${farm} kg` : '')
 console.log(
-  `${games} commissions${forgeNote} · hand ${settings.handSize} · ${settings.castsPerTerm || 'any number of'} sigil${settings.castsPerTerm === 1 ? '' : 's'} a term · flare ×${settings.flareScale} · stock ${settings.stock} · strain ${settings.strain ? 'on' : 'off'} · surplus Force ${settings.surplusForce ? 'multiplies' : 'capped'}${naive ? ' · naive player' : ''}${noOrganics ? ' · no organics' : ''}\n`,
+  `${games} commissions${forgeNote} · hand ${settings.handSize} · ${settings.castsPerTerm || 'any number of'} sigil${settings.castsPerTerm === 1 ? '' : 's'} a term · flare ×${settings.flareScale} · stock ${settings.stock} · surplus Force ${settings.surplusForce ? 'multiplies' : 'capped'}${naive ? ' · naive player' : ''}${noOrganics ? ' · no organics' : ''}\n`,
 )
 const runs = Array.from({ length: games }, (_, i) => play(1000 + i))
+/** --dump FILE writes the first commission's final state as JSON, for drawing its star. */
+if (arg('--dump')) {
+  const { writeFileSync } = await import('node:fs')
+  writeFileSync(arg('--dump')!, JSON.stringify(runs.map((r) => r.state).slice(0, Number(arg('--dump-count') ?? 1))))
+}
 runs.slice(0, traceN).forEach((r, i) => {
   console.log(`commission ${i + 1}: ${r.state.phase}, ${termsUsed(r.state)} terms`)
   trace(r.state)
@@ -462,14 +461,3 @@ console.log(`finished in 1 term ${Math.round((100 * won.filter((r) => termsUsed(
 console.log(buckets.map(([label, f]) => `${label}: ${Math.round((100 * spent.filter(f).length) / games)}%`).join('  '))
 console.log(`sigils a term ${f1(mean(runs.map((r) => r.casts / Math.max(1, termsUsed(r.state)))))} · defence-only sigils ${f1(mean(runs.map((r) => r.wardOnly)))} · purifying ${f1(mean(runs.map((r) => r.purified)))} · discards used ${f1(mean(runs.map((r) => r.discardsUsed)))}`)
 
-// Table metrics at the end of each commission, averaged.
-const played = runs.map((r) => metricsOf(sigilsPlayed(r.state)))
-const onTable = runs.map((r) => metricsOf(r.state.table.map((e) => e.sigil)))
-console.log('\nPer commission, played:')
-console.log(`  bodies   circles ${f1(mean(played.map((m) => m.bodies.circle)))} · crescents ${f1(mean(played.map((m) => m.bodies.crescent)))} · triangles ${f1(mean(played.map((m) => m.bodies.triangle)))} · sides ${f1(mean(played.map((m) => m.sides)))}`)
-console.log(`  gems     water ${f1(mean(played.map((m) => m.motes.water)))} · earth ${f1(mean(played.map((m) => m.motes.earth)))} · air ${f1(mean(played.map((m) => m.motes.air)))} · fire ${f1(mean(played.map((m) => m.motes.fire)))}`)
-console.log('Imbalance on the table at the end (Earth − Air, Water − Fire, total):')
-for (const measure of ['runes', 'motes', 'sides'] as const) {
-  const b = onTable.map((m) => balance(m, measure))
-  console.log(`  ${(measure === 'motes' ? 'gems' : measure).padEnd(6)} ${f1(mean(b.map((x) => x.earthAir)))}, ${f1(mean(b.map((x) => x.waterFire)))}, ${f1(mean(b.map((x) => x.total)))}`)
-}

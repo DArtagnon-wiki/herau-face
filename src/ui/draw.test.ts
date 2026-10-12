@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { elementMote, LINK_MOTE, makeRune } from '../sim/deck'
 import type { Body, Elemental, JoinKind, Rune, Sigil } from '../sim/types'
-import { sigilBody } from './draw'
+import { sigilBody, starSvg } from './draw'
 
 let id = 1
 const rune = (body: Body, e?: Elemental, links = 2): Rune =>
@@ -38,5 +38,17 @@ describe('drawing a sigil', () => {
     const s = sigil(rune('triangle', 'earth', 4), ['circumscribe', rune('crescent', 'air')], ['circumscribe', rune('circle', 'fire')], ['circumscribe', rune('triangle', 'earth')], ['side', rune('circle', 'water')])
     expect(sigilBody(s).radius).toBeGreaterThan(60)
     expect(sigilBody(s, 0.42, 25).radius).toBeLessThanOrEqual(25.01)
+  })
+
+  it('draws a level as a star with one point and one sigil per cast, each star clipped on its own', () => {
+    const pools = [{ elemental: 'earth' as const, grade: 1 as const, kg: 18 }, { elemental: 'water' as const, grade: 0 as const, kg: 18 }]
+    const s = sigil(rune('crescent', 'water'), ['circumscribe', rune('circle', 'earth')])
+    const steps = [0, 1, 2, 3, 4].map((i) => ({ sigil: s, term: 1 + Math.floor(i / 2), after: pools, ...(i % 2 ? { endOfTerm: pools } : {}) }))
+    const a = starSvg(pools, steps)
+    const b = starSvg(pools, steps.slice(0, 1))
+    // The star outline has a tip per sigil: five Ls for tips plus five for valleys after the first M.
+    expect(a.match(/<g transform="translate/g)).toHaveLength(5)
+    expect(a.match(/class="star-term"/g)).toHaveLength(2)
+    expect(a.match(/clipPath id="([^"]+)"/)![1]).not.toBe(b.match(/clipPath id="([^"]+)"/)![1])
   })
 })

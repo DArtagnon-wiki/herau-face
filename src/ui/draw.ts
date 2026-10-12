@@ -495,6 +495,150 @@ export function vesselSvg(pools: Pool[], table: TableEntry[], earth: number, opt
   return `<svg class="vessel-svg" viewBox="-164 -164 328 328" role="img" aria-label="The amalgam and the table">${parts.join('')}</svg>`
 }
 
+// ---------------------------------------------------------------------------
+// The level's star: drawn when a commission ends. One point for every sigil
+// cast, holding that sigil, and between the points the amalgam's composition
+// after it, so the level reads clockwise from twelve o'clock: the start just
+// right of the top, the finish just left of it.
+
+/** One cast in the level, in order, and the amalgam after it. */
+export interface StarStep {
+  sigil: Sigil
+  term: number
+  /** The amalgam right after this cast. */
+  after: Pool[]
+  /** The amalgam after the commission acted, when the term ended after this cast. */
+  endOfTerm?: Pool[]
+}
+
+export interface StarOptions {
+  /** The earth band, marked as two dotted rings. */
+  band?: Range
+  title?: string
+  subtitle?: string
+}
+
+const PURITY_OPACITY = [0.38, 0.62, 0.86, 1]
+
+/** An annular sector from radius r0 to r1, between two angles (radians). */
+function annular(r0: number, r1: number, a0: number, a1: number): string {
+  const p = (r: number, a: number) => `${f(Math.cos(a) * r)} ${f(Math.sin(a) * r)}`
+  const large = a1 - a0 > Math.PI ? 1 : 0
+  return `M ${p(r1, a0)} A ${f(r1)} ${f(r1)} 0 ${large} 1 ${p(r1, a1)} L ${p(r0, a1)} A ${f(r0)} ${f(r0)} 0 ${large} 0 ${p(r0, a0)} Z`
+}
+
+/** The composition as stacked rings from r0 outward: earth innermost, then water, air, fire, each split paler to purer. */
+function compositionBands(pools: Pool[], r0: number, r1: number, a0: number, a1: number): string {
+  const total = pools.reduce((n, p) => n + p.kg, 0)
+  if (total <= 0 || a1 <= a0) return ''
+  let r = r0
+  const out: string[] = []
+  for (const e of ELEMENTALS) {
+    for (const p of pools.filter((q) => q.elemental === e && q.kg > 0).sort((a, b) => a.grade - b.grade)) {
+      const dr = ((r1 - r0) * p.kg) / total
+      out.push(`<path d="${annular(r, r + dr, a0, a1)}" fill="${AFFINITY_VAR[e]}" fill-opacity="${PURITY_OPACITY[p.grade]}"/>`)
+      r += dr
+    }
+  }
+  return out.join('')
+}
+
+let starCount = 0
+
+export function starSvg(start: Pool[], steps: StarStep[], opts: StarOptions = {}): string {
+  const clip = `star-notches-${++starCount}`
+  const n = Math.max(1, steps.length)
+  const R = 182
+  const ri = R * (n <= 2 ? 0.42 : n <= 4 ? 0.5 : n <= 8 ? 0.56 : 0.62)
+  const top = -Math.PI / 2
+  const step = (Math.PI * 2) / n
+  const tip = (k: number) => top + (k + 0.5) * step
+  const valley = (k: number) => tip(k) + step / 2
+  const at = (r: number, a: number): Pt => [Math.cos(a) * r, Math.sin(a) * r]
+  // Each point spans at most 80°; with one or two sigils the gaps between points become arcs.
+  const w = Math.min(step / 2, (40 * Math.PI) / 180)
+  const star =
+    Array.from({ length: n }, (_, k) => {
+      const [lx, ly] = at(ri, tip(k) - w)
+      const [tx, ty] = at(R, tip(k))
+      const [rx, ry] = at(ri, tip(k) + w)
+      const gap = step - 2 * w
+      const arc = gap > 1e-6 ? ` A ${f(ri)} ${f(ri)} 0 ${gap > Math.PI ? 1 : 0} 1 ${f(at(ri, tip(k) + w + gap)[0])} ${f(at(ri, tip(k) + w + gap)[1])}` : ''
+      return `${k ? 'L' : 'M'} ${f(lx)} ${f(ly)} L ${f(tx)} ${f(ty)} L ${f(rx)} ${f(ry)}${arc}`
+    }).join(' ') + ' Z'
+  const circle = `M ${-R} 0 A ${R} ${R} 0 1 1 ${R} 0 A ${R} ${R} 0 1 1 ${-R} 0 Z`
+
+  // The composition, segment by segment around the circle.
+  const bands: string[] = []
+  const ticks: string[] = []
+  bands.push(compositionBands(start, ri, R, top, tip(0)))
+  steps.forEach((st, k) => {
+    const a0 = tip(k)
+    const a1 = k === n - 1 ? top + Math.PI * 2 : tip(k + 1)
+    const mid = k === n - 1 ? a0 + (a1 - a0) / 2 : valley(k)
+    if (st.endOfTerm) {
+      bands.push(compositionBands(st.after, ri, R, a0, mid))
+      bands.push(compositionBands(st.endOfTerm, ri, R, mid, a1))
+      const [x0, y0] = at(R + 2, mid)
+      const [x1, y1] = at(R + 9, mid)
+      const [tx, ty] = at(R + 17, mid)
+      ticks.push(`<line x1="${f(x0)}" y1="${f(y0)}" x2="${f(x1)}" y2="${f(y1)}" stroke="var(--gilt)" stroke-width="1.2"/><text x="${f(tx)}" y="${f(ty)}" class="star-term">${st.term}</text>`)
+    } else bands.push(compositionBands(st.after, ri, R, a0, a1))
+  })
+
+  // The earth band as two dotted rings, where the earth's edge should end up.
+  const rings = opts.band
+    ? [opts.band.min, opts.band.max]
+        .filter((x) => x > 0 && x < 1)
+        .map((x) => `<circle r="${f(ri + (R - ri) * x)}" fill="none" stroke="var(--gilt-bright)" stroke-opacity="0.8" stroke-width="1" stroke-dasharray="1.5 3"/>`)
+        .join('')
+    : ''
+
+  // Each sigil, fitted into its point: the biggest circle on the point's axis
+  // that stays inside the star and clear of the title in the middle.
+  const hub = ri * 0.55
+  const segDist = ([px, py]: Pt, [ax, ay]: Pt, [bx, by]: Pt) => {
+    const [dx, dy] = [bx - ax, by - ay]
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)))
+    return Math.hypot(px - ax - t * dx, py - ay - t * dy)
+  }
+  // Work on the point at angle 0; every point is the same shape.
+  const T: Pt = [R, 0]
+  const V: Pt = at(ri, w)
+  const Tn: Pt = w < step / 2 ? at(ri, step - w) : at(R, step)
+  let fit = { r: (ri + R) / 2, rho: 0 }
+  for (let i = 0; i <= 60; i++) {
+    const r = hub + ((R - hub) * i) / 60
+    const P: Pt = [r, 0]
+    const rho = Math.min(segDist(P, T, V), segDist(P, V, Tn), r - hub - 2)
+    if (rho > fit.rho) fit = { r, rho }
+  }
+  const sigils = steps
+    .map((st, k) => {
+      const [x, y] = at(fit.r, tip(k))
+      const body = sigilBody(st.sigil, 1, fit.rho * 0.94)
+      return `<g transform="translate(${f(x)} ${f(y)})">${body.markup}</g>`
+    })
+    .join('')
+
+  const seam = at(R + 9, top)
+  const title = opts.title ? `<text x="0" y="${opts.subtitle ? -4 : 6}" class="star-title">${opts.title}</text>` : ''
+  const subtitle = opts.subtitle ? `<text x="0" y="16" class="star-sub">${opts.subtitle}</text>` : ''
+  return `<svg class="star-svg" viewBox="-206 -206 412 412" role="img" aria-label="The commission as a star: ${steps.length} sigils clockwise from the top, the amalgam between them">
+    <defs><clipPath id="${clip}"><path d="${circle} ${star}" clip-rule="evenodd"/></clipPath></defs>
+    <g clip-path="url(#${clip})">${bands.join('')}</g>
+    ${rings}
+    <circle r="${R}" fill="none" stroke="var(--gilt)" stroke-opacity="0.55" stroke-width="1"/>
+    <path d="${star}" fill="var(--night)" fill-opacity="0.82" stroke="var(--gilt)" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="${star}" fill="none" stroke="var(--gilt)" stroke-opacity="0.5" stroke-width="0.8" stroke-linejoin="round" transform="scale(0.965)"/>
+    <circle r="${f(hub)}" fill="none" stroke="var(--gilt)" stroke-opacity="0.3" stroke-width="0.8"/>
+    ${ticks.join('')}
+    <path d="M ${f(seam[0])} ${f(seam[1] - 5)} L ${f(seam[0] + 4)} ${f(seam[1])} L ${f(seam[0])} ${f(seam[1] + 5)} L ${f(seam[0] - 4)} ${f(seam[1])} Z" fill="var(--gilt-bright)"/>
+    ${sigils}
+    ${title}${subtitle}
+  </svg>`
+}
+
 /** A small outline of a body, for table headers. */
 export function bodyIcon(body: Body, size = 16): string {
   const r = size * 0.42

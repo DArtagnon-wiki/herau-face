@@ -172,12 +172,6 @@ button.wide { width: 100%; }
 .pool:disabled { opacity: 0.8; }
 .pool.is-on { border-color: var(--c); background: color-mix(in srgb, var(--c) 20%, transparent); }
 .pool .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
-.balance { display: grid; gap: 6px; }
-.scale { display: grid; grid-template-columns: 76px 1fr 76px; align-items: center; gap: 8px; font-size: 15px; }
-.scale-end { color: var(--c); font-weight: 600; }
-.scale-end.right { text-align: right; }
-.scale-track { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(239, 232, 255, 0.1); }
-.scale-track span { height: 100%; opacity: 0.8; }
 
 /* Composer ---------------------------------------------------------------- */
 .last-term {
@@ -256,6 +250,7 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--gilt); }
 .end {
   position: fixed; inset: 0; z-index: 10;
   display: grid; place-items: center;
+  overflow-y: auto;
   padding: 16px;
   background: rgba(7, 4, 14, 0.72);
   backdrop-filter: blur(4px);
@@ -269,6 +264,12 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--gilt); }
   background: linear-gradient(180deg, rgba(48, 30, 92, 0.96), rgba(14, 8, 30, 0.98));
 }
 .end-card h2 { font-size: 26px; letter-spacing: 0.04em; }
+.end-star { margin: 0; display: grid; gap: 6px; }
+.star-svg { width: 100%; height: auto; display: block; }
+.star-title { font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: 0.06em; fill: var(--gilt-bright); text-anchor: middle; }
+.star-sub { font-family: var(--font-text); font-size: 12px; fill: var(--ink-soft); text-anchor: middle; }
+.star-term { font-family: var(--font-display); font-size: 10px; fill: var(--gilt); text-anchor: middle; dominant-baseline: middle; }
+.end-star figcaption { font-size: 14px; color: var(--ink-faint); line-height: 1.35; }
 .end-stats { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .end-stats div { display: grid; gap: 2px; }
 .end-stats dt { font-family: var(--font-display); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gilt); }
@@ -361,18 +362,7 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--gilt); }
 .bowl-pick { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 8px; }
 .bowl-pick select { width: 100%; min-width: 0; }
 
-/* Table metrics -------------------------------------------------------------- */
-.metrics[open] { display: grid; gap: 10px; }
-.metrics .seg.two { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 10px; }
-.table-wrap { overflow-x: auto; }
-.mtable { width: 100%; border-collapse: collapse; font-size: 16px; }
-.mtable th, .mtable td { padding: 4px 6px; text-align: right; border-bottom: 1px solid rgba(217, 184, 114, 0.14); }
-.mtable thead th { font-family: var(--font-display); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gilt); font-weight: 600; vertical-align: bottom; }
-.mtable tbody th { text-align: left; font-weight: 600; white-space: nowrap; }
-.mtable td { font-family: var(--font-display); font-size: 14px; }
-.mtable td.zero { color: var(--ink-faint); opacity: 0.6; }
-.mtable tr.total th, .mtable tr.total td { border-bottom: 0; color: var(--gilt-bright); }
-.balance-table { max-width: 420px; }
+/* Odds and ends ---------------------------------------------------------- */
 .body-icon { display: inline-block; vertical-align: middle; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .csv { width: 100%; font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--ink); background: rgba(9, 5, 20, 0.85); border: 1px solid var(--panel-edge); border-radius: 6px; padding: 8px; }

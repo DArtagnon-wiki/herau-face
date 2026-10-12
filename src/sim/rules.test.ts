@@ -6,7 +6,6 @@ import { DEFAULT_FORGE, GUARD_MOTE, LINK_MOTE, REACH_MOTE, cloneForge, elementMo
 import { addRune, deckSpecs, editRune, removeRune, setComposition, setForge, setTarget } from './sandbox'
 import { DEFAULT_SETTINGS, cast, castsLeft, discardRunes, endTerm, fairOpening, invalidReason, newGame, previewCast, previewEnd, resistanceMult, sigilsPlayed, standardSetup } from './game'
 import { REACH_PER_POWER, canJoin, openLinks, outputs, resolve } from './sigil'
-import { imbalance, slumpTarget, strain, type TableEntry } from './table'
 import type { Affinity, Body, JoinKind, Pool, Rune, Sigil } from './types'
 import { PRESETS, presetByKey } from './presets'
 import { totalKg } from './alchemy'
@@ -168,31 +167,6 @@ describe('resolving a sigil', () => {
   })
 })
 
-describe('the table', () => {
-  const entry = (id: number, s: Sigil): TableEntry => ({ id, term: id, sigil: s })
-
-  it('lets opposites cancel and adds strain past the free amount', () => {
-    const table = [
-      entry(1, sigil(rune('water'), ['circumscribe', rune('earth')])),
-      entry(2, sigil(rune('water'), ['circumscribe', rune('earth')])),
-    ]
-    expect(imbalance(table)).toBe(4)
-    expect(strain(table)).toBe(1)
-    expect(strain(table, false)).toBe(0)
-    const balanced = [entry(1, sigil(rune('water', 'crescent'), ['circumscribe', rune('fire')], ['entwine', rune('fire')]))]
-    expect(imbalance(balanced)).toBe(1)
-  })
-
-  it('slumps the sigil holding the table most level, never an entwined one', () => {
-    const lopsided = entry(1, sigil(rune('water', 'crescent'), ['circumscribe', rune('earth')], ['side', rune('water')]))
-    const leveller = entry(2, sigil(rune('fire'), ['side', rune('air')]))
-    const held = entry(3, sigil(rune('fire'), ['entwine', rune('air')]))
-    expect(slumpTarget([lopsided, leveller])).toBe(leveller)
-    expect(slumpTarget([lopsided, held])).toBe(lopsided)
-    expect(slumpTarget([held])).toBeUndefined()
-  })
-})
-
 describe('mud', () => {
   it('starts with 5% each of air and fire', () => {
     const g = newGame(undefined, 1)
@@ -293,7 +267,7 @@ describe('combat by purity', () => {
     expect(kgOf(after, 'earth:1')).toBeCloseTo(16.2)
     const settle: Move = { element: 'air', kind: 'settle', name: 'Settle', grade: 2, flare: 0, kg: 0, ward: 6, detail: '' }
     const flare: Move = { element: 'water', kind: 'flare', name: 'Flare', grade: 0, flare: 10, kg: 0, detail: '' }
-    const s = { ...newGame({ ...DEFAULT_SETTINGS, strain: false }, 42), intent: composeIntent([settle, flare]) }
+    const s = { ...newGame(DEFAULT_SETTINGS, 42), intent: composeIntent([settle, flare]) }
     expect(previewEnd(s).absorbed).toBe(6)
     expect(previewEnd(s).paid).toBe(4)
   })
@@ -436,31 +410,6 @@ describe('the sandbox', () => {
     s = addRune(s, { body: 'crescent', motes: [elementMote('earth'), GUARD_MOTE] })
     const next = newGame(undefined, 25, { ...standardSetup(), forge: s.forge, deck: deckSpecs(s) })
     expect([...next.hand, ...next.draw]).toHaveLength(15)
-  })
-})
-
-describe('table metrics', () => {
-  it('counts gems, bodies and sides, by element', async () => {
-    const { metricsOf, balance } = await import('./metrics')
-    const s1 = sigil(rune('water'), ['circumscribe', rune('earth')])
-    const s2 = sigil(rune('water', 'crescent'), ['circumscribe', rune('earth')], ['entwine', triangle()])
-    const m = metricsOf([s1, s2])
-    expect(m.runes).toBe(5)
-    expect(m.motes).toEqual({ earth: 2, water: 2, air: 0, fire: 0 })
-    expect(m.bodies).toEqual({ circle: 3, crescent: 1, triangle: 1 })
-    expect(m.sides).toBe(1 + 1 + 2 + 1 + 3)
-    expect(m.sidesBy.water).toBe(3)
-    expect(m.sidesBy.none).toBe(3)
-    expect(balance(m, 'sides')).toEqual({ earthAir: 2, waterFire: 3, total: 5 })
-    expect(balance(m, 'motes').total).toBe(4)
-  })
-
-  it('counts every gem a rune holds', async () => {
-    const { metricsOf } = await import('./metrics')
-    const twoGems = makeRune(nextId++, { body: 'triangle', motes: [elementMote('fire'), elementMote('water'), LINK_MOTE] })
-    const m = metricsOf([sigil(twoGems)])
-    expect(m.motes).toEqual({ earth: 0, water: 1, air: 0, fire: 1 })
-    expect(m.runesBy.fire).toBe(1)
   })
 })
 
