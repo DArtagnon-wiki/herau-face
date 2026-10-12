@@ -399,6 +399,15 @@ Under element moves, each element in the amalgam may act each term, and the less
 - **Same pressure as before, wider spread.** The opening deck spends a median of 13 quintessence on mud (p90 33, up from 24), the mid-run deck 4 and the late-run deck 0.
 - **Purifying barely pays yet.** The simulated player casts about one purifying sigil a commission, even when it weighs next term's expected flares. The chance to act is weighted by kilos, and an opening sigil purifies 1–3 kg of 30.
 
+## Purity as a goal (proposed)
+
+Purifying is rewarding in its own right, and it doesn't have to pay in the first fight. Slay the Spire's Vulnerable works the same way: it is in the toolkit from the start, matters in only a few early fights, and matters a great deal later. Purity should follow that curve, optional early, rewarded in the middle, required late. Three proposals give it uses beyond defence; none is built yet.
+
+- **Catalysts that wake at a purity threshold.** A catalyst is active only while the amalgam meets its condition, and it lights up when it does. Examples: "while any water is pure", "while no impure pool remains", "while half the mass is medium or purer", "while the product is pure". The threshold can read one element, the whole amalgam or the product, so each catalyst points at a different purifying plan. A threshold that is easy to meet pays a little; a hard one pays a lot.
+- **Commissions with purity targets.** A target names a purity as well as a composition: clay is 75–85% earth at medium or better, a finer ware wants its earth pure. A commission is finished only when both hold, and higher purity pays more. Purifying then costs resistance steps and mass on the way to the job itself, not only as a defence.
+- **Enemies that need purity.** Some sources reward or demand it. Early ones only reward it: a pure pool lends more Ward, or a pure product pays a bonus. Later ones need it: impure pools are shielded and cannot be drained until purified, a flare is too large to absorb without lent Ward, or resistance climbs with the impure share so the target is out of reach until the amalgam is cleaner. A boss can make purity the answer to its signature move, as pure earth is to the Mire's stiffening.
+- **A curve to tune.** Fights without purity bonuses stay winnable by transmuting alone, so the first purifying choice is a free one. By mid-run a purity target or purity-gated enemy appears about every other commission, and the late game assumes the player has a purifying plan.
+
 ## Commissions: source and target
 
 Each commission pairs a source material, the opponent, with a target material, the puzzle. A source behaves the same way whatever the target, which rewards familiarity; targets supply the variety.
@@ -548,4 +557,7 @@ Circumgician is built on Pixi.js, TypeScript and Vite, and most of its look is g
 | Does a shape's side count cap the reach runes it carries? | Open. The notation sketch hangs three crescents off a triangle and sets four triangles inside a square; the prototype limits joins only by the anchor's links |
 | What does a bigger concentricity trade? | Open: more pay against harsher moves or more traces |
 | How should difficulty scale over a run? | Open: grow jobs with throughput (Balatro), keep jobs flatter and grow the commission's damage and mechanics (Slay the Spire), or narrow bands so big decks must aim |
-| Is purifying strong enough as a defence? | Not yet for the opening deck. Levers: weight the chance by the impure share more steeply, let purifying move more kilos, or give pure elements weaker moves as well as rarer ones |
+| Is purifying strong enough as a defence? | Not yet for the opening deck, and it need not be: like Vulnerable in Slay the Spire it can be rewarding early and necessary later (see "Purity as a goal"). Levers if it must be stronger: weight the chance by the impure share more steeply, let purifying move more kilos, or give pure elements weaker moves as well as rarer ones |
+| What do purity thresholds read, and how do catalysts show they are active? | Open: one element, the whole amalgam or the product; an active catalyst lights up |
+| How do purity targets fit the finish rule? | Proposed: a commission finishes when composition and purity are both in band; higher purity pays more |
+| How soon must purity be necessary? | Proposed: optional in the first fights, rewarded by the middle, required by the late game and bosses |
