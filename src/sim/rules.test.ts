@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { normalize, poolKey, stepsBetween } from './alchemy'
 import { ACT_CHANCE, CLAY_TARGET, COMMISSIONS, MIRE_TUNING, PURITY_EFFECTS, actChance, applyIntent, composeIntent, inBand, miss, poolEffect, rollIntent, substanceName, type Move } from './commission'
 import { makeRng } from './rng'
-import { DEFAULT_FORGE, GUARD_MOTE, LINK_MOTE, REACH_MOTE, cloneForge, elementMote, makeRune, startingDeck } from './deck'
+import { BODY_LIST, DEFAULT_FORGE, GUARD_MOTE, LINK_MOTE, REACH_MOTE, cloneForge, elementMote, makeRune, startingDeck } from './deck'
 import { addRune, deckSpecs, editRune, removeRune, setComposition, setForge, setTarget } from './sandbox'
 import { DEFAULT_SETTINGS, cast, castsLeft, discardRunes, endTerm, fairOpening, invalidReason, newGame, previewCast, previewEnd, resistanceMult, sigilsPlayed, standardSetup } from './game'
 import { REACH_PER_POWER, canJoin, openLinks, outputs, resolve } from './sigil'
@@ -376,21 +376,22 @@ describe('the sandbox', () => {
   it('changes a body for every rune at once', () => {
     const s = newGame(undefined, 21)
     const forge = cloneForge(s.forge)
-    forge.bodies.circle = { power: 8, links: 2, bowls: 1 }
+    forge.bodies.circle = { power: 8, links: 2 }
     const next = setForge(s, forge)
     const circles = [...next.hand, ...next.draw, ...next.discard].filter((r) => r.body === 'circle')
     expect(circles).toHaveLength(4)
     expect(circles.every((r) => r.power === 8 && r.links === 2)).toBe(true)
   })
 
-  it('drops motes that no longer fit when bowls shrink', () => {
+  it('holds as many motes as a body has sides, and drops the rest', () => {
+    expect(BODY_LIST.map((b) => makeRune(1, { body: b, motes: Array.from({ length: 8 }, () => LINK_MOTE) }).motes.length)).toEqual([1, 2, 3, 4, 5, 6])
     const s = newGame(undefined, 22)
-    const forge = cloneForge(s.forge)
-    forge.bodies.triangle.bowls = 1
-    const tri = [...setForge(s, forge).hand, ...setForge(s, forge).draw].find((r) => r.body === 'triangle')!
-    expect(tri.motes).toHaveLength(1)
-    expect(tri.links).toBe(2)
-    expect(tri.guard).toBe(0)
+    const tri = [...s.hand, ...s.draw].find((r) => r.body === 'triangle')!
+    const asCircle = editRune(s, tri.id, { body: 'circle', motes: tri.motes })
+    const shrunk = [...asCircle.hand, ...asCircle.draw].find((r) => r.id === tri.id)!
+    expect(shrunk.motes).toHaveLength(1)
+    expect(shrunk.links).toBe(2)
+    expect(shrunk.guard).toBe(0)
   })
 
   it('adds a rune to the hand, edits one anywhere, and removes one', () => {
@@ -432,10 +433,10 @@ describe('decks along a run', () => {
     for (const p of PRESETS) expect(p.setup().deck).toHaveLength(14)
   })
 
-  it('gives the late deck six-rune anchors', () => {
+  it('gives the late deck six-rune anchors: a hexagon of each element', () => {
     const late = presetByKey('late')!.setup()
     const deck = buildDeck(late.deck, late.forge)
-    const anchors = deck.filter((r) => r.body === 'triangle' && r.affinity !== 'none')
+    const anchors = deck.filter((r) => r.body === 'hexagon' && r.affinity !== 'none')
     expect(anchors).toHaveLength(4)
     for (const a of anchors) {
       expect(a.links).toBe(5)
@@ -447,7 +448,7 @@ describe('decks along a run', () => {
     const late = presetByKey('late')!.setup()
     const deck = buildDeck(late.deck, late.forge)
     const find = (e: Affinity, body: Body) => deck.find((r) => r.affinity === e && r.body === body)!
-    const s = sigil(find('earth', 'triangle'), ['circumscribe', find('air', 'circle')], ['circumscribe', find('fire', 'circle')], ['circumscribe', find('earth', 'circle')], ...deck.filter((x) => x.affinity === 'water').slice(0, 2).map((x): [JoinKind, Rune] => ['side', x]))
+    const s = sigil(find('earth', 'hexagon'), ['circumscribe', find('air', 'circle')], ['circumscribe', find('fire', 'circle')], ['circumscribe', find('earth', 'circle')], ...deck.filter((x) => x.affinity === 'water').slice(0, 2).map((x): [JoinKind, Rune] => ['side', x]))
     const r = resolve(s, late.start)
     expect(r.yieldFactor).toBe(40)
     expect(r.produced).toBeCloseTo(r.converted * 40)

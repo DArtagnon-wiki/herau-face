@@ -1,13 +1,13 @@
 import type { Body, Elemental, Mote, MoteKind, Rune } from './types'
 
-// A rune is a body holding motes. The body sets power, links and bowls; the
-// motes in its bowls give the element and any abilities. The numbers behind
-// bodies and motes live in a Forge, so the sandbox can change them live.
+// A rune is a body holding motes. The body is an N-gon with N bowls (a
+// circle is a 1-gon, a crescent a 2-gon); the motes in its bowls give the
+// element and any abilities. Power and links per body, and the motes'
+// numbers, live in a Forge, so the sandbox can change them live.
 
 export interface BodySpec {
   power: number
   links: number
-  bowls: number
 }
 
 export interface MoteValues {
@@ -39,20 +39,22 @@ export interface Forge {
   values: MoteValues
 }
 
-export const BODY_LIST: Body[] = ['circle', 'crescent', 'triangle']
-export const BODY_NAMES: Record<Body, string> = { circle: 'Circle', crescent: 'Crescent', triangle: 'Triangle' }
+export const BODY_LIST: Body[] = ['circle', 'crescent', 'triangle', 'square', 'pentagon', 'hexagon']
+export const BODY_NAMES: Record<Body, string> = { circle: 'Circle', crescent: 'Crescent', triangle: 'Triangle', square: 'Square', pentagon: 'Pentagon', hexagon: 'Hexagon' }
+
+/** Sides of each body, and so its bowls: an N-gon holds N motes. */
+export const SIDES: Record<Body, number> = { circle: 1, crescent: 2, triangle: 3, square: 4, pentagon: 5, hexagon: 6 }
+
+/** The body with this many sides, from a circle (1) to a hexagon (6). */
+export const bodyWithSides = (n: number): Body => BODY_LIST[Math.min(BODY_LIST.length, Math.max(1, n)) - 1]
 
 export const DEFAULT_FORGE: Forge = {
-  bodies: {
-    circle: { power: 5, links: 1, bowls: 1 },
-    crescent: { power: 5, links: 1, bowls: 2 },
-    triangle: { power: 5, links: 1, bowls: 3 },
-  },
+  bodies: Object.fromEntries(BODY_LIST.map((b) => [b, { power: 5, links: 1 }])) as Record<Body, BodySpec>,
   values: { reach: 1.5, guard: 4, boost: 0.1, ...ARCHETYPE_VALUES },
 }
 
 export const cloneForge = (f: Forge): Forge => ({
-  bodies: { circle: { ...f.bodies.circle }, crescent: { ...f.bodies.crescent }, triangle: { ...f.bodies.triangle } },
+  bodies: Object.fromEntries(BODY_LIST.map((b) => [b, { ...(f.bodies[b] ?? DEFAULT_FORGE.bodies[b]) }])) as Record<Body, BodySpec>,
   values: { ...f.values },
 })
 
@@ -161,17 +163,18 @@ export interface RuneSpec {
 }
 
 /**
- * Build a rune from its body and motes. Motes past the body's bowls are
- * dropped. The first element mote sets the element. A rune holding a
+ * Build a rune from its body and motes. An N-gon holds N motes; any past
+ * that are dropped. The first element mote sets the element. A rune holding a
  * multiplication mote that has been cast `stacks` times counts each of its
  * other motes 1 + stacks times.
  */
 export function makeRune(id: number, spec: RuneSpec, forge: Forge = DEFAULT_FORGE, power?: number, stacks = 0): Rune {
   const blank = { stacks: 0, glaze: 0, crucible: 0, lute: false, press: 0, cohobation: false, distill: 0, multiplication: false, rectify: false, digestion: 0, resonance: 0, magnesia: 0, calcination: 0 }
   if (spec.junk) return { id, body: 'circle', power: 1, bowls: 0, motes: [], affinity: 'none', links: 0, reachMult: 1, guard: 0, boost: 0, junk: true, ...blank }
-  const b = forge.bodies[spec.body]
+  const b = forge.bodies[spec.body] ?? DEFAULT_FORGE.bodies[spec.body]
   const v = { ...ARCHETYPE_VALUES, ...forge.values }
-  const motes = spec.motes.slice(0, b.bowls)
+  const bowls = SIDES[spec.body]
+  const motes = spec.motes.slice(0, bowls)
   const element = motes.find((m) => m.kind === 'element')
   const multiplication = motes.some((m) => m.kind === 'multiplication')
   const k = multiplication ? 1 + stacks : 1
@@ -180,7 +183,7 @@ export function makeRune(id: number, spec: RuneSpec, forge: Forge = DEFAULT_FORG
     id,
     body: spec.body,
     power: power ?? b.power,
-    bowls: b.bowls,
+    bowls,
     motes,
     affinity: element?.elemental ?? 'none',
     links: b.links + n('link'),

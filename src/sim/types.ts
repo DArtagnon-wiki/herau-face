@@ -4,8 +4,11 @@ export type Affinity = Elemental | 'none'
 /** Purity: 0 impure, 1 medium, 2 pure, 3 perfect (bosses only). */
 export type Grade = 0 | 1 | 2 | 3
 
-/** A rune's body sets its power, links and bowls. */
-export type Body = 'circle' | 'crescent' | 'triangle'
+/**
+ * A rune's body: an N-gon with N bowls, a circle counting as a 1-gon and a
+ * crescent as a 2-gon. The body sets its bowls; the forge sets power and links.
+ */
+export type Body = 'circle' | 'crescent' | 'triangle' | 'square' | 'pentagon' | 'hexagon'
 
 /** How one rune joins another in a sigil. 'side' is a side link. */
 export type JoinKind = 'circumscribe' | 'side' | 'entwine' | 'inscribe' | 'tangent'

@@ -4,7 +4,7 @@
 import { ELEMENTALS } from '../sim/alchemy'
 import type { Range } from '../sim/commission'
 import type { TableEntry } from '../sim/table'
-import { elementMote, LINK_MOTE, makeRune } from '../sim/deck'
+import { elementMote, LINK_MOTE, makeRune, SIDES } from '../sim/deck'
 import { runepath } from '../sim/equation'
 import type { Affinity, Body, Elemental, Grade, JoinKind, Mote, Pool, Rune, Sigil } from '../sim/types'
 
@@ -30,8 +30,24 @@ const CRESCENT_INNER = { dx: 0.45, r: 0.8 }
 const CRESCENT_HORN_X = (CRESCENT_INNER.dx ** 2 + 1 - CRESCENT_INNER.r ** 2) / (2 * CRESCENT_INNER.dx)
 const CRESCENT_HORN_Y = Math.sqrt(1 - CRESCENT_HORN_X ** 2)
 
-/** Outline of a body at radius r, centred on (cx, cy), rotated rotDeg. */
-export function bodyPath(body: Body, r: number, rotDeg = 0, cx = 0, cy = 0): string {
+/** Whether a body is a polygon: a triangle or more sides. */
+export const isGon = (body: Body) => SIDES[body] >= 3
+
+/**
+ * The corners of a regular N-gon of radius 1, flat along the bottom (a
+ * triangle points up, a square sits square, a hexagon lies flat), or with a
+ * corner pointing up, for a rune drawn pointing.
+ */
+function gonPoints(n: number, pointUp = false): Pt[] {
+  const start = pointUp ? -90 : 90 + 180 / n
+  return Array.from({ length: n }, (_, i) => {
+    const a = ((start + (360 * i) / n) * Math.PI) / 180
+    return [Math.cos(a), Math.sin(a)] as Pt
+  })
+}
+
+/** Outline of a body at radius r, centred on (cx, cy), rotated rotDeg. A pointing polygon has a corner at rotDeg − 90. */
+export function bodyPath(body: Body, r: number, rotDeg = 0, cx = 0, cy = 0, pointUp = false): string {
   const at = (p: Pt) => {
     const [x, y] = rotate(p, rotDeg)
     return `${f(cx + x * r)} ${f(cy + y * r)}`
@@ -39,10 +55,7 @@ export function bodyPath(body: Body, r: number, rotDeg = 0, cx = 0, cy = 0): str
   if (body === 'circle') {
     return `M ${f(cx - r)} ${f(cy)} A ${f(r)} ${f(r)} 0 1 0 ${f(cx + r)} ${f(cy)} A ${f(r)} ${f(r)} 0 1 0 ${f(cx - r)} ${f(cy)} Z`
   }
-  if (body === 'triangle') {
-    const pts = [-90, 30, 150].map((a) => [Math.cos((a * Math.PI) / 180), Math.sin((a * Math.PI) / 180)] as Pt)
-    return `M ${pts.map(at).join(' L ')} Z`
-  }
+  if (isGon(body)) return `M ${gonPoints(SIDES[body], pointUp).map(at).join(' L ')} Z`
   // Crescent with horns up: rotate the horns-right construction by -90°.
   const base = rotDeg - 90
   const atC = (p: Pt) => {
@@ -87,9 +100,21 @@ function bowlSpots(body: Body, n: number): { at: Pt[]; r: number } {
     if (n <= 2) return { at: [[-0.42, 0.6], [0.42, 0.6]], r: 0.2 }
     return { at: [[-0.62, 0.42], [0, 0.68], [0.62, 0.42], [-0.8, 0.05], [0.8, 0.05]].slice(0, n) as Pt[], r: 0.15 }
   }
-  if (n <= 3) return { at: [[0, -0.42], [0.37, 0.22], [-0.37, 0.22]], r: 0.19 }
-  // Corners first, then the middles of the edges.
-  return { at: [[0, -0.58], [0.5, 0.29], [-0.5, 0.29], [0, 0.36], [-0.31, -0.18], [0.31, -0.18]].slice(0, n) as Pt[], r: 0.14 }
+  const sides = SIDES[body]
+  if (sides === 3) {
+    if (n <= 3) return { at: [[0, -0.42], [0.37, 0.22], [-0.37, 0.22]], r: 0.19 }
+    // Corners first, then the middles of the edges.
+    return { at: [[0, -0.58], [0.5, 0.29], [-0.5, 0.29], [0, 0.36], [-0.31, -0.18], [0.31, -0.18]].slice(0, n) as Pt[], r: 0.14 }
+  }
+  // An N-gon's bowls sit in its corners, read clockwise from the top.
+  const reach: Record<number, [number, number]> = { 4: [0.5, 0.17], 5: [0.55, 0.155], 6: [0.58, 0.14] }
+  const [rho, br] = reach[sides] ?? [0.58, 0.14]
+  const turn = (p: Pt) => (Math.atan2(p[1], p[0]) * 180) / Math.PI
+  const corners = gonPoints(sides)
+    .map((p) => ({ p, a: (turn(p) + 90 + 360.5) % 360 }))
+    .sort((x, y) => x.a - y.a)
+    .map(({ p }) => [p[0] * rho, p[1] * rho] as Pt)
+  return { at: corners.slice(0, Math.max(n, 1)), r: br }
 }
 
 export const moteColor = (m: Mote) => (m.kind === 'element' ? AFFINITY_VAR[m.elemental!] : 'var(--opal)')
@@ -204,7 +229,7 @@ interface Layer {
   cx: number
   cy: number
   r: number
-  /** 0 or 180: triangles nested in triangles alternate, like a hexagram's halves. */
+  /** Degrees: a polygon nested in one of its own kind turns half a side, so triangles make a hexagram. */
   rot: number
 }
 
@@ -225,16 +250,28 @@ const colorOf = (r: Rune) => (r.junk ? 'var(--slag)' : AFFINITY_VAR[r.affinity])
  */
 function holds(outer: Body, inner: Body): { k: number; dy: number; flip: boolean } {
   if (outer === 'circle') return { k: 1.3, dy: 0, flip: false }
-  if (outer === 'triangle') return { k: 2.15, dy: 0, flip: inner === 'triangle' }
+  if (isGon(outer)) {
+    const n = SIDES[outer]
+    // Room for the inner body inside the outer's edges, which sit cos(π/n) of its radius in.
+    return { k: n === 3 ? 2.15 : 1.15 / Math.cos(Math.PI / n), dy: 0, flip: inner === outer }
+  }
   return { k: 1.95, dy: -0.25, flip: false }
 }
 
+/** How far a polygon nested in its own kind turns: half a side, so a triangle in a triangle points down. */
+const halfTurn = (body: Body, rot: number) => (rot + 180 / SIDES[body]) % (360 / SIDES[body])
+
+/** Whether a polygon layer sits turned from its upright, flat-bottomed pose. */
+const turned = (l: Layer) => isGon(l.body) && Math.round(l.rot % (360 / SIDES[l.body])) !== 0
+
 /** Distance from a layer's centre to its outline along a direction (degrees). */
 function edgeAt(l: Layer, deg: number): number {
-  if (l.body !== 'triangle') return l.r
+  if (!isGon(l.body)) return l.r
+  const n = SIDES[l.body]
+  const period = 360 / n
   const a = deg - l.rot - 90
-  const d = (((a % 120) + 120 + 60) % 120) - 60
-  return (0.5 * l.r) / Math.cos(rad(d))
+  const d = (((a % period) + period + period / 2) % period) - period / 2
+  return (Math.cos(Math.PI / n) * l.r) / Math.cos(rad(d))
 }
 
 /** Where tangents sit inside an anchor of radius 1, and how big each is. */
@@ -250,6 +287,14 @@ function tangentSpots(body: Body, n: number): { x: number; y: number; s: number 
     const order = n === 1 ? [0] : n === 2 ? [1, 2] : [0, 1, 2]
     return [...order.map((i) => corners[i]), ...ring(0.24, 90, 3, 0.1)].slice(0, n)
   }
+  if (isGon(body)) {
+    // In the corners, spread evenly round; any more crowd a small ring at the heart.
+    const k = SIDES[body]
+    const fromTop = (q: { x: number; y: number }) => ((Math.atan2(q.y, q.x) * 180) / Math.PI + 90 + 360.5) % 360
+    const corners = ring((0.75 * (1 + Math.cos(Math.PI / k))) / 2, 90 + 180 / k, k, 0.2).sort((p, q) => fromTop(p) - fromTop(q))
+    const picked = Array.from({ length: Math.min(n, k) }, (_, i) => corners[Math.round((i * k) / Math.min(n, k)) % k])
+    return [...picked, ...ring(0.28, 90, Math.max(1, n - k), 0.1)].slice(0, n)
+  }
   const band = [
     { x: -0.45, y: 0.58, s: 0.13 },
     { x: 0.45, y: 0.58, s: 0.13 },
@@ -262,15 +307,28 @@ function tangentSpots(body: Body, n: number): { x: number; y: number; s: number 
 /** Directions (degrees, 90 is down) to hang side links from the outermost layer: off a triangle's edges, a crescent's back. */
 function sideAngles(n: number, outer: Layer): number[] {
   if (outer.body === 'crescent') return n === 1 ? [90] : Array.from({ length: n }, (_, i) => 25 + (130 * i) / (n - 1))
-  const sets: Record<number, number[]> =
-    outer.body === 'triangle' && outer.rot === 180
+  if (outer.body === 'triangle' || !isGon(outer.body)) {
+    const sets: Record<number, number[]> = turned(outer)
       ? { 1: [90], 2: [30, 150], 3: [30, 150, 270] }
       : { 1: [90], 2: [210, 330], 3: [90, 210, 330], 4: [45, 135, 225, 315] }
-  return sets[n] ?? Array.from({ length: n }, (_, i) => 90 + (360 * i) / n)
+    return sets[n] ?? Array.from({ length: n }, (_, i) => 90 + (360 * i) / n)
+  }
+  // Off the middles of a polygon's edges: below first, then either side, spread round.
+  const k = SIDES[outer.body]
+  if (n > k) return Array.from({ length: n }, (_, i) => 90 + (360 * i) / n)
+  const normals = Array.from({ length: k }, (_, i) => (90 + outer.rot + (360 * i) / k) % 360)
+  const gap = (a: number, b: number) => Math.abs(((a - b + 540) % 360) - 180)
+  const out: number[] = []
+  for (let i = 0; i < n; i++) {
+    const want = (90 + (360 * i) / n + (n === 2 ? 90 : 0)) % 360
+    const free = normals.filter((x) => !out.includes(x))
+    out.push(free.reduce((best, x) => (gap(x, want) < gap(best, want) ? x : best), free[0]))
+  }
+  return out
 }
 
-/** How far a pointing rune's back sits behind its centre. */
-const backOf = (body: Body, r: number) => (body === 'triangle' ? r * 0.5 : r)
+/** How far a pointing rune's back sits behind its centre: a pointing polygon has a corner forward, and an edge or a corner behind. */
+const backOf = (body: Body, r: number) => (isGon(body) ? (SIDES[body] % 2 ? r * Math.cos(Math.PI / SIDES[body]) : r) : r)
 
 /** Lay a sigil out at scale 1, as primitives in sigil coordinates. */
 function layout(sigil: Sigil): Prim[] {
@@ -291,7 +349,7 @@ function layout(sigil: Sigil): Prim[] {
   for (const st of steps.filter((x) => x.kind === 'circumscribe')) {
     const h = holds(st.rune.body, outer.body)
     const r = outer.r * h.k
-    const layer: Layer = { body: st.rune.body, cx: outer.cx, cy: outer.cy - h.dy * r, r, rot: h.flip ? (outer.rot + 180) % 360 : 0 }
+    const layer: Layer = { body: st.rune.body, cx: outer.cx, cy: outer.cy - h.dy * r, r, rot: h.flip ? halfTurn(st.rune.body, outer.rot) : 0 }
     rings.push({ layer, rune: st.rune })
     outer = layer
   }
@@ -302,7 +360,7 @@ function layout(sigil: Sigil): Prim[] {
     const h = holds(inner.body, st.rune.body)
     const crowded = inner === anchor && tangents.length > 0 && inner.body !== 'crescent'
     const k = crowded ? (inner.body === 'circle' ? 1.9 : 3.4) : h.k
-    const layer: Layer = { body: st.rune.body, cx: inner.cx, cy: inner.cy + h.dy * inner.r, r: inner.r / k, rot: h.flip ? (inner.rot + 180) % 360 : 0 }
+    const layer: Layer = { body: st.rune.body, cx: inner.cx, cy: inner.cy + h.dy * inner.r, r: inner.r / k, rot: h.flip ? halfTurn(st.rune.body, inner.rot) : 0 }
     cores.push({ layer, rune: st.rune })
     inner = layer
   }
@@ -378,15 +436,16 @@ function paint(prims: Prim[], scale: number, ox: number, oy: number): string {
       const cy = Number(Y(p.cy))
       const r = p.r * scale
       if (p.t === 'point') {
-        const d = p.body === 'circle' ? dropPath(r, p.dir, cx, cy) : bodyPath(p.body, r, p.dir + 90, cx, cy)
+        const d = p.body === 'circle' ? dropPath(r, p.dir, cx, cy) : bodyPath(p.body, r, p.dir + 90, cx, cy, true)
         return `<path d="${d}" fill="${p.c}" fill-opacity="0.12" stroke="${p.c}" stroke-width="${w(p.w)}" ${ln}/>`
       }
       const main = `<path d="${bodyPath(p.body, r, p.rot, cx, cy)}" fill="${p.fill ? p.c : 'none'}"${p.fill ? ` fill-opacity="${p.fill}"` : ''} stroke="${p.c}" stroke-width="${w(p.w)}"${p.dash ? ` stroke-dasharray="${f(4 * scale + 1)} ${f(2.5 * scale + 1)}"` : ''} ${ln}/>`
       if (!p.seal) return main
-      // The seal's second line, just inside the first. A triangle's edges sit half its radius in, so it shrinks twice as far;
-      // a crescent's two arcs move apart from their own centres.
+      // The seal's second line, just inside the first. A polygon's edges sit cos(π/n) of its radius in, so it shrinks
+      // further (a triangle twice as far); a crescent's two arcs move apart from their own centres.
       const gap = SEAL_GAP * scale
-      const second = p.body === 'crescent' ? crescentInset(r, gap, p.rot, cx, cy) : bodyPath(p.body, Math.max(r * 0.4, r - gap * (p.body === 'triangle' ? 2 : 1)), p.rot, cx, cy)
+      const shrink = isGon(p.body) ? gap / Math.cos(Math.PI / SIDES[p.body]) : gap
+      const second = p.body === 'crescent' ? crescentInset(r, gap, p.rot, cx, cy) : bodyPath(p.body, Math.max(r * 0.4, r - shrink), p.rot, cx, cy)
       return second ? main + `<path d="${second}" fill="none" stroke="${p.c}" stroke-width="${w(p.w * 0.75)}" ${ln}/>` : main
     })
     .join('')

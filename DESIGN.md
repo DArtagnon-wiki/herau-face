@@ -9,7 +9,7 @@ A roguelike deckbuilder in the spirit of Balatro: each term you compose sigils f
 **Design pillars**
 
 - **Every hand is a composition.** Players build a structure by circumscribing, inscribing, side-linking and entwining, rather than matching a set.
-- **Runes are what they hold.** A rune's body sets its power, links and bowls; the motes in its bowls give it an element and abilities. Upgrading a rune means changing what it holds.
+- **Runes are what they hold.** A rune's body is an N-gon with N bowls; the motes in its bowls give it an element and abilities. Upgrading a rune means changing what it holds.
 - **Upgrades compound.** Motes and new runes stack across a run toward big, readable payoffs.
 - **Hit the target, and make plenty.** Each commission asks for a specific constitution, so overshooting is a risk, but more product earns more. This is the main departure from Balatro.
 - **Alchemy you can reason about.** Elemental changes follow one consistent logic, so players can predict which changes are cheap.
@@ -21,7 +21,7 @@ A roguelike deckbuilder in the spirit of Balatro: each term you compose sigils f
 | Term | Meaning |
 | --- | --- |
 | Rune | A card in the deck: a body holding motes in its bowls. |
-| Body | A rune's shape: circle, crescent or triangle. It sets power, links and bowls. |
+| Body | A rune's shape: an N-gon with N bowls, from the circle (a 1-gon) and the crescent (a 2-gon) through triangle, square, pentagon and hexagon. It also sets power and links. |
 | Bowl | A slot on a body that holds one mote. |
 | Mote | What gives a rune its nature. Gems set the element; ability motes add links, multiply Reach or add Ward. Earned motes fill or replace bowls to upgrade a rune for the rest of the run. |
 | Power | A rune's strength, set by its body. Each join turns it into Force, Reach or Ward. |
@@ -72,13 +72,16 @@ Running out of quintessence ends the run.
 
 ## Runes: bodies and motes
 
-A rune is a body holding motes. The body sets power, links and bowls; the motes in its bowls give the rune its element and abilities, so upgrading a rune means changing what it holds. Values are the prototype's starting points, all editable in its sandbox.
+A rune is a body holding motes. The body is an N-gon with N bowls, a circle counting as a 1-gon and a crescent as a 2-gon, and it sets power and links; the motes in its bowls give the rune its element and abilities, so upgrading a rune means changing what it holds. Values are the prototype's starting points, power and links editable in its sandbox.
 
 | Body | Power | Links | Bowls | Sides |
 | --- | --- | --- | --- | --- |
 | Circle | 5 | 1 | 1 | 1 |
 | Crescent | 5 | 1 | 2 | 2 |
 | Triangle | 5 | 1 | 3 | 3 |
+| Square | 5 | 1 | 4 | 4 |
+| Pentagon | 5 | 1 | 5 | 5 |
+| Hexagon | 5 | 1 | 6 | 6 |
 
 | Mote | Effect | Adds or multiplies |
 | --- | --- | --- |
@@ -175,7 +178,7 @@ Runes from other classes are sometimes offered, and taking them isn't always goo
 Runes improve by changing what their bowls hold; the deck grows by earning new runes and, proposed, shrinks by dissolving them.
 
 - **Motes.** Earned motes go into empty bowls or replace what a bowl holds, for the rest of the run. Gems change the element; ability motes add links, multiply Reach or add Ward; later motes can add triggers such as "retrigger when inscribed". Bowls are scarce, so placement is a decision.
-- **Bodies (proposed).** A body upgrade could add a bowl or power, so a circle grows into something that holds more.
+- **Bodies.** A body upgrade adds a side, and with it a bowl: circle, crescent, triangle, square, pentagon, hexagon. The prototype gives every body power 5 and one link; whether more sides should also bring power or links is open.
 - **New runes.** Earned from commission rewards or bought in the workshop, in rarity tiers. Runes from other classes appear only sometimes.
 - **Currency.** The workshop takes an ordinary currency (name open), earned from commissions in proportion to product made. Quintessence is never spent here.
 - **Dissolving (proposed).** Retire a rune and recover its motes. Thinning lets players focus a deck, and recovering motes makes it feel like a gain.
@@ -240,7 +243,7 @@ Six archetypes, each built on a resource of its own, so a mote, rune or catalyst
 
 **Archetypes lean on each other.** Thinning shortens the loop for combo and for the great rune. Pure pools lend Ward, so purity feeds consistent ward. A mono-element sigil purifies by inscribing its own element, so mastery and purity share runes. Pelican turns combo's loops into Ward.
 
-**Prototyped.** Twelve of these motes (all but lodestone, projection, exaltation and mercurial) and three catalysts (pelican, aqua vitae, the caput mortuum) are in the prototype. Each archetype has a deck at the mid-run deck's budget of about ten upgrades with a 7-rune hand, and a late version at about twenty with an 8-rune hand. Simulated with the equation, 100 commissions against mud and 60 against the Mire:
+**Prototyped.** Twelve of these motes (all but lodestone, projection, exaltation and mercurial) and three catalysts (pelican, aqua vitae, the caput mortuum) are in the prototype. Each archetype has a deck at the mid-run deck's budget of about ten upgrades with a 7-rune hand, and a late version at about thirty-five, mostly hexagons, with an 8-rune hand. Simulated with the equation, 100 commissions against mud and 60 against the Mire:
 
 | Deck | Mud: quintessence spent (median), terms | The Mire, late version: won | What sets it apart |
 | --- | --- | --- | --- |
@@ -276,10 +279,10 @@ By the end of a run the player should crush the commissions that once pushed the
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Opening | 0 | 6 | 6 | 0% | 0% | 5 | 35 kg |
 | Mid-run | About 10 | 7 | 3 | 0% | 17% | 0 | 54 kg |
-| Late-run | About 20 | 8 | 1 | 59% | 99% | 0 | 91 kg |
-| Late-run, 10-rune hand | About 20 | 10 | 1 | 91% | 100% | 0 | 106 kg |
+| Late-run | About 35 | 8 | 1 | 59% | 99% | 0 | 91 kg |
+| Late-run, 10-rune hand | About 35 | 10 | 1 | 91% | 100% | 0 | 106 kg |
 
-Mid-run, each crescent becomes a triangle with two link motes, so it anchors four-rune sigils. Late-run, triangles hold six bowls, and each elemental triangle carries four link motes and a reach mote, so it anchors six-rune sigils.
+Mid-run, one crescent of each element grows a side into a triangle with two link motes, so it anchors four-rune sigils. Late-run, it has grown into a hexagon carrying four link motes and a reach mote, so it anchors six-rune sigils. Counting each side as an upgrade, the late deck is about 35 upgrades, not the 20 a run of twenty commissions allows at one each; the arc's pace needs revisiting.
 
 **Ring chains are the mass engine.** A chain of circumscribes that loops back to the anchor's element multiplies the yields along it: earth → air → fire → earth is 20 × 1 × 2 = ×40. One late sigil, an earth anchor ringed by air, fire and earth with a side link, turned 2.7 kg of earth into 108 kg and finished mud as 145 kg of clay. The new earth dilutes the traces into their band, so one cast fixes everything. A loop needs three rings, so it opens only once an anchor holds three links. A simulated player that held off finishing grew the late deck's clay to 440 kg, 11 times the mud, in a median 7 terms for 2 quintessence.
 

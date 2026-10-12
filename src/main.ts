@@ -1,7 +1,7 @@
 import './ui/style.css'
 import { GRADE_NAMES, poolKey, totalKg } from './sim/alchemy'
 import { COMMISSIONS, FINE_CLAY_PURITY, actChances, chancesFor, cloneTarget, combatOf, effectsFor, elementOdds, constrained, gradeShare, inBand, shares, substanceName, within, type CommissionKey, type Range } from './sim/commission'
-import { ARCHETYPE_MOTES, BODY_LIST, BODY_NAMES, DEFAULT_FORGE, GEMS, MOTE_OPTIONS, buildDeck, cloneForge, makeRune, mote, moteEffect, moteFromKey, moteKey, moteName, type Forge, type RuneSpec } from './sim/deck'
+import { ARCHETYPE_MOTES, BODY_LIST, BODY_NAMES, DEFAULT_FORGE, SIDES, GEMS, MOTE_OPTIONS, buildDeck, cloneForge, makeRune, mote, moteEffect, moteFromKey, moteKey, moteName, type Forge, type RuneSpec } from './sim/deck'
 import { addRune, deckSpecs, editRune, findRune, removeRune, setComposition, setForge, setTarget } from './sim/sandbox'
 import { DEFAULT_SETTINGS, autoBurn, burnsOf, resistanceMult, cast, castsLeft, discardRunes, endTerm, invalidReason, newGame, payment, powerBonus, previewCast, previewEnd, standardSetup, termsUsed, type CastOutcome, type CastPreview, type EndOutcome, type GameState, type Settings, type Setup, type TermOutcome } from './sim/game'
 import { REACH_PER_POWER, WARD_PER_POWER, candidatePools, canJoin, openLinks, resolve, type Resolution } from './sim/sigil'
@@ -245,7 +245,7 @@ function deckGroups(setup: Setup): string {
     const motes = distinct.map(effects).join(' · ')
     return `<li class="deck-group">
       <span class="deck-group-runes">${distinct.slice(0, 4).map((r) => runeSvg(r, 40)).join('')}</span>
-      <span class="deck-group-name"><b class="num">${all.length}</b> ${BODY_NAMES[body].toLowerCase()}${all.length === 1 ? '' : 's'} <span class="deck-group-spec num">· power ${spec.power} · ${linksWord(spec.links)} · ${spec.bowls} bowl${spec.bowls === 1 ? '' : 's'}</span></span>
+      <span class="deck-group-name"><b class="num">${all.length}</b> ${BODY_NAMES[body].toLowerCase()}${all.length === 1 ? '' : 's'} <span class="deck-group-spec num">· power ${spec.power} · ${linksWord(spec.links)} · ${SIDES[body]} bowl${SIDES[body] === 1 ? '' : 's'}</span></span>
       <span class="deck-group-line">${motes}</span>
     </li>`
   }).join('')
@@ -898,7 +898,7 @@ function endView(g: GameState): string {
 }
 
 const ORDER = ['water', 'earth', 'air', 'fire', 'none']
-const BODY_ORDER: Body[] = ['circle', 'crescent', 'triangle']
+const BODY_ORDER: Body[] = BODY_LIST
 
 function sigilSummary(sg: Sigil): string {
   const name = (r: Rune) => `${r.affinity === 'none' ? '' : ELEMENT_NAME[r.affinity] + ' '}${BODY_NAMES[r.body].toLowerCase()}`
@@ -928,7 +928,6 @@ function recordCsv(g: GameState): string {
 const BOUNDS: Record<string, [number, number, number]> = {
   power: [1, 15, 1],
   links: [0, 4, 1],
-  bowls: [0, 6, 1],
   reach: [1, 3, 0.25],
   guard: [0, 12, 1],
   boost: [0, 1, 0.05],
@@ -958,7 +957,7 @@ function editorView(g: GameState): string {
   if (ui.editing !== 'new' && !found) return ''
   const spec: RuneSpec = found ? { body: found.rune.body, motes: found.rune.motes } : ui.draft
   const preview = found ? found.rune : buildDeck([spec], g.forge)[0]
-  const bowls = g.forge.bodies[spec.body].bowls
+  const bowls = SIDES[spec.body]
   const own = abilities(preview)
   return `<div class="editor">
     <div class="editor-head">
@@ -1048,7 +1047,7 @@ function sandboxView(g: GameState): string {
             <span class="shape-name">${runeSvg(buildDeck([{ body: b, motes: [] }], f)[0], 30)}${BODY_NAMES[b]}</span>
             ${stepper(`${b}.power`, f.bodies[b].power, 'power', `${b} power`)}
             ${stepper(`${b}.links`, f.bodies[b].links, 'links', `${b} links`)}
-            ${stepper(`${b}.bowls`, f.bodies[b].bowls, 'bowls', `${b} bowls`)}
+            <span class="num shape-bowls">${SIDES[b]}</span>
           </div>`,
         ).join('')}
       </div>
@@ -1057,7 +1056,7 @@ function sandboxView(g: GameState): string {
         <span class="mv"><span class="mote-dot" style="background:var(--opal)"></span>Guard mote +${stepper('values.guard', f.values.guard, 'guard', 'guard mote Ward')} Ward</span>
         <span class="mv"><span class="mote-dot" style="background:var(--opal)"></span>Boost mote +${stepper('values.boost', f.values.boost, 'boost', 'boost mote multiplier')} multiplier</span>
       </div>
-      <p class="fine">Shrinking a body’s bowls drops the motes that no longer fit. <button class="link-btn" data-act="sb-reset-forge">Reset shapes and motes</button></p>
+      <p class="fine">An N-gon holds N bowls: a circle is a 1-gon, a crescent a 2-gon. Changing a rune to a body with fewer sides drops the motes that no longer fit. <button class="link-btn" data-act="sb-reset-forge">Reset shapes and motes</button></p>
     </div>
     <div class="sb-section">
       <h3>Runes</h3>
@@ -1104,9 +1103,8 @@ function stepForge(target: string, delta: number) {
   const [lo, hi, step] = BOUNDS[field]
   const clamp = (v: number) => Math.min(hi, Math.max(lo, Math.round((v + delta * step) * 100) / 100))
   if (group === 'values') forge.values[field as 'reach' | 'guard' | 'boost'] = clamp(forge.values[field as 'reach' | 'guard' | 'boost'])
-  else forge.bodies[group as Body][field as 'power' | 'links' | 'bowls'] = clamp(forge.bodies[group as Body][field as 'power' | 'links' | 'bowls'])
+  else forge.bodies[group as Body][field as 'power' | 'links'] = clamp(forge.bodies[group as Body][field as 'power' | 'links'])
   ui.game = setForge(g, forge)
-  if (forge.bodies[ui.draft.body].bowls < ui.draft.motes.length) ui.draft = { ...ui.draft, motes: ui.draft.motes.slice(0, forge.bodies[ui.draft.body].bowls) }
 }
 
 function historyView(g: GameState): string {
@@ -1432,7 +1430,7 @@ root.addEventListener('click', (e) => {
       editSpec((spec) => ({ body: el.dataset.body as Body, motes: spec.motes }))
       break
     case 'sb-add':
-      if (g) ui.game = addRune(g, { body: ui.draft.body, motes: ui.draft.motes.slice(0, g.forge.bodies[ui.draft.body].bowls) })
+      if (g) ui.game = addRune(g, { body: ui.draft.body, motes: ui.draft.motes.slice(0, SIDES[ui.draft.body]) })
       break
     case 'sb-copy':
       if (g && typeof ui.editing === 'number') {

@@ -29,13 +29,16 @@ The rules are pure TypeScript in `src/sim`, with no UI dependencies, so the simu
 
 ### Runes and motes
 
-A rune is a body holding motes. The body sets power, links and bowls; the motes in its bowls give the element and any abilities.
+A rune is a body holding motes. The body is an N-gon with N bowls (a circle is a 1-gon, a crescent a 2-gon) and sets power and links; the motes in its bowls give the element and any abilities.
 
 | Body | Power | Links | Bowls |
 | --- | --- | --- | --- |
 | Circle | 5 | 1 | 1 |
 | Crescent | 5 | 1 | 2 |
 | Triangle | 5 | 1 | 3 |
+| Square | 5 | 1 | 4 |
+| Pentagon | 5 | 1 | 5 |
+| Hexagon | 5 | 1 | 6 |
 
 | Mote | Effect |
 | --- | --- |
@@ -58,7 +61,7 @@ When a commission ends, the end card draws its star: one point for every sigil c
 
 ### Sandbox
 
-The Sandbox panel changes the commission in progress, live (any mote, archetype motes included, can go in any bowl): the mud's starting composition (kg and purity per element, which resets the amalgam) and the target bands; each body's power, links and bowls; the reach and guard mote values; any rune's body and motes, wherever it is in the deck; new runes straight into the hand; and removing runes. Restarting keeps every change, and "Restart with the standard deck" undoes them. "Decks along a run" loads the opening, mid-run or late-run deck, on the start screen too. The Tuning panel covers the rest: rules, combat, surplus Force, flare size, quintessence, hand size, sigils a term and discards.
+The Sandbox panel changes the commission in progress, live (any mote, archetype motes included, can go in any bowl): the mud's starting composition (kg and purity per element, which resets the amalgam) and the target bands; each body's power and links (bowls are fixed, one per side); the reach and guard mote values; any rune's body and motes, wherever it is in the deck; new runes straight into the hand; and removing runes. Restarting keeps every change, and "Restart with the standard deck" undoes them. "Decks along a run" loads the opening, mid-run or late-run deck, on the start screen too. The Tuning panel covers the rest: rules, combat, surplus Force, flare size, quintessence, hand size, sigils a term and discards.
 
 ### Rules the doc leaves open
 
@@ -112,7 +115,7 @@ The power arc's target: by the end of a run of 20 or more commissions, mud to cl
 
 - **Opening:** the standard deck, 6-rune hand.
 - **Mid-run** (about 10 upgrades): each crescent becomes a triangle with two link motes, so it anchors four-rune sigils; 7-rune hand.
-- **Late-run** (about 20 upgrades): triangles hold 6 bowls, and each elemental triangle carries four link motes and a reach mote, so it anchors six-rune sigils; 8-rune hand.
+- **Late-run** (about 35 upgrades, counting each side): one crescent of each element has grown into a hexagon carrying four link motes and a reach mote, so it anchors six-rune sigils; 8-rune hand.
 
 | Deck | Hand | Median terms | Done in 1 term | In 2 or fewer | Median spent | Clay made |
 | --- | --- | --- | --- | --- | --- | --- |
