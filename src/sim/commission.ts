@@ -157,8 +157,14 @@ export type MoveKind = 'flare' | 'seep' | 'evaporate' | 'scorch' | 'slump' | 'st
  */
 export type CombatMode = 'purity' | 'moves'
 
-/** What a pool does when it stirs, by purity (impure, medium, pure, perfect), for every `mass` kilos of it. */
+/**
+ * Purity effects. Each element stirs with its own chance, the same whatever
+ * its purity; when it stirs, every one of its pools does what its purity does
+ * (by purity: impure, medium, pure, perfect), for every `mass` kilos of it.
+ */
 export interface PurityEffects {
+  /** Each element's chance to stir in a term. */
+  chance: Record<Elemental, number>
   flare: number[]
   /** Ward lent to the player against this term's flares. */
   ward: number[]
@@ -169,11 +175,17 @@ export interface PurityEffects {
 }
 
 /**
- * Per 15 kg: impure flares 15; medium flares 5 and taints a tenth of itself to
- * impure; pure and perfect lend Ward 3. Quoted per 10 kg, the opening deck
- * paid a median of 37 against mud and lost 3%; per 15 kg it pays 14, as before.
+ * Every element stirs half the time. Per 18 kg of a pool: impure flares 15;
+ * medium flares 5 and taints a tenth of itself to impure; pure and perfect
+ * lend Ward 3.
  */
-export const PURITY_EFFECTS: PurityEffects = { flare: [15, 5, 0, 0], ward: [0, 0, 3, 3], taint: [0, 0.1, 0, 0], mass: 15 }
+export const PURITY_EFFECTS: PurityEffects = {
+  chance: { earth: 0.5, water: 0.5, air: 0.5, fire: 0.5 },
+  flare: [15, 5, 0, 0],
+  ward: [0, 0, 3, 3],
+  taint: [0, 0.1, 0, 0],
+  mass: 18,
+}
 
 /** One elemental's move this term. */
 export interface Move {
@@ -262,7 +274,7 @@ export const MIRE_TUNING: BossTuning = {
   stiffen: 2,
   junk: 2,
   act: [0.9, 0.65, 0.35, 0.1],
-  purity: { mass: 30 },
+  purity: { mass: 35 },
   signature: 1 / 3,
 }
 
@@ -411,7 +423,8 @@ export const combatOf = (settings: Settings): CombatMode => settings.combat ?? '
 /** The purity effects for this commission: mud's, or a boss's own on top. */
 export function effectsFor(settings: Settings, key: CommissionKey): PurityEffects {
   const base = { ...PURITY_EFFECTS, ...settings.purity }
-  return key === 'mud' ? base : { ...base, ...MIRE_TUNING.purity, ...settings.boss?.purity }
+  const fx = key === 'mud' ? base : { ...base, ...MIRE_TUNING.purity, ...settings.boss?.purity }
+  return { ...fx, chance: { ...PURITY_EFFECTS.chance, ...fx.chance } }
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10
@@ -426,11 +439,26 @@ export function poolEffect(p: Pool, fx: PurityEffects, flareScale = 1): { flare:
   }
 }
 
-/** Every pool's chance to stir next term and what it would do, for the intent panel. */
+/** Every pool's chance to stir next term (its element's) and what it would do. */
 export function poolOdds(pools: Pool[], settings: Settings, key: CommissionKey = 'mud') {
   const fx = effectsFor(settings, key)
-  const chances = chancesFor(settings, key)
-  return pools.filter((p) => p.kg > 0).map((p) => ({ pool: p, chance: chances[p.grade] ?? 0, ...poolEffect(p, fx, settings.flareScale) }))
+  return pools.filter((p) => p.kg > 0).map((p) => ({ pool: p, chance: fx.chance[p.elemental] ?? 0, ...poolEffect(p, fx, settings.flareScale) }))
+}
+
+/** Each element's chance to stir next term and what all its pools would do together. */
+export function elementOdds(pools: Pool[], settings: Settings, key: CommissionKey = 'mud') {
+  const odds = poolOdds(pools, settings, key)
+  return ELEMENTALS.map((e) => {
+    const mine = odds.filter((o) => o.pool.elemental === e)
+    return {
+      element: e,
+      chance: effectsFor(settings, key).chance[e] ?? 0,
+      kg: mine.reduce((n, o) => n + o.pool.kg, 0),
+      flare: mine.reduce((n, o) => n + o.flare, 0),
+      ward: round1(mine.reduce((n, o) => n + o.ward, 0)),
+      taint: round1(mine.reduce((n, o) => n + o.taint, 0)),
+    }
+  }).filter((o) => o.kg > 0)
 }
 
 const SIGNATURE: Partial<Record<Elemental, MoveSpec>> = {
@@ -439,15 +467,15 @@ const SIGNATURE: Partial<Record<Elemental, MoveSpec>> = {
   fire: { kind: 'slag', name: 'Slag', weight: 1 },
 }
 
-/** Purity effects: every pool rolls by its purity and does what its purity does. */
+/** Purity effects: each element stirs by its own chance, and every pool of it does what its purity does. */
 function rollPurity(rng: Rng, term: number, pools: Pool[], settings: Settings, key: CommissionKey): Intent {
   const fx = effectsFor(settings, key)
-  const chances = chancesFor(settings, key)
   const moves: Move[] = []
   const stirred = new Set<Elemental>()
   for (const e of ELEMENTALS) {
-    for (const p of pools.filter((q) => q.elemental === e && q.kg > 0).sort((a, b) => a.grade - b.grade)) {
-      if (rng.float() >= (chances[p.grade] ?? 0)) continue
+    const mine = pools.filter((q) => q.elemental === e && q.kg > 0).sort((a, b) => a.grade - b.grade)
+    if (!mine.length || rng.float() >= (fx.chance[e] ?? 0)) continue
+    for (const p of mine) {
       const { flare, ward, taint } = poolEffect(p, fx, settings.flareScale)
       if (!flare && !ward && !taint) continue
       stirred.add(e)

@@ -267,10 +267,23 @@ describe('combat by purity', () => {
   })
 
   it('under purity effects, impure pools flare, medium pools flare a little and taint, pure pools lend Ward, all by mass', () => {
-    const fx = PURITY_EFFECTS
+    const fx = { ...PURITY_EFFECTS, mass: 15 }
     expect(poolEffect({ elemental: 'water', grade: 0, kg: 30 }, fx)).toEqual({ flare: 30, ward: 0, taint: 0 })
     expect(poolEffect({ elemental: 'earth', grade: 1, kg: 30 }, fx)).toEqual({ flare: 10, ward: 0, taint: 3 })
     expect(poolEffect({ elemental: 'earth', grade: 2, kg: 30 }, fx)).toEqual({ flare: 0, ward: 6, taint: 0 })
+  })
+
+  it('under purity effects, stirs each element by its own chance whatever its purity', () => {
+    const rng = makeRng(9)
+    const at = (grade: 0 | 2) => [{ elemental: 'earth' as const, grade, kg: 18 }]
+    let impure = 0
+    let pure = 0
+    for (let i = 0; i < 4000; i++) {
+      if (rollIntent(rng, 1, at(0), [], DEFAULT_SETTINGS).moves.length) impure++
+      if (rollIntent(rng, 1, at(2), [], DEFAULT_SETTINGS).moves.length) pure++
+    }
+    expect(impure / 4000).toBeCloseTo(PURITY_EFFECTS.chance.earth, 1)
+    expect(pure / 4000).toBeCloseTo(PURITY_EFFECTS.chance.earth, 1)
   })
 
   it('applies a taint and lets a pure pool’s Ward absorb the term’s flares', () => {

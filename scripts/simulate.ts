@@ -74,6 +74,9 @@ const settings: Settings = {
   if (list('--purity-flare')) purity.flare = list('--purity-flare')
   if (list('--purity-ward')) purity.ward = list('--purity-ward')
   if (list('--purity-taint')) purity.taint = list('--purity-taint')
+  /** --purity-chance P or E,W,A,F: each element's chance to stir. */
+  const ch = list('--purity-chance')
+  if (ch) purity.chance = ch.length === 1 ? { earth: ch[0], water: ch[0], air: ch[0], fire: ch[0] } : { earth: ch[0], water: ch[1], air: ch[2], fire: ch[3] }
   if (Object.keys(purity).length) settings.purity = purity
 }
 if (args.includes('--equation')) {
@@ -127,7 +130,11 @@ if (commission !== 'mud') {
   set('stiffen', num('--boss-stiffen'))
   set('junk', num('--boss-junk'))
   /** --boss-purity-mass N: under purity effects, the boss's effects are quoted per N kg. --boss-signature P: chance a stirring element also makes its signature move. */
-  if (arg('--boss-purity-mass')) boss.purity = { mass: Number(arg('--boss-purity-mass')) }
+  if (arg('--boss-purity-mass')) boss.purity = { ...boss.purity, mass: Number(arg('--boss-purity-mass')) }
+  if (arg('--boss-chance')) {
+    const c = Number(arg('--boss-chance'))
+    boss.purity = { ...boss.purity, chance: { earth: c, water: c, air: c, fire: c } }
+  }
   if (arg('--boss-signature')) boss.signature = Number(arg('--boss-signature'))
   /** --boss-act 0.8,0.6,0.3,0.1: the boss's chance to act by purity. */
   if (arg('--boss-act')) boss.act = arg('--boss-act')!.split(',').map(Number)

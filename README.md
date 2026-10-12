@@ -181,16 +181,16 @@ Everything a sigil transmutes comes out impure, so working the mud stirs it up a
 
 ### Purity effects (the default)
 
-Tuning's Combat switch picks between element moves (above) and purity effects, now the default (`--combat moves|purity` in the simulator). Under purity effects every pool stirs with the same chances, and its purity decides what it does, per 15 kg of it: impure flares 15; medium flares 5 and taints a tenth of itself to impure; pure and perfect lend Ward 3 against the term's flares. The intent panel lists what stirred and, below, every pool's chance and effect next term.
+Tuning's Combat switch picks between element moves (above) and purity effects, now the default (`--combat moves|purity` in the simulator). Under purity effects each element stirs half the time whatever its purity, and when it does, each of its pools does what its purity does, per 18 kg of it: impure flares 15; medium flares 5 and taints a tenth of itself to impure; pure and perfect lend Ward 3 against the term's flares. The intent panel lists what stirred and, below, each element's chance and what its pools would do next term.
 
 | Fight | Deck | Result |
 | --- | --- | --- |
-| Mud | Opening | median 14 spent (p90 32); 37 and 3% lost if quoted per 10 kg |
-| Mud | Mid-run, late-run | median 6, 0 |
-| The Mire (per 30 kg, signature move a third of the time) | Late-run | 68% won, wins median 45 (p10 0, p90 92) |
-| The Mire | Mid-run, late+ | 0%, 98% |
+| Mud | Opening | median 12 spent (p90 25); 18 (p90 41, 1% lost) if quoted per 15 kg |
+| Mud | Mid-run, late-run | median 5, 0 |
+| The Mire (per 35 kg, signature move a third of the time) | Late-run | 68% won, wins median 49 (p10 0, p90 85) |
+| The Mire | Mid-run, late+ | 0%, 93% |
 
-Purifying still rarely pays for the opening deck: its purifying sigils move 2–3 kg. `--free-purify` (no extra resistance step) changed nothing. Flags: `--purity-mass`, `--purity-flare`, `--purity-ward`, `--purity-taint`, `--boss-purity-mass`, `--boss-signature`.
+Purifying still rarely pays for the opening deck: its purifying sigils move 2–3 kg. `--free-purify` (no extra resistance step) changed nothing. Flags: `--purity-chance`, `--purity-mass`, `--purity-flare`, `--purity-ward`, `--purity-taint`, `--boss-chance`, `--boss-purity-mass`, `--boss-signature`.
 
 ### Boss: the Mire
 

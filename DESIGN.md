@@ -370,18 +370,18 @@ A partial refill after each boss (proposed) keeps a weak deck's slide from feeli
 
 ## Purity and combat
 
-The prototype now defaults to purity effects. Every pool, an element at one purity, may stir each term with the same chances as before: impure 50%, medium 25%, pure 10%, perfect 3%. What it does depends only on its purity, scaled by its kilos:
+The prototype now defaults to purity effects. Each element stirs with its own chance, the same whatever its purity: 50% each in the prototype. When it stirs, every one of its pools, an element at one purity, does what its purity does, scaled by its kilos:
 
-| Purity | When it stirs, per 15 kg of the pool |
+| Purity | When its element stirs, per 18 kg of the pool |
 | --- | --- |
 | Impure | Flare 15 |
 | Medium | Flare 5, and a tenth of the pool turns impure |
 | Pure, perfect | Lends Ward 3 against this term's flares |
 
-- **The amalgam's purity is its threat.** Mud's 18 kg of impure water flares 18 half the time; its medium earth flares 6 a quarter of the time and slowly sours, so a long commission grows more volatile.
-- **The reference mass sets the pressure.** Quoted per 10 kg, the opening deck paid a median of 37 against mud and lost 3% of commissions. Per 15 kg it pays a median of 14 (p90 32), the mid-run deck 6 and the late-run deck 0.
-- **The Mire** quotes its effects per 30 kg, and when its earth, water or fire stirs it makes its signature move a third of the time. The late-run deck wins 68% (wins cost a median of 45, p10 0, p90 92), the mid-run deck never wins, and late+ wins 98%.
-- **Purifying still barely pays for the opening deck.** Purifying impure kilos cuts their expected flare sixfold, but an opening purifying sigil moves 2–3 kg, worth about one flare a term, and the water is about to be transmuted anyway. Waiving purifying's extra step of resistance changed nothing.
+- **The amalgam's purity is its threat.** Mud's 18 kg of impure water flares 15 half the time; its medium earth flares 5 half the time and slowly sours, so a long commission grows more volatile.
+- **The reference mass sets the pressure.** Quoted per 15 kg, the opening deck paid a median of 18 against mud (p90 41) and lost 1% of commissions. Per 18 kg it pays 12 (p90 25), the mid-run deck 5 and the late-run deck 0.
+- **The Mire** quotes its effects per 35 kg, and when its earth, water or fire stirs it makes its signature move a third of the time. The late-run deck wins 68% (wins cost a median of 49, p10 0, p90 85), the mid-run deck never wins, and late+ wins 93%.
+- **Purifying still barely pays for the opening deck.** Purifying cuts a pool's flare from 15 to 5, and from medium to pure turns flare into Ward, but an opening purifying sigil moves 2–3 kg, worth about one flare a term, and the water is about to be transmuted anyway. Waiving purifying's extra step of resistance changed nothing.
 
 The element moves below, the first version, remain an option in Tuning.
 

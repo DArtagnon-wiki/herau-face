@@ -1,6 +1,6 @@
 import './ui/style.css'
 import { GRADE_NAMES, poolKey, totalKg } from './sim/alchemy'
-import { COMMISSIONS, actChances, chancesFor, cloneTarget, combatOf, effectsFor, poolOdds, constrained, inBand, shares, substanceName, within, type CommissionKey, type Range } from './sim/commission'
+import { COMMISSIONS, actChances, chancesFor, cloneTarget, combatOf, effectsFor, elementOdds, constrained, inBand, shares, substanceName, within, type CommissionKey, type Range } from './sim/commission'
 import { BODY_LIST, BODY_NAMES, DEFAULT_FORGE, GEMS, MOTE_OPTIONS, buildDeck, cloneForge, moteEffect, moteFromKey, moteKey, moteName, type Forge, type RuneSpec } from './sim/deck'
 import { addRune, deckSpecs, editRune, findRune, removeRune, setComposition, setForge, setTarget } from './sim/sandbox'
 import { DEFAULT_SETTINGS, resistanceMult, cast, castsLeft, discardRunes, endTerm, invalidReason, newGame, payment, previewCast, previewEnd, sigilsPlayed, standardSetup, termsUsed, type CastOutcome, type CastPreview, type EndOutcome, type GameState, type Settings, type Setup, type TermOutcome } from './sim/game'
@@ -284,7 +284,7 @@ function startView(): string {
       <ol>
         <li><b>${commissionOf().source} shows its moves.</b> ${
           (ui.settings.combat ?? 'purity') === 'purity'
-            ? `Every pool may stir: impure ones half the time, medium a quarter, pure a tenth. What it does depends on its purity, for every ${effectsFor(ui.settings, ui.setup.commission ?? 'mud').mass} kg of it: impure flares 15, medium flares 5 and turns a tenth of itself impure, pure lends you Ward 3.${commissionOf().boss ? ' When the Mire’s earth, water or fire stirs, it may also stiffen (resistance ×2 this term), bind you to one sigil this term, or throw slag runes into your draw pile.' : ''}`
+            ? `Each element stirs half the time, whatever its purity. When it does, each of its pools does what its purity does, for every ${effectsFor(ui.settings, ui.setup.commission ?? 'mud').mass} kg of it: impure flares 15, medium flares 5 and turns a tenth of itself impure, pure lends you Ward 3.${commissionOf().boss ? ' When the Mire’s earth, water or fire stirs, it may also stiffen (resistance ×2 this term), bind you to one sigil this term, or throw slag runes into your draw pile.' : ''}`
             : `Each element in it may act, and impure elements act far more often than pure ones, so all four can act at once or none at all. ${commissionOf().boss ? 'The Mire is restless. Every move carries a flare: its earth may stiffen (resistance ×2 this term), its water bind you to one sigil this term, its fire throw slag runes into your draw pile.' : 'Each element flares (earth tremors, water swells, air gusts, fire flares), or does its own mischief with a small flare: water seeps into earth, air evaporates water, fire scorches earth, earth slumps a sigil off your table.'} A move lands harder the more of the amalgam its element is.`
         }</li>
         <li><b>Compose and cast sigils.</b> Tap a rune to make it the anchor: its element is what changes. Pick a join and tap more runes, up to the anchor’s links, then cast. Each sigil resolves at once. Cast as many as your hand allows.</li>
@@ -301,7 +301,7 @@ function startView(): string {
           ? `<p><b>The equation.</b> With reach up equal to reach down, a sigil takes ${neutralWords(ui.settings.equation!)}${ui.settings.equation!.gate ? ', less if its power falls short of the pool’s resistance' : ''}. Side links aim for more and tangents for less, and power against resistance decides how far you get: kilos = neutral take × (reach up ÷ reach down)<sup>ln(1 + power ÷ resistance)</sup>. Resistance doubles for every quality the runepath flips. Switch to Reach × Force in Tuning.</p>`
           : `<p><b>Reach × Force.</b> Reach is how many kilos the sigil grabs; Force is how hard it pushes. Each change needs some Force (impure water to earth needs 5), and what converts is Reach × Force ÷ that need. They multiply, so give each new rune to whichever total is smaller.</p>`
       }
-      <p><b>Purity.</b> Every element is impure, medium, pure or perfect. Purer elements resist change more and stir less, and stir more gently, in combat. Anything a sigil transmutes comes out impure, so working the amalgam stirs it up. Inscribe the element the runepath is at to purify (one grade up, one more step of resistance); circumscribe it to adulterate (one grade down).</p>
+      <p><b>Purity.</b> Every element is impure, medium, pure or perfect. Purer elements resist change more, and when they stir in combat they do less harm: pure ones even lend you Ward. Anything a sigil transmutes comes out impure, so working the amalgam stirs it up. Inscribe the element the runepath is at to purify (one grade up, one more step of resistance); circumscribe it to adulterate (one grade down).</p>
       <p class="fine">Cast sigils stay on the table. Keep it level, Earth against Air and Water against Fire, or the lopsidedness adds strain every term.</p>
     </section>
     ${tuningView()}
@@ -398,12 +398,11 @@ function intentView(g: GameState, end: EndOutcome, after: Pool[]): string {
     </div>
     ${
       combatOf(g.settings) === 'purity'
-        ? `<p class="intent-odds">Next term each pool may stir: ${poolOdds(after, g.settings, g.commission)
-            .filter((o) => o.flare || o.ward || o.taint)
-            .sort((a, b) => ELEMENT_ORDER.indexOf(a.pool.elemental) - ELEMENT_ORDER.indexOf(b.pool.elemental) || a.pool.grade - b.pool.grade)
+        ? `<p class="intent-odds">Next term, if each element stirs: ${elementOdds(after, g.settings, g.commission)
+            .sort((a, b) => ELEMENT_ORDER.indexOf(a.element) - ELEMENT_ORDER.indexOf(b.element))
             .map(
               (o) =>
-                `<span style="--c:${AFFINITY_VAR[o.pool.elemental]}"><span class="dot"></span>${GRADE_NAMES[o.pool.grade]} ${o.pool.elemental} <b class="num">${Math.round(o.chance * 100)}%</b> ${o.flare ? `<span class="warn num">flare ${o.flare}</span>` : ''}${o.taint ? ` <span class="num">taint ${num(o.taint)} kg</span>` : ''}${o.ward ? `<span class="good num">Ward ${num(o.ward)}</span>` : ''}</span>`,
+                `<span style="--c:${AFFINITY_VAR[o.element]}"><span class="dot"></span>${o.element} <b class="num">${Math.round(o.chance * 100)}%</b> ${[o.flare ? `<span class="warn num">flare ${o.flare}</span>` : '', o.taint ? `<span class="num">taint ${num(o.taint)} kg</span>` : '', o.ward ? `<span class="good num">Ward ${num(o.ward)}</span>` : ''].filter(Boolean).join(' ') || '<span class="num">nothing</span>'}</span>`,
             )
             .join(' ')}</p>`
         : `<p class="intent-odds">Next term each acts by its purity: ${ELEMENT_ORDER.filter((e) => chances[e] > 0)
