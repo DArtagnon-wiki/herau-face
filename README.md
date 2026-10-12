@@ -160,16 +160,16 @@ Six archetypes, each with motes of its own (DESIGN.md, Archetypes), are playable
 | Element mastery | Resonance (+2 power per other rune of its element in the sigil), magnesia (a seal that also draws other elements in, never past the middle of their bands) | The preview says what magnesia draws |
 | Deck thinning | Calcination (burn a rune from hand after casting); the caput mortuum (+1 power to every rune per rune burned) | Choose what burns under the preview; the Burned pile opens from the bar |
 
-Simulated with the equation (100 commissions against mud, 60 against the Mire): the mid-run deck pays a median of 5 against mud in 3 terms and the late-run deck beats the Mire 72% of the time.
+Simulated with the equation (100 commissions against mud, 60 against the Mire): the mid-run deck pays a median of 5 against mud in 3 terms and the late-run deck beats the Mire 63% of the time.
 
 | Deck | Mud: spent, terms | The Mire, late: won | Signature |
 | --- | --- | --- | --- |
-| Consistent ward | 0, 5 | 92% | Ward absorbs 98% of mud's flares, 91% of the Mire's |
+| Consistent ward | 0, 5 | 87% | Ward absorbs 98% of mud's flares, 91% of the Mire's |
 | Combo | 0, 3 | 92% | 3.9 sigils a term against 1.9 |
-| One great rune | 4, 3 | 60% | Against the Mire it grows 3 times and moves 87% of the kilos |
-| Purity maxing | 6, 3 | 73% | Fine clay in 10 terms; the mid-run deck takes 21 |
-| Element mastery | 0, 2 | 93% | 29% of mud and 42% of the Mire finished in one term |
-| Deck thinning | 5, 4 | 88% | Burns 1.7 runes against mud, 3.2 against the Mire |
+| One great rune | 4, 3 | 58% | Against the Mire it grows 3 times and moves 86% of the kilos |
+| Purity maxing | 6, 3 | 60% | Fine clay in 9 terms; the mid-run deck takes 21 |
+| Element mastery | 0, 2 | 97% | 29% of mud and 40% of the Mire finished in one term |
+| Deck thinning | 5, 4 | 87% | Burns 1.7 runes against mud, 3.2 against the Mire |
 
 Ward needed press to turn Ward into progress (42% against the Mire without it), magnesia had to stop at each band's middle (38% when it dragged traces under), and purity changes nothing until something asks for it, so fine clay is the prototype's first purity target.
 
@@ -180,7 +180,7 @@ Ward needed press to turn Ward into progress (42% against the Mire without it), 
 - **Resistance** = the material's base × the pool's grade multiplier × the step factor for every quality flipped along the runepath (a diagonal flips two).
 - **Runepath:** from the anchor, walk the elemental square through the circumscribed and inscribed runes, easiest step first, ties going earth, fire, air, water. It ends at the seal, the last of those runes placed, whose element is the output.
 - **Input kg** = neutral take × min(1, power ÷ resistance) × (reach up ÷ reach down) ^ ln(1 + power ÷ resistance). The neutral take is a flat 1 kg, a property of the material, so a heavier pool takes more work. Reach up is the anchor plus side links, times reach motes; reach down is the anchor plus tangents, a join that touches at a point; power is the anchor plus circumscribes and inscribes.
-- **Output kg** = input × 1.1 per circumscribe ÷ 1.1 per inscribe. A boost mote adds 0.1 to its rune's multiplier. Element yields don't apply. A step that stays on the element the path is at changes purity: inscribed, it purifies (+1 grade, one more step of resistance); circumscribed, it adulterates (−1 grade). Everything transmuted comes out impure, so air → water → water, the last inscribed, makes medium water.
+- **Output kg** = input × 1.1 per circumscribe ÷ 1.1 per inscribe. A boost mote adds 0.1 to its rune's multiplier. Element yields don't apply. A step that stays on the element the path is at changes purity. On the anchor's own element, inscribed, it purifies (+1 grade, one more step of resistance); circumscribed, it adulterates (−1 grade). After the path changes element, repeating the new element purifies either way. Everything transmuted comes out impure, so water → earth → earth makes medium earth.
 
 Defaults: base 3.5, step ×2, a flat 1 kg take, power gate on. `--mix C:K[:T]` tries a starting deck of C circles and K crescents per element (and T plain triangles).
 
@@ -229,7 +229,7 @@ Tuning's Combat switch picks between element moves (above) and purity effects, n
 | --- | --- | --- |
 | Mud | Opening | median 12 spent (p90 27) |
 | Mud | Mid-run, late-run | median 4, 0 |
-| The Mire (per 35 kg, signature move a third of the time) | Late-run | 72% won, wins median 50 (p10 0, p90 88) |
+| The Mire (per 35 kg, signature move a third of the time) | Late-run | 63% won, wins median 50 (p10 0, p90 90) |
 | The Mire | Mid-run, late+ | 0%, 95% |
 
 Purifying still rarely pays for the opening deck: its purifying sigils move 2–3 kg. `--free-purify` (no extra resistance step) changed nothing. Flags: `--purity-chance`, `--purity-mass`, `--purity-flare`, `--purity-ward`, `--purity-taint`, `--boss-chance`, `--boss-purity-mass`, `--boss-signature`.

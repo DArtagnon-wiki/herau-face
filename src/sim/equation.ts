@@ -16,10 +16,12 @@ import type { Elemental, Grade, Pool, Rune, Sigil } from './types'
 // element. Ties on the square go earth, fire, air, water.
 //
 // Purity: a step that changes element leaves the output impure. A step that
-// stays on the same element changes purity instead: inscribed, it purifies
-// (one grade up, at one extra step of resistance); circumscribed, it
-// adulterates (one grade down). So air → water → water, the second water
-// inscribed, makes medium water.
+// stays on the same element changes purity instead. On the anchor's own
+// element, before any change, inscribing purifies (one grade up, at one extra
+// step of resistance) and circumscribing adulterates (one grade down). Once the
+// path has changed element, repeating the new element purifies, inscribed or
+// circumscribed: water → earth → earth makes medium earth, and air → water →
+// water medium water.
 
 export interface Equation {
   /** The material's base resistance. A pool's is this × its grade multiplier; the commission can raise it. */
@@ -57,7 +59,10 @@ export interface PathStep {
   to: Elemental
   /** Qualities flipped on this step: 0 same element, 1 an edge of the square, 2 a diagonal. */
   flips: number
-  /** On a same-element step: +1 when inscribed (purify; +2 with rectification), −1 when circumscribed (adulterate). 0 otherwise. */
+  /**
+   * On a same-element step: +1 purifies (+2 with rectification), −1 adulterates; 0 when the step changes element.
+   * Before any change, inscribing purifies and circumscribing adulterates; after one, either purifies.
+   */
   purity: number
 }
 
@@ -89,6 +94,8 @@ export function runepath(sigil: Sigil): Runepath | null {
   let at: Elemental = from
   const rank = (r: Rune) => (r.affinity === 'none' ? -1 : PREFERENCE.indexOf(r.affinity))
   const cost = (r: Rune) => (r.affinity === 'none' ? 0 : stepsBetween(at, r.affinity))
+  // Whether the path has changed element yet: after a change, repeating the new element purifies.
+  let changed = false
   while (rest.length) {
     let best = 0
     for (let i = 1; i < rest.length; i++) {
@@ -97,16 +104,19 @@ export function runepath(sigil: Sigil): Runepath | null {
     }
     const [j] = rest.splice(best, 1)
     const to = j.rune.affinity === 'none' ? at : j.rune.affinity
-    steps.push(step(j.rune, j.kind as PathStep['kind'], at, to))
+    const st = step(j.rune, j.kind as PathStep['kind'], at, to, changed)
+    steps.push(st)
+    changed ||= st.flips > 0
     at = to
   }
-  steps.push(step(seal.rune, seal.kind as PathStep['kind'], at, seal.rune.affinity as Elemental))
+  steps.push(step(seal.rune, seal.kind as PathStep['kind'], at, seal.rune.affinity as Elemental, changed))
   return { steps, flips: steps.reduce((n, s) => n + s.flips, 0) }
 }
 
-function step(rune: Rune, kind: PathStep['kind'], from: Elemental, to: Elemental): PathStep {
+function step(rune: Rune, kind: PathStep['kind'], from: Elemental, to: Elemental, changed = false): PathStep {
   const flips = stepsBetween(from, to)
-  const purity = flips === 0 && rune.affinity !== 'none' ? (kind === 'inscribe' ? (rune.rectify ? 2 : 1) : -1) : 0
+  const purifies = changed || kind === 'inscribe'
+  const purity = flips === 0 && rune.affinity !== 'none' ? (purifies ? (rune.rectify ? 2 : 1) : -1) : 0
   return { rune, kind, from, to, flips, purity }
 }
 

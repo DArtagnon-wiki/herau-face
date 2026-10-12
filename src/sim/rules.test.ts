@@ -498,7 +498,7 @@ describe('the alchemical equation', () => {
     expect(r.target).toEqual({ elemental: 'earth', grade: 2 })
   })
 
-  it('adulterates when the path circumscribes the element it is at, at no extra resistance', () => {
+  it('adulterates when the path circumscribes the anchor’s own element, at no extra resistance', () => {
     const r = resolveEquation(sigil(rune('earth'), ['circumscribe', rune('earth')]), [{ elemental: 'earth', grade: 2, kg: 10 }], undefined, eq)
     expect(r.mode).toBe('adulterate')
     expect(r.required).toBe(20)
@@ -517,6 +517,19 @@ describe('the alchemical equation', () => {
     expect(purified.target).toEqual({ elemental: 'water', grade: 1 })
     // One flip and one purifying step: two steps of resistance.
     expect(purified.required).toBe(10 * 1 * 2 ** 2)
+  })
+
+  it('purifies a repeated element after a change whether it is inscribed or circumscribed: water → earth → earth makes medium earth', () => {
+    const water = [{ elemental: 'water' as const, grade: 0 as const, kg: 10 }]
+    const ringed = resolveEquation(sigil(rune('water', 'crescent'), ['circumscribe', rune('earth')], ['circumscribe', rune('earth')]), water, undefined, eq)
+    expect(ringed.target).toEqual({ elemental: 'earth', grade: 1 })
+    expect(ringed.mode).toBe('transmute')
+    // One flip and one purifying step, from impure water (×0.5): 10 × 0.5 × 2².
+    expect(ringed.required).toBe(10 * 0.5 * 2 ** 2)
+    // Three earth rings purify twice: pure earth.
+    const triple = makeRune(nextId++, { body: 'triangle', motes: [elementMote('water'), LINK_MOTE, LINK_MOTE] })
+    const pure = resolveEquation(sigil(triple, ['circumscribe', rune('earth')], ['circumscribe', rune('earth')], ['circumscribe', rune('earth')]), water, undefined, eq)
+    expect(pure.target).toEqual({ elemental: 'earth', grade: 2 })
   })
 
   it('adds boost motes to their rune multiplier', () => {

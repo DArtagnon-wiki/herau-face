@@ -39,7 +39,7 @@ A roguelike deckbuilder in the spirit of Balatro: each term you compose sigils f
 | Purity | How pure a pool is: impure, medium, pure, or perfect for bosses. Purer pools resist change more and act less in combat; anything transmuted comes out impure. |
 | Yield | Kg produced per kg changed, set by the from→to pair. |
 | Change-inertia | Umbrella for how hard a change is (grade) and how much results (yield). |
-| Purifying | A runepath step that inscribes the element the path is at: purity one grade up, at one more step of resistance. Its opposite, adulterating, circumscribes it: one grade down. |
+| Purifying | A runepath step that repeats an element: purity one grade up, at one more step of resistance. On the anchor's own element it takes an inscribe; after the path has changed element, an inscribe or a circumscribe. Its opposite, adulterating, circumscribes the anchor's own element: one grade down. |
 | Commission | One encounter: a source material (the opponent) to transmute into a target material (the puzzle). Balatro's blind. |
 | Action pool | A source's weighted set of moves; one is rolled and revealed each term. |
 | Flare | A burst of instability from the commission. Ward absorbs part; the rest costs quintessence. |
@@ -253,21 +253,21 @@ Six archetypes, each built on a resource of its own, so a mote, rune or catalyst
 
 | Deck | Mud: quintessence spent (median), terms | The Mire, late version: won | What sets it apart |
 | --- | --- | --- | --- |
-| Baseline: mid-run, late-run | 5, 3 terms | 72% | 1.9 sigils a term; Ward absorbs 77% of mud's flares |
-| Consistent ward | 0, 5 terms | 92%, wins costing a median of 0 | Ward absorbs 98% of mud's flares and 91% of the Mire's |
-| Combo | 0, 3 terms | 92% | 3.9 sigils a term; anchors return 5 times a commission, 8.6 against the Mire |
-| One great rune | 4, 3 terms | 60% | Against the Mire the great rune grows 3 times and moves 87% of the kilos |
-| Purity maxing | 6, 3 terms | 73% | Fine clay in a median of 10 terms; the mid-run deck takes 21 |
-| Element mastery | 0, 2 terms | 93% | 29% of mud commissions finish in one term, 42% of the Mire's; magnesia pulls in 2.4 kg of traces, 14 kg from the Mire |
-| Deck thinning | 5, 4 terms | 88% | Burns 1.7 runes a commission against mud, 3.2 against the Mire |
+| Baseline: mid-run, late-run | 5, 3 terms | 63% | 1.9 sigils a term; Ward absorbs 77% of mud's flares |
+| Consistent ward | 0, 5 terms | 87%, wins costing a median of 0 | Ward absorbs 98% of mud's flares and 89% of the Mire's |
+| Combo | 0, 3 terms | 92% | 3.9 sigils a term; anchors return 5 times a commission, 9.8 against the Mire |
+| One great rune | 4, 3 terms | 58% | Against the Mire the great rune grows 3 times and moves 86% of the kilos |
+| Purity maxing | 6, 3 terms | 60% | Fine clay in a median of 9 terms; the mid-run deck takes 21 |
+| Element mastery | 0, 2 terms | 97% | 29% of mud commissions finish in one term, 40% of the Mire's; magnesia pulls in 2.4 kg of traces, 14.5 kg from the Mire |
+| Deck thinning | 5, 4 terms | 87% | Burns 1.7 runes a commission against mud, 3.2 against the Mire |
 
 - **Each archetype wins its own way.** Each deck's signature measure moves only for that deck: Ward absorbed, sigils a term, the great rune's share of the work, terms on fine clay, one-term finishes, runes burned.
-- **Ward needed a payoff.** Without press, the late ward deck won 42% against the Mire. It ground through 17 terms while slag piled up. Turning held Ward into power lifted it to 92%.
+- **Ward needed a payoff.** Without press, the late ward deck won 42% against the Mire. It ground through 17 terms while slag piled up. Turning held Ward into power lifted it to 87%.
 - **Magnesia had to home in.** Drawing a flat quarter dragged traces under their band, and a deck without air or fire runes could not raise them again. The late mastery deck won 38%, and some fights never ended. Stopping at the middle of each band made it the fastest deck.
-- **Purity needs a goal.** Against plain mud and the Mire the purity deck plays like the baseline, because nothing rewards purity there. Fine clay, mud that must finish with at least half its earth pure, is the prototype's first purity target: the purity deck takes 10 terms, the mid-run deck 21.
-- **A great rune has to be the deck's engine.** The first late version carried two reach motes and emptied the Mire's water on its first cast, before growing at all. Rebuilt with mid-run triangles around it, and calcination on the great rune itself, it does 87% of the work. Multiplication counts the calcination too, so it burns more of the deck as it grows. It wins only 60%: one rune is a high-variance plan.
+- **Purity needs a goal.** Against plain mud and the Mire the purity deck plays like the baseline, because nothing rewards purity there. Fine clay, mud that must finish with at least half its earth pure, is the prototype's first purity target: the purity deck takes 9 terms, the mid-run deck 21.
+- **A great rune has to be the deck's engine.** The first late version carried two reach motes and emptied the Mire's water on its first cast, before growing at all. Rebuilt with mid-run triangles around it, and calcination on the great rune itself, it does 87% of the work. Multiplication counts the calcination too, so it burns more of the deck as it grows. It wins only 58%: one rune is a high-variance plan.
 - **Short commissions hide growth and thinning.** Mud ends in about 3 terms, before multiplication or calcination pays; they show against the Mire.
-- **Coherent decks beat generic upgrades.** Five of the six late archetype decks beat the late-run deck on a similar budget. The budgets are rough, so this is a tuning target, not a verdict. It matches Slay the Spire, where a coherent deck beats a pile of good cards.
+- **Coherent decks beat generic upgrades.** Four of the six late archetype decks (ward, combo, mastery, thinning) beat the late-run deck on a similar budget. The budgets are rough, so this is a tuning target, not a verdict. It matches Slay the Spire, where a coherent deck beats a pile of good cards.
 
 ## Power arc
 
@@ -355,7 +355,7 @@ Proposed base resistance: 10 for a 1-step change and 30 for a direct 2-step jump
 
 **Yield is leverage, not reward.** A high yield is a sledgehammer: 1 kg Earth → 20 kg Air is fast but easy to overshoot. A low yield is a scalpel: 1 kg Water → 0.2 kg Fire. Proposed principle: every elemental gets at least one coarse route and one fine route. Mass is not conserved.
 
-**Purifying** raises a pool one grade along the runepath: inscribe the element the path is at. It costs one more step of resistance and, under the equation, the inscribe's ÷1.1. Circumscribing it instead adulterates, one grade down, at no extra step. Steel from water: water to impure earth, then purify to medium and to pure.
+**Purifying** raises a pool one grade along the runepath: inscribe the anchor's own element, or, once the path has changed element, repeat the new element with an inscribe or a circumscribe. It costs one more step of resistance. Circumscribing the anchor's own element instead adulterates, one grade down, at no extra step. Water → earth → earth makes medium earth. Steel from water: water to impure earth, then purify to medium and to pure.
 
 ## Multi-axis resolution
 
@@ -394,7 +394,7 @@ R &= R_{\text{base}} \times g \times s^{\,\text{flips}} \\
 - **The runepath** starts at the anchor and walks the elemental square through the circumscribed and inscribed runes, easiest step first. Ties go earth, fire, air, water: the Planeteers' order, which is also a walk around the square. It ends at the seal, the last of those runes placed, and the output is the seal's element.
 - **The neutral take** N is a flat amount, a property of the material (mud: 1 kg), so weight is difficulty: emptying a pool needs a multiplier of the pool's weight ÷ N. Power short of resistance shrinks the take: earth to air flips both qualities, so medium earth resists 14 against a two-rune sigil's 10, and the take shrinks to 0.7 kg.
 - **Aiming.** Reach up is the anchor plus side links, times reach motes. Reach down is the anchor plus tangents, a join that touches the anchor at a point, kept for the prototype. Power P is the anchor plus circumscribes and inscribes.
-- **Output.** Each circumscribe multiplies by 1.1 and each inscribe divides by 1.1. A boost mote adds a flat 0.1 to its rune's multiplier. Element yields no longer apply. A step that stays on the element the path is at changes purity instead: inscribed, it purifies (one grade up, at one extra step); circumscribed, it adulterates (one grade down). Anything transmuted comes out impure, so air → water → water, the last inscribed, makes medium water.
+- **Output.** Each circumscribe multiplies by 1.1 and each inscribe divides by 1.1. A boost mote adds a flat 0.1 to its rune's multiplier. Element yields no longer apply. A step that stays on the element the path is at changes purity instead. On the anchor's own element, inscribed, it purifies (one grade up, at one extra step); circumscribed, it adulterates (one grade down). Once the path has changed element, repeating the new element purifies either way. Anything transmuted comes out impure, so water → earth → earth makes medium earth and air → water → water medium water.
 
 Simulated against mud with those numbers, 60 commissions each:
 
@@ -468,7 +468,7 @@ The prototype now defaults to purity effects. Each element stirs with its own ch
 
 - **The amalgam's purity is its threat.** Mud's 18 kg of impure water flares 15 half the time; its medium earth flares 5 half the time and slowly sours, so a long commission grows more volatile.
 - **The reference mass sets the pressure.** Quoted per 15 kg, the opening deck paid a median of 18 against mud (p90 41) and lost 1% of commissions. Per 17 kg, now that table strain is gone, it pays 12 (p90 27), the mid-run deck 4 and the late-run deck 0.
-- **The Mire** quotes its effects per 35 kg, and when its earth, water or fire stirs it makes its signature move a third of the time. The late-run deck wins 72% (wins cost a median of 50, p10 0, p90 88), the mid-run deck never wins, and late+ wins 95%.
+- **The Mire** quotes its effects per 35 kg, and when its earth, water or fire stirs it makes its signature move a third of the time. The late-run deck wins 63% (wins cost a median of 50, p10 0, p90 90), the mid-run deck never wins, and late+ wins 95%.
 - **Purifying still barely pays for the opening deck.** Purifying cuts a pool's flare from 15 to 5, and from medium to pure turns flare into Ward, but an opening purifying sigil moves 2–3 kg, worth about one flare a term, and the water is about to be transmuted anyway. Waiving purifying's extra step of resistance changed nothing.
 
 The element moves below, the first version, remain an option in Tuning.

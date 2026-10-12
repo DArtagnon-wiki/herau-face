@@ -383,7 +383,7 @@ function startView(): string {
           ? `<p><b>The equation.</b> With reach up equal to reach down, a sigil takes ${neutralWords(ui.settings.equation!)}${ui.settings.equation!.gate ? ', less if its power falls short of the pool’s resistance' : ''}. Side links aim for more and tangents for less, and power against resistance decides how far you get: kilos = neutral take × (reach up ÷ reach down)<sup>ln(1 + power ÷ resistance)</sup>. Resistance doubles for every quality the runepath flips. Switch to Reach × Force in Tuning.</p>`
           : `<p><b>Reach × Force.</b> Reach is how many kilos the sigil grabs; Force is how hard it pushes. Each change needs some Force (impure water to earth needs 5), and what converts is Reach × Force ÷ that need. They multiply, so give each new rune to whichever total is smaller.</p>`
       }
-      <p><b>Purity.</b> Every element is impure, medium, pure or perfect. Purer elements resist change more, and when they stir in combat they do less harm: pure ones even lend you Ward. Anything a sigil transmutes comes out impure, so working the amalgam stirs it up. Inscribe the element the runepath is at to purify (one grade up, one more step of resistance); circumscribe it to adulterate (one grade down).</p>
+      <p><b>Purity.</b> Every element is impure, medium, pure or perfect. Purer elements resist change more, and when they stir in combat they do less harm: pure ones even lend you Ward. Anything a sigil transmutes comes out impure, so working the amalgam stirs it up. Inscribe the anchor’s own element to purify it (one grade up, one more step of resistance); circumscribe it to adulterate (one grade down). Once the runepath has changed element, repeating the new element purifies, inscribed or circumscribed: water → earth → earth makes medium earth.</p>
       <p class="fine">Cast sigils stay on the table around the amalgam, for show.</p>
     </section>
     ${tuningView()}
@@ -395,9 +395,9 @@ function joinHelp(kind: JoinKind, equation = false): string {
     const eq = ui.game?.settings.equation ?? ui.settings.equation ?? DEFAULT_EQUATION
     switch (kind) {
       case 'circumscribe':
-        return `Drawn around the anchor: a step on the runepath. Adds its power, and multiplies the output by ${eq.ring} (plus boost motes). On the element the path is already at, it adulterates: one grade less pure. The runepath’s last step is the seal, drawn with a double line: its element is what you make.`
+        return `Drawn around the anchor: a step on the runepath. Adds its power, and multiplies the output by ${eq.ring} (plus boost motes). On the anchor’s own element, before any change, it adulterates: one grade less pure. After a change, repeating the new element purifies, one more step of resistance. The runepath’s last step is the seal, drawn with a double line: its element is what you make.`
       case 'inscribe':
-        return `Drawn inside the anchor: a step on the runepath. Adds its power, and divides the output by ${eq.inscribe}. On the element the path is already at, it purifies: one grade purer, at one more step of resistance. Anything transmuted comes out impure, so air → water → water, the last inscribed, makes medium water.`
+        return `Drawn inside the anchor: a step on the runepath. Adds its power, and divides the output by ${eq.inscribe}. On the element the path is already at, it purifies: one grade purer, at one more step of resistance. Anything transmuted comes out impure; repeating the new element after a change purifies it, so air → water → water makes medium water.`
       case 'side':
         return 'Hangs outside, pointing out: adds its power to reach up, for more kilos.'
       case 'tangent':
@@ -709,7 +709,7 @@ function joinHint(r: Rune, kind: JoinKind, sigil: Sigil): string {
   const eq = ui.game?.settings.equation
   if (eq) {
     const hint: Record<JoinKind, string> = {
-      circumscribe: `+${r.power} power · ×${num(eq.ring + r.boost)}${purityStep(r, 'circumscribe', sigil) < 0 ? ' · adulterate' : ''}`,
+      circumscribe: `+${r.power} power · ×${num(eq.ring + r.boost)}${purityStep(r, 'circumscribe', sigil) < 0 ? ' · adulterate' : purityStep(r, 'circumscribe', sigil) > 0 ? ' · purify' : ''}`,
       inscribe: `+${r.power} power · ÷${num(eq.inscribe + r.boost)}${purityStep(r, 'inscribe', sigil) > 0 ? ' · purify' : ''}`,
       side: `+${r.power} reach up`,
       tangent: `+${r.power} reach down`,
