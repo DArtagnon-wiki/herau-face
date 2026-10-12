@@ -377,7 +377,8 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--gilt); }
 .tchip .band { color: var(--ink-faint); font-size: 13.5px; }
 .this-term { display: grid; gap: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--panel-edge); }
 .cast-list { margin: 0; padding-left: 1.3em; display: grid; gap: 3px; font-size: 15px; color: var(--ink-soft); }
-.actions.four { grid-template-columns: 0.9fr 1fr 1.2fr 1.3fr; }
+.actions.main { grid-template-columns: 0.8fr 1.2fr 1.3fr; }
+.actions.pair { grid-template-columns: 1fr 1.6fr; }
 .actions .end-term { display: grid; gap: 1px; justify-items: center; border-color: var(--gilt); }
 .actions .end-term .sub { font-family: var(--font-text); font-size: 13px; letter-spacing: 0; color: var(--ink-soft); font-weight: 600; }
 .history li ul { margin: 4px 0 0; padding-left: 1.1em; display: grid; gap: 2px; font-size: 14.5px; }

@@ -82,8 +82,8 @@ export function outputs(sigil: Sigil): Outputs {
 
 export interface Resolution {
   outputs: Outputs
-  /** Purify and adulterate change a pool's purity without changing its element. */
-  mode: 'transmute' | 'purify' | 'adulterate' | 'none'
+  /** Purify changes a pool's purity without changing its element. */
+  mode: 'transmute' | 'purify' | 'none'
   /** Why nothing changes, when mode is 'none'. */
   note: string
   source?: Pool

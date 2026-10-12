@@ -383,7 +383,7 @@ function startView(): string {
           ? `<p><b>The equation.</b> With reach up equal to reach down, a sigil takes ${neutralWords(ui.settings.equation!)}${ui.settings.equation!.gate ? ', less if its power falls short of the pool’s resistance' : ''}. Side links aim for more and tangents for less, and power against resistance decides how far you get: kilos = neutral take × (reach up ÷ reach down)<sup>ln(1 + power ÷ resistance)</sup>. Resistance doubles for every quality the runepath flips. Switch to Reach × Force in Tuning.</p>`
           : `<p><b>Reach × Force.</b> Reach is how many kilos the sigil grabs; Force is how hard it pushes. Each change needs some Force (impure water to earth needs 5), and what converts is Reach × Force ÷ that need. They multiply, so give each new rune to whichever total is smaller.</p>`
       }
-      <p><b>Purity.</b> Every element is impure, medium, pure or perfect. Purer elements resist change more, and when they stir in combat they do less harm: pure ones even lend you Ward. Anything a sigil transmutes comes out impure, so working the amalgam stirs it up. Inscribe the anchor’s own element to purify it (one grade up, one more step of resistance); circumscribe it to adulterate (one grade down). Once the runepath has changed element, repeating the new element purifies, inscribed or circumscribed: water → earth → earth makes medium earth.</p>
+      <p><b>Purity.</b> Every element is impure, medium, pure or perfect. Purer elements resist change more, and when they stir in combat they do less harm: pure ones even lend you Ward. Anything a sigil transmutes comes out impure, so working the amalgam stirs it up. Every runepath step that doesn’t change element purifies, inscribed or circumscribed: repeat the element the path is at, or add a neutral rune (one with no element). Each is one grade up at one more step of resistance. Water → earth → earth makes medium earth, and so does water → earth inside a neutral ring. Purifying before a change of element is wiped out by it, so it costs nothing.</p>
       <p class="fine">Cast sigils stay on the table around the amalgam, for show.</p>
     </section>
     ${tuningView()}
@@ -395,9 +395,9 @@ function joinHelp(kind: JoinKind, equation = false): string {
     const eq = ui.game?.settings.equation ?? ui.settings.equation ?? DEFAULT_EQUATION
     switch (kind) {
       case 'circumscribe':
-        return `Drawn around the anchor: a step on the runepath. Adds its power, and multiplies the output by ${eq.ring} (plus boost motes). On the anchor’s own element, before any change, it adulterates: one grade less pure. After a change, repeating the new element purifies, one more step of resistance. The runepath’s last step is the seal, drawn with a double line: its element is what you make.`
+        return `Drawn around the anchor: a step on the runepath. Adds its power, and multiplies the output by ${eq.ring} (plus boost motes). If it changes element, the output comes out impure. If it doesn’t (the element the path is already at, or a neutral rune), it purifies: one grade purer, at one more step of resistance. The last elemental rune on the runepath is the seal, drawn with a double line: its element is what you make. Neutral runes come after it.`
       case 'inscribe':
-        return `Drawn inside the anchor: a step on the runepath. Adds its power, and divides the output by ${eq.inscribe}. On the element the path is already at, it purifies: one grade purer, at one more step of resistance. Anything transmuted comes out impure; repeating the new element after a change purifies it, so air → water → water makes medium water.`
+        return `Drawn inside the anchor: a step on the runepath. Adds its power, and divides the output by ${eq.inscribe}. Like a ring, a step that keeps the element purifies, one grade purer at one more step of resistance: the element the path is at, or a neutral rune. Anything transmuted comes out impure, so air → water → water makes medium water.`
       case 'side':
         return 'Hangs outside, pointing out: adds its power to reach up, for more kilos.'
       case 'tangent':
@@ -446,7 +446,6 @@ function tuningView(): string {
       <label>Quintessence <select id="tune-stock">${opt(60, s.stock)}${opt(100, s.stock)}${opt(140, s.stock)}</select></label>
       <label>Hand size <select id="tune-hand">${[4, 5, 6, 7, 8, 9, 10].map((v) => opt(v, s.handSize)).join('')}</select></label>
       <label>Sigils a term <select id="tune-casts">${opt(1, s.castsPerTerm)}${opt(2, s.castsPerTerm)}${opt(3, s.castsPerTerm)}${opt(0, s.castsPerTerm, 'Any number')}</select></label>
-      <label>Discards <select id="tune-discards">${opt(1, s.discards)}${opt(2, s.discards)}${opt(3, s.discards)}</select></label>
     </div>
     <p class="fine">${s.equation ? 'The equation: kilos = neutral take × (reach up ÷ reach down)^ln(1 + power ÷ resistance), output × each ring ÷ each inscribe.' : 'Unticking surplus Force uses the design doc’s formula, where Force past the requirement does nothing.'} Changing the rules takes effect on restart. ${ui.game ? `Seed ${ui.seed}.` : ''}</p>
     ${ui.game ? `<div class="row"><button data-act="restart">Restart with these</button><button data-act="replay">Replay seed ${ui.seed}</button></div>` : ''}
@@ -639,7 +638,7 @@ function equationStats(g: GameState, sigil: Sigil, preview: CastPreview): string
   const path = runepath(eff)
   const a = sigil.anchor.affinity
   const route =
-    a === 'none' ? 'No element' : path ? [ELEMENT_NAME[a], ...path.steps.map((s) => ELEMENT_NAME[s.to])].join(' → ') + (r.mode === 'purify' ? ' · purify' : r.mode === 'adulterate' ? ' · adulterate' : ' · sealed') : `${ELEMENT_NAME[a]} → no seal yet`
+    a === 'none' ? 'No element' : path ? [ELEMENT_NAME[a], ...path.steps.map((s) => ELEMENT_NAME[s.to])].join(' → ') + (r.mode === 'purify' ? ' · purify' : ' · sealed') : `${ELEMENT_NAME[a]} → no seal yet`
   const t = path && r.source ? terms(eff, r.source, eq, path) : null
   const extras = [r.outputs.reachMult > 1 ? `Reach up ×${+r.outputs.reachMult.toFixed(2)} from motes` : '', r.outputs.guard ? `+${r.outputs.guard} Ward from motes` : '', ...archetypeNotes(g, sigil, eff, preview)].filter(Boolean)
   let change = r.mode === 'none' ? `<p class="note">${esc(r.mode === 'none' && !path && a !== 'none' ? 'Circumscribe or inscribe a rune to seal the equation: its element is the output.' : r.note)}</p>` : ''
@@ -697,7 +696,7 @@ function archetypeNotes(g: GameState, sigil: Sigil, eff: Sigil, preview: CastPre
   return out
 }
 
-/** Whether joining this rune this way would be a purifying (+1) or adulterating (−1) step on the runepath. */
+/** The grades joining this rune this way would purify on the runepath, as things stand: 0 if it changes element. */
 function purityStep(r: Rune, kind: 'circumscribe' | 'inscribe', sigil: Sigil): number {
   const path = runepath({ anchor: sigil.anchor, joins: [...sigil.joins, { kind, rune: r }] })
   return path?.steps.find((st) => st.rune === r)?.purity ?? 0
@@ -709,7 +708,7 @@ function joinHint(r: Rune, kind: JoinKind, sigil: Sigil): string {
   const eq = ui.game?.settings.equation
   if (eq) {
     const hint: Record<JoinKind, string> = {
-      circumscribe: `+${r.power} power · ×${num(eq.ring + r.boost)}${purityStep(r, 'circumscribe', sigil) < 0 ? ' · adulterate' : purityStep(r, 'circumscribe', sigil) > 0 ? ' · purify' : ''}`,
+      circumscribe: `+${r.power} power · ×${num(eq.ring + r.boost)}${purityStep(r, 'circumscribe', sigil) > 0 ? ' · purify' : ''}`,
       inscribe: `+${r.power} power · ÷${num(eq.inscribe + r.boost)}${purityStep(r, 'inscribe', sigil) > 0 ? ' · purify' : ''}`,
       side: `+${r.power} reach up`,
       tangent: `+${r.power} reach down`,
@@ -877,16 +876,15 @@ function handView(g: GameState): string {
 
 function actionsView(g: GameState, sigil: Sigil | null, preview: CastPreview | null, end: EndOutcome): string {
   if (ui.discarding) {
-    return `<div class="actions">
+    return `<div class="actions pair">
       <button data-act="discard-cancel">Cancel</button>
       <button class="primary" data-act="discard-confirm" ${ui.marked.size ? '' : 'disabled'}>Discard ${ui.marked.size || ''} and redraw</button>
     </div>`
   }
   const invalid = sigil ? invalidReason(g, sigil) : 'Choose an anchor.'
   const castLabel = preview?.cast.finished ? 'Cast · finish' : 'Cast'
-  return `<div class="actions four">
+  return `<div class="actions main">
     <button data-act="clear" ${sigil ? '' : 'disabled'}>Clear</button>
-    <button data-act="discard-mode" ${g.discardsLeft > 0 && !sigil ? '' : 'disabled'}>Discard <span class="num">(${g.discardsLeft})</span></button>
     <button class="primary" data-act="cast" ${invalid ? 'disabled' : ''}>${castLabel}</button>
     <button class="end-term" data-act="end-term" ${g.phase === 'compose' ? '' : 'disabled'}>End term<span class="sub num">${end.paid > 0 ? `pay ${num(end.paid)}` : 'no cost'}${end.finished ? ' · finishes' : ''}</span></button>
   </div>`
@@ -1120,6 +1118,8 @@ function sandboxView(g: GameState): string {
       ${where('hand', 'In hand')}${where('draw', 'Draw pile')}${where('discard', 'Discard')}
       ${editorView(g)}
       <p class="fine">New runes join the deck. Restarting keeps every change here. <button class="link-btn" data-act="sb-standard">Restart with the standard deck</button></p>
+      <div class="row sb-discard"><button data-act="discard-mode" ${g.phase === 'compose' && g.hand.length ? '' : 'disabled'}>Discard from hand and redraw</button></div>
+      <p class="fine">A sandbox tool: as many times as you like. In a run, drawing and discarding will come from motes and runes.</p>
     </div>
     <div class="sb-section">
       <h3>Decks along a run</h3>
@@ -1311,7 +1311,6 @@ function readTuning() {
   s.flareScale = n('tune-flare', s.flareScale)
   s.stock = n('tune-stock', s.stock)
   s.handSize = n('tune-hand', s.handSize)
-  s.discards = n('tune-discards', s.discards)
   s.castsPerTerm = n('tune-casts', s.castsPerTerm)
   s.flareRise = n('tune-rise', s.flareRise ?? 0)
   s.debuffFlare = n('tune-debuff', s.debuffFlare ?? 0)
@@ -1427,6 +1426,7 @@ root.addEventListener('click', (e) => {
     case 'discard-mode':
       resetComposer()
       ui.discarding = true
+      requestAnimationFrame(() => document.querySelector('.hand')?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
       break
     case 'discard-cancel':
       ui.discarding = false
@@ -1435,7 +1435,7 @@ root.addEventListener('click', (e) => {
     case 'discard-confirm':
       if (g) {
         const n = ui.marked.size
-        ui.game = discardRunes(g, [...ui.marked])
+        ui.game = discardRunes(g, [...ui.marked], { free: true })
         const dealt = newIn(g, ui.game)
         sound.discard(n)
         sound.deal(dealt.length)

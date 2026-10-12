@@ -13,7 +13,6 @@ import {
   DEFAULT_SETTINGS,
   cast,
   castsLeft,
-  discardRunes,
   endTerm,
   newGame,
   previewCast,
@@ -366,7 +365,6 @@ function bestCast(state: GameState): Scored | null {
 
 function play(seed: number) {
   let s = newGame(settings, seed, { ...setup, start: setup.start.map((p) => ({ ...p })) })
-  let discardsUsed = 0
   let wardOnly = 0
   let purified = 0
   let casts = 0
@@ -393,26 +391,13 @@ function play(seed: number) {
       }
       continue
     }
-    if (s.casts.length === 0 && s.discardsLeft > 0) {
-      const sh = shares(s.pools)
-      const t = s.target
-      const needed = new Set<string>(['water', 'earth', 'none'])
-      if (sh.air >= t.air.max) needed.add('air')
-      if (sh.fire >= t.fire.max) needed.add('fire')
-      const drop = s.hand.filter((r) => r.junk || !needed.has(r.affinity)).map((r) => r.id)
-      if (drop.length) {
-        s = discardRunes(s, drop)
-        discardsUsed++
-        continue
-      }
-    }
     s = endTerm(s)
   }
   const all = [...s.hand, ...s.draw, ...s.discard, ...s.burned]
   const maxStacks = Math.max(0, ...all.map((r) => r.stacks))
   const absorbed = s.history.reduce((a, t) => a + t.absorbed, 0)
   const flares = s.history.reduce((a, t) => a + t.flare, 0)
-  return { state: s, discardsUsed, wardOnly, purified, casts, returns, gathered, maxStacks, moved, movedByGreat, absorbed, flares, burned: s.burned.length, refined: refinedShare(s.pools), peak: Math.max(peak, totalKg(s.pools)) }
+  return { state: s, wardOnly, purified, casts, returns, gathered, maxStacks, moved, movedByGreat, absorbed, flares, burned: s.burned.length, refined: refinedShare(s.pools), peak: Math.max(peak, totalKg(s.pools)) }
 }
 
 /** --trace N prints the first N commissions cast by cast. */
@@ -480,5 +465,5 @@ console.log(buckets.map(([label, f]) => `${label}: ${Math.round((100 * spent.fil
 console.log(
   `archetype signs: Ward absorbed ${Math.round((100 * runs.reduce((a, r) => a + r.absorbed, 0)) / Math.max(1, runs.reduce((a, r) => a + r.flares, 0)))}% of flares · returns ${f1(mean(runs.map((r) => r.returns)))} · biggest growth ${f1(mean(runs.map((r) => r.maxStacks)))} casts, moving ${Math.round((100 * runs.reduce((a, r) => a + r.movedByGreat, 0)) / Math.max(1, runs.reduce((a, r) => a + r.moved, 0)))}% of the kilos · burned ${f1(mean(runs.map((r) => r.burned)))} · gathered ${f1(mean(runs.map((r) => r.gathered)))} kg · medium or purer at the end ${Math.round(100 * mean(runs.map((r) => r.refined)))}%${setup.catalysts?.length ? ` · catalysts ${setup.catalysts.join(', ')}` : ''}`,
 )
-console.log(`sigils a term ${f1(mean(runs.map((r) => r.casts / Math.max(1, termsUsed(r.state)))))} · defence-only sigils ${f1(mean(runs.map((r) => r.wardOnly)))} · purifying ${f1(mean(runs.map((r) => r.purified)))} · discards used ${f1(mean(runs.map((r) => r.discardsUsed)))}`)
+console.log(`sigils a term ${f1(mean(runs.map((r) => r.casts / Math.max(1, termsUsed(r.state)))))} · defence-only sigils ${f1(mean(runs.map((r) => r.wardOnly)))} · purifying ${f1(mean(runs.map((r) => r.purified)))}`)
 

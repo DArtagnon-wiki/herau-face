@@ -363,10 +363,12 @@ describe('a commission', () => {
     expect(invalidReason(s, sigil(rune('water')))).toMatch(/hand/)
   })
 
-  it('spends a discard to redraw', () => {
+  it('gives a run no discards; the sandbox discards freely', () => {
     const s = newGame(undefined, 11)
-    const next = discardRunes(s, [s.hand[0].id, s.hand[1].id])
-    expect(next.discardsLeft).toBe(1)
+    expect(s.discardsLeft).toBe(0)
+    expect(discardRunes(s, [s.hand[0].id])).toBe(s)
+    const next = discardRunes(s, [s.hand[0].id, s.hand[1].id], { free: true })
+    expect(next.discardsLeft).toBe(0)
     expect(next.hand).toHaveLength(6)
     expect(next.hand.some((h) => h.id === s.hand[0].id)).toBe(false)
   })
@@ -498,14 +500,54 @@ describe('the alchemical equation', () => {
     expect(r.target).toEqual({ elemental: 'earth', grade: 2 })
   })
 
-  it('adulterates when the path circumscribes the anchor’s own element, at no extra resistance', () => {
-    const r = resolveEquation(sigil(rune('earth'), ['circumscribe', rune('earth')]), [{ elemental: 'earth', grade: 2, kg: 10 }], undefined, eq)
-    expect(r.mode).toBe('adulterate')
-    expect(r.required).toBe(20)
+  it('purifies when the path circumscribes the anchor’s own element too: sigils never adulterate', () => {
+    const r = resolveEquation(sigil(rune('earth'), ['circumscribe', rune('earth')]), [{ elemental: 'earth', grade: 0, kg: 10 }], undefined, eq)
+    expect(r.mode).toBe('purify')
+    expect(r.required).toBe(10 * 0.5 * 2)
     expect(r.target).toEqual({ elemental: 'earth', grade: 1 })
-    // Impure earth can't get any less pure, so the sigil offers only the pure pool.
+    // Pure earth can't get any purer, so the sigil offers only the impure pool.
     const both = [{ elemental: 'earth' as const, grade: 0 as const, kg: 5 }, { elemental: 'earth' as const, grade: 2 as const, kg: 5 }]
-    expect(resolveEquation(sigil(rune('earth'), ['circumscribe', rune('earth')]), both, undefined, eq).source?.grade).toBe(2)
+    expect(resolveEquation(sigil(rune('earth'), ['circumscribe', rune('earth')]), both, undefined, eq).source?.grade).toBe(0)
+    expect(resolveEquation(sigil(rune('earth'), ['circumscribe', rune('earth')]), [both[1]], undefined, eq).note).toMatch(/already pure/)
+  })
+
+  it('purifies with a neutral rune, ringed or inscribed, sealing at the anchor’s element', () => {
+    const earth = [{ elemental: 'earth' as const, grade: 0 as const, kg: 10 }]
+    const ringed = resolveEquation(sigil(rune('earth'), ['circumscribe', rune('none', 'triangle')]), earth, undefined, eq)
+    expect(ringed.mode).toBe('purify')
+    expect(ringed.target).toEqual({ elemental: 'earth', grade: 1 })
+    expect(ringed.required).toBe(10 * 0.5 * 2)
+    expect(ringed.produced).toBeCloseTo(ringed.converted * 1.1)
+    const inscribed = resolveEquation(sigil(rune('earth'), ['inscribe', rune('none')]), earth, undefined, eq)
+    expect(inscribed.target).toEqual({ elemental: 'earth', grade: 1 })
+    expect(runepath(sigil(rune('earth'), ['inscribe', rune('none')]))!.seal.kind).toBe('inscribe')
+  })
+
+  it('puts neutral runes after the seal, so they purify what it makes: water → earth inside a neutral ring makes medium earth', () => {
+    const water = [{ elemental: 'water' as const, grade: 0 as const, kg: 10 }]
+    const plain = rune('none', 'triangle')
+    const s = sigil(rune('water', 'crescent'), ['circumscribe', plain], ['circumscribe', rune('earth')])
+    const path = runepath(s)!
+    expect(path.steps.map((x) => x.rune)).toEqual([s.joins[1].rune, plain])
+    expect(path.seal.rune).toBe(s.joins[1].rune)
+    const r = resolveEquation(s, water, undefined, eq)
+    expect(r.mode).toBe('transmute')
+    expect(r.target).toEqual({ elemental: 'earth', grade: 1 })
+    expect(r.required).toBe(10 * 0.5 * 2 ** 2)
+  })
+
+  it('charges nothing for purifying a later change of element wipes out', () => {
+    const water = [{ elemental: 'water' as const, grade: 0 as const, kg: 10 }]
+    const r = resolveEquation(sigil(rune('water', 'crescent'), ['inscribe', rune('water')], ['circumscribe', rune('earth')]), water, undefined, eq)
+    expect(r.target).toEqual({ elemental: 'earth', grade: 0 })
+    expect(r.required).toBe(10 * 0.5 * 2)
+  })
+
+  it('lets slag sit on the path and do nothing', () => {
+    const slag = makeRune(nextId++, { body: 'circle', motes: [], junk: true })
+    expect(runepath(sigil(rune('earth'), ['circumscribe', slag]))).toBeNull()
+    const s = sigil(rune('earth', 'crescent'), ['circumscribe', slag], ['inscribe', rune('earth')])
+    expect(runepath(s)!.steps.map((x) => x.purity)).toEqual([1, 0])
   })
 
   it('makes everything it transmutes impure, then purifies what follows: air → water → water makes medium water', () => {

@@ -142,7 +142,7 @@ export function moteEffect(m: Mote, values: MoteValues = DEFAULT_FORGE.values): 
     case 'multiplication':
       return 'Other motes count once more each cast'
     case 'rectification':
-      return 'Inscribed, purifies two grades'
+      return 'Purifying, it purifies two grades'
     case 'digestion':
       return `Purifying takes ${Math.round(100 * (values.digestion ?? ARCHETYPE_VALUES.digestion))}% of the pool too`
     case 'resonance':

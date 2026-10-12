@@ -270,8 +270,6 @@ class Engine {
     } else if (r.mode === 'purify') {
       this.bell(semis(sealVoice.freq, 24), t, 0.1, 1.8, 2)
       this.bell(semis(sealVoice.freq, 31), t + 0.09, 0.07, 1.6, 2)
-    } else if (r.mode === 'adulterate') {
-      this.bell(semis(sealVoice.freq, 11), t, 0.08, 0.9, 1.41)
     } else {
       this.noise(t, 0.12, 'bandpass', 900, 0.04, 2)
     }

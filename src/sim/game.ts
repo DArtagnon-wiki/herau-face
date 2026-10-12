@@ -40,7 +40,8 @@ export const DEFAULT_SETTINGS: Settings = {
   flareScale: 1,
   stock: 100,
   handSize: 6,
-  discards: 2,
+  // Discarding is a sandbox tool; in a run, drawing and discarding come from motes and runes.
+  discards: 0,
   castsPerTerm: 0,
   // Mud's pressure, tuned with the equation and the 4-circle, 8-crescent deck:
   // each elemental acts by its purity, flare moves of 13–16 scaled by the
@@ -385,15 +386,16 @@ export function endTerm(state: GameState): GameState {
   return { ...next, seed: rng.state() }
 }
 
-export function discardRunes(state: GameState, ids: number[]): GameState {
-  if (state.phase !== 'compose' || state.discardsLeft <= 0 || ids.length === 0) return state
+/** Discard runes from hand and draw back up. Spends a discard, unless free (the sandbox's tool). */
+export function discardRunes(state: GameState, ids: number[], opts: { free?: boolean } = {}): GameState {
+  if (state.phase !== 'compose' || (!opts.free && state.discardsLeft <= 0) || ids.length === 0) return state
   const drop = new Set(ids)
   const rng = makeRng(state.seed)
   let next: GameState = {
     ...state,
     hand: state.hand.filter((g) => !drop.has(g.id)),
     discard: [...state.discard, ...state.hand.filter((g) => drop.has(g.id))],
-    discardsLeft: state.discardsLeft - 1,
+    discardsLeft: opts.free ? state.discardsLeft : state.discardsLeft - 1,
   }
   next = drawUp(next, rng)
   return { ...next, seed: rng.state() }

@@ -445,7 +445,7 @@ function layout(sigil: Sigil): Prim[] {
   const steps: { rune: Rune; kind: 'circumscribe' | 'inscribe' }[] = path
     ? path.steps.map((st) => ({ rune: st.rune, kind: st.kind }))
     : sigil.joins.filter((j) => j.kind === 'circumscribe' || j.kind === 'inscribe').map((j) => ({ rune: j.rune, kind: j.kind as 'circumscribe' | 'inscribe' }))
-  const seal = path ? path.steps[path.steps.length - 1].rune : undefined
+  const seal = path?.seal.rune
   const tangents = sigil.joins.filter((j) => j.kind === 'tangent')
 
   // Outward: each circumscribe holds everything inside it.

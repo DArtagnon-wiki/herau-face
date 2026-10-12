@@ -64,7 +64,7 @@ When a commission ends, the end card draws its star: one point for every sigil c
 
 ### Sandbox
 
-The Sandbox panel changes the commission in progress, live (any mote, archetype motes included, can go in any bowl): the mud's starting composition (kg and purity per element, which resets the amalgam) and the target bands; each body's power and links (bowls are fixed, one per side); the reach and guard mote values; any rune's body and motes, wherever it is in the deck; new runes straight into the hand; and removing runes. Restarting keeps every change, and "Restart with the standard deck" undoes them. "Decks along a run" loads the opening, mid-run or late-run deck, on the start screen too. The Tuning panel covers the rest: rules, combat, surplus Force, flare size, quintessence, hand size, sigils a term and discards.
+The Sandbox panel changes the commission in progress, live (any mote, archetype motes included, can go in any bowl): the mud's starting composition (kg and purity per element, which resets the amalgam) and the target bands; each body's power and links (bowls are fixed, one per side); the reach and guard mote values; any rune's body and motes, wherever it is in the deck; new runes straight into the hand; removing runes; and discarding from hand to redraw, as often as you like (a run has no discards of its own). Restarting keeps every change, and "Restart with the standard deck" undoes them. "Decks along a run" loads the opening, mid-run or late-run deck, on the start screen too. The Tuning panel covers the rest: rules, combat, surplus Force, flare size, quintessence, hand size, and sigils a term.
 
 ### Rules the doc leaves open
 
@@ -100,7 +100,7 @@ Every sigil is drawn the way the design doc's notation reads (`src/ui/draw.ts`):
 | Chance to act | Each element, each term, by purity weighted by kilos: impure 50%, medium 25%, pure 10%, perfect 3% |
 | Mud's moves | Each element: a flare move (weight 2) or its own move (weight 1): earth only tremors, water seeps 0.5 kg of earth into water, air evaporates 0.5 kg of water, fire scorches 0.5 kg of earth |
 | Flare size | Flare moves 13–16, own moves 4–6, each × (0.4 + 1.2 × the element's share); no escalation |
-| Quintessence, hand, discards | 100, 6, 2 |
+| Quintessence, hand, discards | 100, 6, none (a Sandbox tool) |
 | Sigils a term | As many as the hand allows |
 
 ### What the simulated player found
@@ -156,20 +156,20 @@ Six archetypes, each with motes of its own (DESIGN.md, Archetypes), are playable
 | Consistent ward | Glaze (+2 Ward per rune in its sigil), crucible (+3 Ward when drawn), lute (its sigil's Ward lasts until spent), press (+0.5 power per Ward held) | Lasting Ward shows under the commission's moves |
 | Combo | Cohobation (an anchor returns to hand), distillation (draw a rune after casting); the pelican (+2 Ward per return) | The anchor comes back after each cast |
 | One great rune | Multiplication (its other motes count once more each cast), here with calcination on the great rune | Cards show how many times it has grown |
-| Purity maxing | Rectification (inscribed, purifies two grades), digestion (a purifying sigil also takes a quarter of the pool); aqua vitae (+3 power while 80% of the amalgam is medium or purer) | Tick "Fine clay" for a purity target |
+| Purity maxing | Rectification (a purifying step with it purifies two grades), digestion (a purifying sigil also takes a quarter of the pool); aqua vitae (+3 power while 80% of the amalgam is medium or purer) | Tick "Fine clay" for a purity target |
 | Element mastery | Resonance (+2 power per other rune of its element in the sigil), magnesia (a seal that also draws other elements in, never past the middle of their bands) | The preview says what magnesia draws |
 | Deck thinning | Calcination (burn a rune from hand after casting); the caput mortuum (+1 power to every rune per rune burned) | Choose what burns under the preview; the Burned pile opens from the bar |
 
-Simulated with the equation (100 commissions against mud, 60 against the Mire): the mid-run deck pays a median of 5 against mud in 3 terms and the late-run deck beats the Mire 63% of the time.
+Simulated with the equation (300 commissions each against mud and the Mire): the mid-run deck pays a median of 4 against mud in 3 terms and the late-run deck beats the Mire 67% of the time.
 
 | Deck | Mud: spent, terms | The Mire, late: won | Signature |
 | --- | --- | --- | --- |
-| Consistent ward | 0, 5 | 87% | Ward absorbs 98% of mud's flares, 91% of the Mire's |
-| Combo | 0, 3 | 92% | 3.9 sigils a term against 1.9 |
-| One great rune | 4, 3 | 58% | Against the Mire it grows 3 times and moves 86% of the kilos |
-| Purity maxing | 6, 3 | 60% | Fine clay in 9 terms; the mid-run deck takes 21 |
-| Element mastery | 0, 2 | 97% | 29% of mud and 40% of the Mire finished in one term |
-| Deck thinning | 5, 4 | 87% | Burns 1.7 runes against mud, 3.2 against the Mire |
+| Consistent ward | 0, 5 | 89% | Ward absorbs 98% of mud's flares, 90% of the Mire's |
+| Combo | 0, 3 | 93% | 4.0 sigils a term against 2.0 |
+| One great rune | 4, 3 | 63% | Against the Mire it grows 3.2 times and moves 88% of the kilos |
+| Purity maxing | 7, 4 | 69% | Fine clay in 7 terms; the mid-run deck takes 9 (21 before neutral runes purified) |
+| Element mastery | 0, 2 | 97% | 39% of mud and 33% of the Mire finished in one term |
+| Deck thinning | 4, 4 | 92% | Burns 1.7 runes against mud, 3.4 against the Mire |
 
 Ward needed press to turn Ward into progress (42% against the Mire without it), magnesia had to stop at each band's middle (38% when it dragged traces under), and purity changes nothing until something asks for it, so fine clay is the prototype's first purity target.
 
@@ -178,9 +178,9 @@ Ward needed press to turn Ward into progress (42% against the Mire without it), 
 `src/sim/equation.ts` is a second model for what a sigil does. The page plays by it (Tuning switches back to Reach × Force), and the simulator runs it with `--equation`:
 
 - **Resistance** = the material's base × the pool's grade multiplier × the step factor for every quality flipped along the runepath (a diagonal flips two).
-- **Runepath:** from the anchor, walk the elemental square through the circumscribed and inscribed runes, easiest step first, ties going earth, fire, air, water. It ends at the seal, the last of those runes placed, whose element is the output.
+- **Runepath:** from the anchor, walk the elemental square through the circumscribed and inscribed runes, easiest step first, ties going earth, fire, air, water. It ends at the seal, the last of those runes placed with an element, whose element is the output. Neutral runes (no element) come after the seal; with none elemental, the last neutral rune seals at the anchor's element.
 - **Input kg** = neutral take × min(1, power ÷ resistance) × (reach up ÷ reach down) ^ ln(1 + power ÷ resistance). The neutral take is a flat 1 kg, a property of the material, so a heavier pool takes more work. Reach up is the anchor plus side links, times reach motes; reach down is the anchor plus tangents, a join that touches at a point; power is the anchor plus circumscribes and inscribes.
-- **Output kg** = input × 1.1 per circumscribe ÷ 1.1 per inscribe. A boost mote adds 0.1 to its rune's multiplier. Element yields don't apply. A step that stays on the element the path is at changes purity. On the anchor's own element, inscribed, it purifies (+1 grade, one more step of resistance); circumscribed, it adulterates (−1 grade). After the path changes element, repeating the new element purifies either way. Everything transmuted comes out impure, so water → earth → earth makes medium earth.
+- **Output kg** = input × 1.1 per circumscribe ÷ 1.1 per inscribe. A boost mote adds 0.1 to its rune's multiplier. Element yields don't apply. Every step that keeps the element purifies (+1 grade, one more step of resistance), inscribed or circumscribed: a repeated element or a neutral rune. Everything transmuted comes out impure, so water → earth → earth makes medium earth, and so does water → earth inside a neutral ring. Purifying that a later change of element wipes out costs nothing. Sigils never adulterate; slag on the path does nothing.
 
 Defaults: base 3.5, step ×2, a flat 1 kg take, power gate on. `--mix C:K[:T]` tries a starting deck of C circles and K crescents per element (and T plain triangles).
 
@@ -227,9 +227,9 @@ Tuning's Combat switch picks between element moves (above) and purity effects, n
 
 | Fight | Deck | Result |
 | --- | --- | --- |
-| Mud | Opening | median 12 spent (p90 27) |
+| Mud | Opening | median 12 spent (p90 26) |
 | Mud | Mid-run, late-run | median 4, 0 |
-| The Mire (per 35 kg, signature move a third of the time) | Late-run | 63% won, wins median 50 (p10 0, p90 90) |
+| The Mire (per 35 kg, signature move a third of the time) | Late-run | 67% won, wins median 46 (p10 1, p90 80) |
 | The Mire | Mid-run, late+ | 0%, 95% |
 
 Purifying still rarely pays for the opening deck: its purifying sigils move 2–3 kg. `--free-purify` (no extra resistance step) changed nothing. Flags: `--purity-chance`, `--purity-mass`, `--purity-flare`, `--purity-ward`, `--purity-taint`, `--boss-chance`, `--boss-purity-mass`, `--boss-signature`.
