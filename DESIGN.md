@@ -22,7 +22,8 @@ A roguelike deckbuilder in the spirit of Balatro: each term you compose sigils f
 | --- | --- |
 | Rune | A card in the deck: a body holding motes in its bowls. |
 | Body | A rune's shape: an N-gon with N bowls, from the circle (a 1-gon) and the crescent (a 2-gon) through triangle, square, pentagon and hexagon. It also sets power and links. |
-| Bowl | A slot on a body that holds one mote. |
+| Bowl | A slot on a body that holds one mote. An N-gon has N. |
+| Rarity | Common, uncommon or rare. A polygon shows it as a star: common runes are plain N-gons, uncommon have shallow divots, rare are pointy. |
 | Mote | What gives a rune its nature. Gems set the element; ability motes add links, multiply Reach or add Ward. Earned motes fill or replace bowls to upgrade a rune for the rest of the run. |
 | Power | A rune's strength, set by its body. Each join turns it into Force, Reach or Ward. |
 | Links | How many runes a rune holds when it anchors a sigil. |
@@ -105,6 +106,10 @@ A rune is a body holding motes. The body is an N-gon with N bowls, a circle coun
 **Links count only on the anchor.** A circle anchor makes a two-rune sigil; a crescent or triangle anchor makes three. The prototype first treated links as connections, so a 2-link rune anywhere carried the sigil one step deeper. Every crescent and triangle became a free extender, and a simulated player built five- and six-rune sigils that finished mud in one term.
 
 A rune's element is its first gem; a rune without a gem has no element. Mote abilities apply wherever the rune sits in a sigil.
+
+**Rarity shows in the shape.** Runes with the same number of sides are told apart by drawing them as stars: the smaller a star's inner radius, the rarer the rune. A common rune's divots sit on its edges, so it is the regular N-gon; an uncommon rune has shallow divots (inner radius 0.8 of the polygon's); a rare rune is pointy (half). In the prototype rarity changes only the drawing. Archetype decks mark their enablers uncommon and their payoffs rare. Circles and crescents have no corners to sharpen, so how they show rarity is open.
+
+![Runes by rarity: each body common, uncommon and rare, and sigils of stars](docs/rune-rarity.png)
 
 ## Sigil composition
 
@@ -421,6 +426,8 @@ A sigil's drawing reads as its equation: nesting gives the runepath, and the way
 | A rune hung outside, pointing out | Reach up (+) | Side |
 | A rune set inside, pointing in | Reach down (−) | Tangent |
 
+Every polygon nests, links and takes tangents the same way, from triangle to hexagon: a polygon inside one of its own kind turns half a side, so triangles make a hexagram and squares an eight-pointed figure, and a star holds what it rings inside its divots.
+
 In the sketch, a blue square anchors, a red triangle circumscribes it as the seal, three green crescents hang outside for +reach, and four yellow triangles sit inside for −reach. Eventually a reach rune is sigilized: turned to point in or out, and its direction gives the sign. Until then the side and tangent joins stand in.
 
 **The prototype draws every sigil this way**, on the table and as it is composed. Where the sketch left room, a crescent holds what it rings in its hollow and its seal line runs parallel to both arcs, a triangle inside a triangle is inverted like half a hexagram, tangents sit in a triangle's corners, side links hang off a triangle's edges or a crescent's back, and a circle that points is drawn as a drop. On cards, motes are marks: a drop of colour for an element, a ring for a link, an arrowhead for reach, a lozenge for guard, a cross for boost.
@@ -635,6 +642,8 @@ Circumgician is built on Pixi.js, TypeScript and Vite, and most of its look is g
 | Is routing through chained circumscribes too strong? | They are the late-run mass engine: earth → air → fire → earth is ×40. Links gate them; tune step costs and yields if loops arrive too early |
 | Names: working title, the currency? | Open. Settled: a card is a rune; what you cast is a sigil |
 | Does a commission finish the moment it is in band, or when the player seals it? | Settled: the moment the amalgam is in range, whether a cast or the commission's own move put it there. Extra product means working off-spec and landing at the end |
+| How do circles and crescents show rarity? | Open: polygons become pointier stars; a 1-gon and a 2-gon have no corners. A thinner crescent is one option |
+| Should more sides bring more power or links, as well as bowls? | Open: every body is power 5 with one link in the prototype |
 | Does a shape's side count cap the reach runes it carries? | Open. The notation sketch hangs three crescents off a triangle and sets four triangles inside a square; the prototype limits joins only by the anchor's links |
 | What does a bigger concentricity trade? | Open: more pay against harsher moves or more traces |
 | How should difficulty scale over a run? | Open: grow jobs with throughput (Balatro), keep jobs flatter and grow the commission's damage and mechanics (Slay the Spire), or narrow bands so big decks must aim |

@@ -10,6 +10,9 @@ export type Grade = 0 | 1 | 2 | 3
  */
 export type Body = 'circle' | 'crescent' | 'triangle' | 'square' | 'pentagon' | 'hexagon'
 
+/** How rare a rune is. A polygon shows it as a star: common runes are plain N-gons, uncommon have shallow divots, rare are pointy. */
+export type Rarity = 'common' | 'uncommon' | 'rare'
+
 /** How one rune joins another in a sigil. 'side' is a side link. */
 export type JoinKind = 'circumscribe' | 'side' | 'entwine' | 'inscribe' | 'tangent'
 
@@ -49,6 +52,7 @@ export interface Rune {
   power: number
   bowls: number
   motes: Mote[]
+  rarity: Rarity
   // Derived from body and motes (see makeRune).
   affinity: Affinity
   /** How many other runes it can join to in a sigil. */

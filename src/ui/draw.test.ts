@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { elementMote, LINK_MOTE, makeRune } from '../sim/deck'
 import type { Body, Elemental, JoinKind, Rune, Sigil } from '../sim/types'
-import { sigilBody, starSvg } from './draw'
+import { bodyPath, sigilBody, starInner, starSvg } from './draw'
 
 let id = 1
 const rune = (body: Body, e?: Elemental, links = 2): Rune =>
@@ -50,5 +50,17 @@ describe('drawing a sigil', () => {
     expect(a.match(/<g transform="translate/g)).toHaveLength(5)
     expect(a.match(/class="star-term"/g)).toHaveLength(2)
     expect(a.match(/clipPath id="([^"]+)"/)![1]).not.toBe(b.match(/clipPath id="([^"]+)"/)![1])
+  })
+})
+
+describe('rarity as stars', () => {
+  it('draws a common polygon plain and rarer ones as pointier stars', () => {
+    expect(starInner('square', 'common')).toBeCloseTo(Math.cos(Math.PI / 4))
+    expect(starInner('square', 'uncommon')).toBeLessThan(starInner('square', 'common'))
+    expect(starInner('square', 'rare')).toBeLessThan(starInner('square', 'uncommon'))
+    expect(starInner('crescent', 'rare')).toBe(1)
+    const corners = (d: string) => (d.match(/L/g) ?? []).length + 1
+    expect(corners(bodyPath('pentagon', 10, 0, 0, 0, false, starInner('pentagon', 'common')))).toBe(5)
+    expect(corners(bodyPath('pentagon', 10, 0, 0, 0, false, starInner('pentagon', 'rare')))).toBe(10)
   })
 })

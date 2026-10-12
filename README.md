@@ -76,8 +76,12 @@ The Sandbox panel changes the commission in progress, live (any mote, archetype 
 Every sigil is drawn the way the design doc's notation reads (`src/ui/draw.ts`): the anchor innermost with a dot at its heart; circumscribed runes nest outward and inscribed runes inward, in runepath order; the seal has a double line; side links hang outside on stems, pointing out; tangents sit inside, pointing in, on stems to the edge they touch; entwined runes lace through, dashed. Where the sketch left room:
 
 - A crescent holds what it rings, or what is inscribed in it, in its hollow. As a seal, its second line runs parallel to both arcs, the back and the hollow, and closes in shorter horns.
-- A triangle inside a triangle is inverted, so nested triangles read as halves of a hexagram rather than as a seal's double line.
-- Tangents sit in a triangle's corners, in a crescent's band and around a circle. Side links hang off a triangle's edges, a crescent's back, or below a circle.
+- Runes are N-gons with N bowls, from the circle (1) and crescent (2) to the hexagon (6). A polygon inside one of its own kind turns half a side, so nested triangles read as halves of a hexagram rather than as a seal's double line.
+- Rarity shows in the shape: common polygons are plain, uncommon have shallow divots, rare are pointy stars. The Sandbox sets any rune's rarity; it changes only the drawing for now. Archetype decks mark their enablers uncommon and payoffs rare.
+
+![Runes by rarity](docs/rune-rarity.png)
+
+- Tangents sit in a polygon's corners (or a star's points), in a crescent's band and around a circle. Side links hang off a polygon's edges (or a star's divots), a crescent's back, or below a circle.
 - A circle can't point, so a circle that points is drawn as a drop.
 - On cards, motes are marks: a drop of colour for an element, a ring for a link, an arrowhead for reach, a lozenge for guard, a cross for boost. Archetype motes have marks of their own (a crucible, a loop for cohobation, a drop for distillation, an × for multiplication, an arrowhead pointing in for magnesia, and so on); the start screen lists the ones in the chosen deck. Slag is a dotted grey circle.
 

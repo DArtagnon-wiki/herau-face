@@ -1,11 +1,11 @@
 import './ui/style.css'
 import { GRADE_NAMES, poolKey, totalKg } from './sim/alchemy'
 import { COMMISSIONS, FINE_CLAY_PURITY, actChances, chancesFor, cloneTarget, combatOf, effectsFor, elementOdds, constrained, gradeShare, inBand, shares, substanceName, within, type CommissionKey, type Range } from './sim/commission'
-import { ARCHETYPE_MOTES, BODY_LIST, BODY_NAMES, DEFAULT_FORGE, SIDES, GEMS, MOTE_OPTIONS, buildDeck, cloneForge, makeRune, mote, moteEffect, moteFromKey, moteKey, moteName, type Forge, type RuneSpec } from './sim/deck'
+import { ARCHETYPE_MOTES, BODY_LIST, BODY_NAMES, DEFAULT_FORGE, RARITIES, RARITY_NAMES, SIDES, GEMS, MOTE_OPTIONS, buildDeck, cloneForge, makeRune, mote, moteEffect, moteFromKey, moteKey, moteName, type Forge, type RuneSpec } from './sim/deck'
 import { addRune, deckSpecs, editRune, findRune, removeRune, setComposition, setForge, setTarget } from './sim/sandbox'
 import { DEFAULT_SETTINGS, autoBurn, burnsOf, resistanceMult, cast, castsLeft, discardRunes, endTerm, invalidReason, newGame, payment, powerBonus, previewCast, previewEnd, standardSetup, termsUsed, type CastOutcome, type CastPreview, type EndOutcome, type GameState, type Settings, type Setup, type TermOutcome } from './sim/game'
 import { REACH_PER_POWER, WARD_PER_POWER, candidatePools, canJoin, openLinks, resolve, type Resolution } from './sim/sigil'
-import type { Body, Catalyst, Elemental, Grade, JoinKind, Pool, Rune, Sigil } from './sim/types'
+import type { Body, Catalyst, Elemental, Grade, JoinKind, Pool, Rarity, Rune, Sigil } from './sim/types'
 import { AFFINITY_VAR, joinSketch, moteColor, runeSvg, sigilSvg, starSvg, vesselSvg, type StarStep } from './ui/draw'
 import { ARCHETYPE_DECKS, PRESETS, presetByKey } from './sim/presets'
 import { CATALYSTS, effectiveSigil } from './sim/catalysts'
@@ -233,7 +233,7 @@ function deckGroups(setup: Setup): string {
     const all = runes.filter((r) => r.body === body)
     if (!all.length) return ''
     const spec = setup.forge.bodies[body]
-    const distinct = all.filter((r, i) => all.findIndex((x) => JSON.stringify(x.motes) === JSON.stringify(r.motes)) === i)
+    const distinct = all.filter((r, i) => all.findIndex((x) => JSON.stringify(x.motes) === JSON.stringify(r.motes) && x.rarity === r.rarity) === i)
     const effects = (r: Rune) => {
       const counts = new Map<string, number>()
       for (const m of r.motes) {
@@ -242,7 +242,7 @@ function deckGroups(setup: Setup): string {
       }
       return [...counts].map(([e, n]) => (n > 1 && e === '+1 link' ? `+${n} links` : n > 1 ? `${e} ×${n}` : e)).join(' + ') || 'empty'
     }
-    const motes = distinct.map(effects).join(' · ')
+    const motes = distinct.map((r) => (r.rarity !== 'common' ? `<i>${RARITY_NAMES[r.rarity].toLowerCase()}:</i> ` : '') + effects(r)).join(' · ')
     return `<li class="deck-group">
       <span class="deck-group-runes">${distinct.slice(0, 4).map((r) => runeSvg(r, 40)).join('')}</span>
       <span class="deck-group-name"><b class="num">${all.length}</b> ${BODY_NAMES[body].toLowerCase()}${all.length === 1 ? '' : 's'} <span class="deck-group-spec num">· power ${spec.power} · ${linksWord(spec.links)} · ${SIDES[body]} bowl${SIDES[body] === 1 ? '' : 's'}</span></span>
@@ -314,7 +314,7 @@ function startView(): string {
       ${presetView()}
       <ul class="deck-groups">${deckGroups(ui.setup)}</ul>
       ${moteLegend(ui.setup)}
-      <p class="fine">Gems set the element: ${Object.entries(GEMS).map(([e, g]) => `${g.toLowerCase()} is ${e}`).join(', ')}. Each shows as a drop of its colour. Ability motes show as marks: a ring is a link mote, adding a link; an arrowhead is a reach mote, multiplying the sigil’s reach up; a lozenge is a guard mote, adding Ward; a cross is a boost mote, adding to its rune’s multiplier. An archetype deck’s own motes and catalysts are listed above. The deck is the same each time; the shuffle is not, though your opening hand always has a water and an earth. Once you begin, the Sandbox panel can change any of it.</p>
+      <p class="fine">Gems set the element: ${Object.entries(GEMS).map(([e, g]) => `${g.toLowerCase()} is ${e}`).join(', ')}. Each shows as a drop of its colour. Ability motes show as marks: a ring is a link mote, adding a link; an arrowhead is a reach mote, multiplying the sigil’s reach up; a lozenge is a guard mote, adding Ward; a cross is a boost mote, adding to its rune’s multiplier. An archetype deck’s own motes and catalysts are listed above. A rune is an N-gon with N bowls, a circle counting as a 1-gon and a crescent as a 2-gon, and rarity shows in its shape: common polygons are plain, uncommon have shallow divots, rare are pointy stars. The deck is the same each time; the shuffle is not, though your opening hand always has a water and an earth. Once you begin, the Sandbox panel can change any of it.</p>
       <button class="primary wide" data-act="start">Begin the commission</button>
     </section>
 
@@ -760,7 +760,7 @@ function pileSheet(g: GameState): string {
           (h) => `<li class="deck-item" style="--c:${AFFINITY_VAR[h.affinity]}">
             ${runeSvg(h, 34)}
             <span class="deck-item-text">
-              <span class="deck-item-name">${h.affinity === 'none' ? BODY_NAMES[h.body] : `${ELEMENT_NAME[h.affinity]} ${BODY_NAMES[h.body].toLowerCase()}`} · <span class="num">${h.power}</span> · ${linksWord(h.links)}</span>
+              <span class="deck-item-name">${h.rarity !== 'common' ? `${RARITY_NAMES[h.rarity]} ` : ''}${h.affinity === 'none' ? BODY_NAMES[h.body].toLowerCase() : `${ELEMENT_NAME[h.affinity].toLowerCase()} ${BODY_NAMES[h.body].toLowerCase()}`} · <span class="num">${h.power}</span> · ${linksWord(h.links)}</span>
               <span class="deck-item-motes">${h.motes.map((m) => `<span class="mote-chip"><span class="mote-dot" style="background:${moteColor(m)}"></span>${moteName(m)}${m.kind === 'element' ? '' : ': ' + moteEffect(m, g.forge.values)}</span>`).join('')}</span>
             </span>
           </li>`,
@@ -819,7 +819,7 @@ function handView(g: GameState): string {
         const role = roleOf(h.id)
         const marked = ui.marked.has(h.id)
         const blocked = !role && !ui.discarding && ui.anchorId !== null && !canJoin(currentSigil()!, h)
-        return `<button class="card ${role ? 'in-rune' : ''} ${marked ? 'marked' : ''} ${blocked ? 'blocked' : ''}" data-act="card" data-id="${h.id}" style="--c:${AFFINITY_VAR[h.affinity]}" aria-label="${ELEMENT_NAME[h.affinity]} ${BODY_NAMES[h.body].toLowerCase()}, power ${h.power}, ${linksWord(h.links)}${role ? ', ' + role : ''}">
+        return `<button class="card ${role ? 'in-rune' : ''} ${marked ? 'marked' : ''} ${blocked ? 'blocked' : ''}" data-act="card" data-id="${h.id}" style="--c:${AFFINITY_VAR[h.affinity]}" aria-label="${h.rarity !== 'common' ? RARITY_NAMES[h.rarity] + ' ' : ''}${ELEMENT_NAME[h.affinity]} ${BODY_NAMES[h.body].toLowerCase()}, power ${h.power}, ${linksWord(h.links)}${role ? ', ' + role : ''}">
           <span class="card-value num">${h.power}</span>
           ${pips(h.links)}
           ${runeSvg(h, 56)}
@@ -955,7 +955,7 @@ function editorView(g: GameState): string {
   if (ui.editing === null) return `<p class="hint">Pick a rune above to change its body and motes, or make a new one.</p>`
   const found = ui.editing === 'new' ? undefined : findRune(g, ui.editing)
   if (ui.editing !== 'new' && !found) return ''
-  const spec: RuneSpec = found ? { body: found.rune.body, motes: found.rune.motes } : ui.draft
+  const spec: RuneSpec = found ? { body: found.rune.body, motes: found.rune.motes, rarity: found.rune.rarity } : ui.draft
   const preview = found ? found.rune : buildDeck([spec], g.forge)[0]
   const bowls = SIDES[spec.body]
   const own = abilities(preview)
@@ -963,7 +963,7 @@ function editorView(g: GameState): string {
     <div class="editor-head">
       ${runeSvg(preview, 64)}
       <div>
-        <p class="editor-title">${ui.editing === 'new' ? 'New rune' : `${preview.affinity === 'none' ? 'Elementless' : ELEMENT_NAME[preview.affinity]} ${BODY_NAMES[preview.body].toLowerCase()}`}</p>
+        <p class="editor-title">${ui.editing === 'new' ? 'New rune' : `${preview.rarity !== 'common' ? RARITY_NAMES[preview.rarity] + ' ' : ''}${preview.affinity === 'none' ? 'elementless' : ELEMENT_NAME[preview.affinity].toLowerCase()} ${BODY_NAMES[preview.body].toLowerCase()}`}</p>
         <p class="editor-line num">Power ${preview.power} · ${linksWord(preview.links)}${own.length ? ' · ' + own.join(' · ') : ''}</p>
         <p class="editor-line">${found ? `In your ${found.at === 'draw' ? 'draw pile' : found.at}. Changes apply now.` : 'Not in the deck yet.'}</p>
       </div>
@@ -971,6 +971,10 @@ function editorView(g: GameState): string {
     <div class="seg" role="group" aria-label="Body">
       ${BODY_LIST.map((b) => `<button data-act="sb-body" data-body="${b}" class="${spec.body === b ? 'is-on' : ''}" aria-pressed="${spec.body === b}">${BODY_NAMES[b]}</button>`).join('')}
     </div>
+    <div class="seg" role="group" aria-label="Rarity">
+      ${RARITIES.map((x) => `<button data-act="sb-rarity" data-rarity="${x}" class="${(spec.rarity ?? 'common') === x ? 'is-on' : ''}" aria-pressed="${(spec.rarity ?? 'common') === x}">${RARITY_NAMES[x]}</button>`).join('')}
+    </div>
+    <p class="fine">Rarity shows in a polygon’s shape: common runes are plain, uncommon have shallow divots, rare are pointy stars. It changes nothing else yet.</p>
     <div class="bowls">${bowls ? Array.from({ length: bowls }, (_, i) => moteSelect(i, spec.motes[i] ? moteKey(spec.motes[i]) : undefined)).join('') : '<p class="hint">This body has no bowls.</p>'}</div>
     <div class="row">
       ${ui.editing === 'new' ? `<button class="primary" data-act="sb-add">Add to hand</button>` : `<button data-act="sb-copy">Add a copy to hand</button><button data-act="sb-remove">Remove from deck</button>`}
@@ -1076,13 +1080,13 @@ function sandboxView(g: GameState): string {
 function editSpec(fn: (spec: RuneSpec) => RuneSpec) {
   const g = ui.game!
   if (ui.editing === 'new') {
-    ui.draft = fn({ body: ui.draft.body, motes: ui.draft.motes.slice() })
+    ui.draft = fn({ body: ui.draft.body, motes: ui.draft.motes.slice(), rarity: ui.draft.rarity })
     return
   }
   if (typeof ui.editing !== 'number') return
   const found = findRune(g, ui.editing)
   if (!found) return
-  ui.game = editRune(g, ui.editing, fn({ body: found.rune.body, motes: found.rune.motes.slice() }))
+  ui.game = editRune(g, ui.editing, fn({ body: found.rune.body, motes: found.rune.motes.slice(), rarity: found.rune.rarity }))
 }
 
 function setBowl(i: number, key: string) {
@@ -1427,15 +1431,18 @@ root.addEventListener('click', (e) => {
       break
     }
     case 'sb-body':
-      editSpec((spec) => ({ body: el.dataset.body as Body, motes: spec.motes }))
+      editSpec((spec) => ({ ...spec, body: el.dataset.body as Body }))
+      break
+    case 'sb-rarity':
+      editSpec((spec) => ({ ...spec, rarity: el.dataset.rarity as Rarity }))
       break
     case 'sb-add':
-      if (g) ui.game = addRune(g, { body: ui.draft.body, motes: ui.draft.motes.slice(0, SIDES[ui.draft.body]) })
+      if (g) ui.game = addRune(g, { body: ui.draft.body, motes: ui.draft.motes.slice(0, SIDES[ui.draft.body]), rarity: ui.draft.rarity })
       break
     case 'sb-copy':
       if (g && typeof ui.editing === 'number') {
         const found = findRune(g, ui.editing)
-        if (found) ui.game = addRune(g, { body: found.rune.body, motes: found.rune.motes.slice() })
+        if (found) ui.game = addRune(g, { body: found.rune.body, motes: found.rune.motes.slice(), rarity: found.rune.rarity })
       }
       break
     case 'sb-remove':

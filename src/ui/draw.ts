@@ -6,7 +6,7 @@ import type { Range } from '../sim/commission'
 import type { TableEntry } from '../sim/table'
 import { elementMote, LINK_MOTE, makeRune, SIDES } from '../sim/deck'
 import { runepath } from '../sim/equation'
-import type { Affinity, Body, Elemental, Grade, JoinKind, Mote, Pool, Rune, Sigil } from '../sim/types'
+import type { Affinity, Body, Elemental, Grade, JoinKind, Mote, Pool, Rarity, Rune, Sigil } from '../sim/types'
 
 export const AFFINITY_VAR: Record<Affinity, string> = {
   earth: 'var(--earth)',
@@ -46,8 +46,28 @@ function gonPoints(n: number, pointUp = false): Pt[] {
   })
 }
 
-/** Outline of a body at radius r, centred on (cx, cy), rotated rotDeg. A pointing polygon has a corner at rotDeg − 90. */
-export function bodyPath(body: Body, r: number, rotDeg = 0, cx = 0, cy = 0, pointUp = false): string {
+/**
+ * How far in a polygon's divots sit, as a share of its radius: a rarer rune
+ * is a pointier star. A common rune's divots sit on its edges, so it is the
+ * plain N-gon; an uncommon one's sit a little further in; a rare one's well in.
+ * Circles and crescents have no corners to sharpen, so they stay as they are.
+ */
+export function starInner(body: Body, rarity: Rarity = 'common'): number {
+  const n = SIDES[body]
+  if (n < 3) return 1
+  const edge = Math.cos(Math.PI / n)
+  return rarity === 'rare' ? Math.max(0.3, edge * 0.5) : rarity === 'uncommon' ? edge * 0.8 : edge
+}
+
+/** Whether a polygon's divots cut inside its edges: it is drawn as a star. */
+const starry = (body: Body, inner: number) => isGon(body) && inner < Math.cos(Math.PI / SIDES[body]) - 1e-6
+
+/**
+ * Outline of a body at radius r, centred on (cx, cy), rotated rotDeg. A
+ * pointing polygon has a corner at rotDeg − 90. With inner, a polygon is drawn
+ * as a star whose divots sit at that share of its radius (see starInner).
+ */
+export function bodyPath(body: Body, r: number, rotDeg = 0, cx = 0, cy = 0, pointUp = false, inner?: number): string {
   const at = (p: Pt) => {
     const [x, y] = rotate(p, rotDeg)
     return `${f(cx + x * r)} ${f(cy + y * r)}`
@@ -55,7 +75,20 @@ export function bodyPath(body: Body, r: number, rotDeg = 0, cx = 0, cy = 0, poin
   if (body === 'circle') {
     return `M ${f(cx - r)} ${f(cy)} A ${f(r)} ${f(r)} 0 1 0 ${f(cx + r)} ${f(cy)} A ${f(r)} ${f(r)} 0 1 0 ${f(cx - r)} ${f(cy)} Z`
   }
-  if (isGon(body)) return `M ${gonPoints(SIDES[body], pointUp).map(at).join(' L ')} Z`
+  if (isGon(body)) {
+    const n = SIDES[body]
+    const corners = gonPoints(n, pointUp)
+    if (inner === undefined || !starry(body, inner)) return `M ${corners.map(at).join(' L ')} Z`
+    // A star: each divot sits between two corners, at the inner share of the radius.
+    const pts: Pt[] = []
+    corners.forEach((c, i) => {
+      const next = corners[(i + 1) % n]
+      const mid: Pt = [(c[0] + next[0]) / 2, (c[1] + next[1]) / 2]
+      const len = Math.hypot(mid[0], mid[1])
+      pts.push(c, [(mid[0] / len) * inner, (mid[1] / len) * inner])
+    })
+    return `M ${pts.map(at).join(' L ')} Z`
+  }
   // Crescent with horns up: rotate the horns-right construction by -90°.
   const base = rotDeg - 90
   const atC = (p: Pt) => {
@@ -89,8 +122,16 @@ function crescentInset(r: number, gap: number, rotDeg: number, cx: number, cy: n
   return `M ${at([x, -y])} A ${f(outer)} ${f(outer)} 0 ${x > 0 ? 1 : 0} 0 ${at([x, y])} A ${f(hollow)} ${f(hollow)} 0 ${x > d ? 1 : 0} 1 ${at([x, -y])} Z`
 }
 
-/** Where each bowl sits on a body, in unit coordinates (horns up for a crescent), by how many bowls it has. */
-function bowlSpots(body: Body, n: number): { at: Pt[]; r: number } {
+/** Where each bowl sits on a body, in unit coordinates (horns up for a crescent), by how many bowls it has. A star's bowls draw in and shrink a little to fit its points. */
+function bowlSpots(body: Body, n: number, inner = starInner(body)): { at: Pt[]; r: number } {
+  const plain = plainBowlSpots(body, n)
+  if (!starry(body, inner)) return plain
+  const q = inner / Math.cos(Math.PI / SIDES[body])
+  const pull = 0.82 + 0.18 * q
+  return { at: plain.at.map(([x, y]) => [x * pull, y * pull] as Pt), r: plain.r * (0.7 + 0.3 * q) }
+}
+
+function plainBowlSpots(body: Body, n: number): { at: Pt[]; r: number } {
   if (body === 'circle') {
     if (n <= 1) return { at: [[0, 0]], r: 0.34 }
     const ring = (rad: number) => Array.from({ length: n }, (_, i) => rotate([0, -rad], (360 * i) / n))
@@ -190,7 +231,7 @@ function moteMark(m: Mote | undefined, x: number, y: number, br: number): string
 }
 
 function bowls(rune: Rune, r: number): string {
-  const spec = bowlSpots(rune.body, Math.max(rune.bowls, rune.motes.length))
+  const spec = bowlSpots(rune.body, Math.max(rune.bowls, rune.motes.length), starInner(rune.body, rune.rarity))
   return spec.at.map((p, i) => moteMark(rune.motes[i], p[0] * r, p[1] * r, spec.r * r)).join('')
 }
 
@@ -206,7 +247,7 @@ export function runeSvg(rune: Rune, size = 56): string {
   }
   const c = AFFINITY_VAR[rune.affinity]
   return `<svg class="glyph" ${box} aria-hidden="true">
-    <path d="${bodyPath(rune.body, r)}" fill="${c}" fill-opacity="0.08" stroke="${c}" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="${bodyPath(rune.body, r, 0, 0, 0, false, starInner(rune.body, rune.rarity))}" fill="${c}" fill-opacity="0.08" stroke="${c}" stroke-width="1.6" stroke-linejoin="round"/>
     ${bowls(rune, r)}
   </svg>`
 }
@@ -231,11 +272,13 @@ interface Layer {
   r: number
   /** Degrees: a polygon nested in one of its own kind turns half a side, so triangles make a hexagram. */
   rot: number
+  /** Where a star's divots sit, as a share of its radius (see starInner); 1 for circles and crescents. */
+  inner: number
 }
 
 type Prim =
-  | { t: 'body'; body: Body; cx: number; cy: number; r: number; rot: number; c: string; w: number; fill?: number; dash?: boolean; seal?: boolean }
-  | { t: 'point'; body: Body; cx: number; cy: number; r: number; dir: number; c: string; w: number }
+  | { t: 'body'; body: Body; cx: number; cy: number; r: number; rot: number; c: string; w: number; fill?: number; dash?: boolean; seal?: boolean; inner: number }
+  | { t: 'point'; body: Body; cx: number; cy: number; r: number; dir: number; c: string; w: number; inner: number }
   | { t: 'line'; x1: number; y1: number; x2: number; y2: number; c: string; w: number }
   | { t: 'dot'; cx: number; cy: number; r: number; c: string }
 
@@ -248,12 +291,12 @@ const colorOf = (r: Rune) => (r.junk ? 'var(--slag)' : AFFINITY_VAR[r.affinity])
  * centre), and how the inner turns. A crescent cradles what it holds in its
  * hollow; a triangle holds another triangle inverted.
  */
-function holds(outer: Body, inner: Body): { k: number; dy: number; flip: boolean } {
+function holds(outer: Body, inner: Body, outerInner = starInner(outer)): { k: number; dy: number; flip: boolean } {
   if (outer === 'circle') return { k: 1.3, dy: 0, flip: false }
   if (isGon(outer)) {
     const n = SIDES[outer]
-    // Room for the inner body inside the outer's edges, which sit cos(π/n) of its radius in.
-    return { k: n === 3 ? 2.15 : 1.15 / Math.cos(Math.PI / n), dy: 0, flip: inner === outer }
+    // Room for the inner body inside the outer's edges, or a star's divots, which sit outerInner of its radius in.
+    return { k: (n === 3 ? 1.075 : 1.15) / outerInner, dy: 0, flip: inner === outer }
   }
   return { k: 1.95, dy: -0.25, flip: false }
 }
@@ -270,12 +313,25 @@ function edgeAt(l: Layer, deg: number): number {
   const n = SIDES[l.body]
   const period = 360 / n
   const a = deg - l.rot - 90
-  const d = (((a % period) + period + period / 2) % period) - period / 2
-  return (Math.cos(Math.PI / n) * l.r) / Math.cos(rad(d))
+  const d = Math.abs((((a % period) + period + period / 2) % period) - period / 2)
+  // Along the ray at d from the nearest edge's middle, meet the outline running from the divot (or edge middle) to the corner.
+  const [ax, ay] = [l.inner, 0]
+  const [bx, by] = [Math.cos(Math.PI / n), Math.sin(Math.PI / n)]
+  const [ux, uy] = [Math.cos(rad(d)), Math.sin(rad(d))]
+  const [ex, ey] = [bx - ax, by - ay]
+  return (l.r * (ax * ey - ay * ex)) / (ux * ey - uy * ex)
 }
 
 /** Where tangents sit inside an anchor of radius 1, and how big each is. */
-function tangentSpots(body: Body, n: number): { x: number; y: number; s: number }[] {
+function tangentSpots(body: Body, n: number, inner = starInner(body)): { x: number; y: number; s: number }[] {
+  const spots = plainTangentSpots(body, n)
+  if (!starry(body, inner)) return spots
+  // A star's points are narrower than a polygon's corners, so its tangents draw in and shrink.
+  const q = inner / Math.cos(Math.PI / SIDES[body])
+  return spots.map((p) => ({ x: p.x * (0.7 + 0.3 * q), y: p.y * (0.7 + 0.3 * q), s: p.s * (0.6 + 0.4 * q) }))
+}
+
+function plainTangentSpots(body: Body, n: number): { x: number; y: number; s: number }[] {
   const ring = (radius: number, start: number, count: number, s: number) =>
     Array.from({ length: count }, (_, i) => {
       const a = rad(start + (360 * i) / count)
@@ -328,14 +384,14 @@ function sideAngles(n: number, outer: Layer): number[] {
 }
 
 /** How far a pointing rune's back sits behind its centre: a pointing polygon has a corner forward, and an edge or a corner behind. */
-const backOf = (body: Body, r: number) => (isGon(body) ? (SIDES[body] % 2 ? r * Math.cos(Math.PI / SIDES[body]) : r) : r)
+const backOf = (body: Body, r: number, inner = starInner(body)) => (isGon(body) ? (SIDES[body] % 2 ? r * inner : r) : r)
 
 /** Lay a sigil out at scale 1, as primitives in sigil coordinates. */
 function layout(sigil: Sigil): Prim[] {
   const out: Prim[] = []
   const a = sigil.anchor
   const R = UNIT
-  const anchor: Layer = { body: a.body, cx: 0, cy: 0, r: R, rot: 0 }
+  const anchor: Layer = { body: a.body, cx: 0, cy: 0, r: R, rot: 0, inner: starInner(a.body, a.rarity) }
   const path = runepath(sigil)
   const steps: { rune: Rune; kind: 'circumscribe' | 'inscribe' }[] = path
     ? path.steps.map((st) => ({ rune: st.rune, kind: st.kind }))
@@ -347,9 +403,10 @@ function layout(sigil: Sigil): Prim[] {
   let outer = anchor
   const rings: { layer: Layer; rune: Rune }[] = []
   for (const st of steps.filter((x) => x.kind === 'circumscribe')) {
-    const h = holds(st.rune.body, outer.body)
+    const ringInner = starInner(st.rune.body, st.rune.rarity)
+    const h = holds(st.rune.body, outer.body, ringInner)
     const r = outer.r * h.k
-    const layer: Layer = { body: st.rune.body, cx: outer.cx, cy: outer.cy - h.dy * r, r, rot: h.flip ? halfTurn(st.rune.body, outer.rot) : 0 }
+    const layer: Layer = { body: st.rune.body, cx: outer.cx, cy: outer.cy - h.dy * r, r, rot: h.flip ? halfTurn(st.rune.body, outer.rot) : 0, inner: ringInner }
     rings.push({ layer, rune: st.rune })
     outer = layer
   }
@@ -357,34 +414,34 @@ function layout(sigil: Sigil): Prim[] {
   let inner = anchor
   const cores: { layer: Layer; rune: Rune }[] = []
   for (const st of steps.filter((x) => x.kind === 'inscribe')) {
-    const h = holds(inner.body, st.rune.body)
+    const h = holds(inner.body, st.rune.body, inner.inner)
     const crowded = inner === anchor && tangents.length > 0 && inner.body !== 'crescent'
     const k = crowded ? (inner.body === 'circle' ? 1.9 : 3.4) : h.k
-    const layer: Layer = { body: st.rune.body, cx: inner.cx, cy: inner.cy + h.dy * inner.r, r: inner.r / k, rot: h.flip ? halfTurn(st.rune.body, inner.rot) : 0 }
+    const layer: Layer = { body: st.rune.body, cx: inner.cx, cy: inner.cy + h.dy * inner.r, r: inner.r / k, rot: h.flip ? halfTurn(st.rune.body, inner.rot) : 0, inner: starInner(st.rune.body, st.rune.rarity) }
     cores.push({ layer, rune: st.rune })
     inner = layer
   }
 
   const ring = (l: Layer, rune: Rune, w: number) =>
-    out.push({ t: 'body', body: l.body, cx: l.cx, cy: l.cy, r: l.r, rot: l.rot, c: colorOf(rune), w, seal: rune === seal })
+    out.push({ t: 'body', body: l.body, cx: l.cx, cy: l.cy, r: l.r, rot: l.rot, c: colorOf(rune), w, seal: rune === seal, inner: l.inner })
   rings.forEach(({ layer, rune }) => ring(layer, rune, 1.7))
   sigil.joins
     .filter((j) => j.kind === 'entwine')
-    .forEach((j, i) => out.push({ t: 'body', body: j.rune.body, cx: 0, cy: 0, r: R * 1.18, rot: 60 + i * 37, c: colorOf(j.rune), w: 1.3, dash: true }))
-  out.push({ t: 'body', body: a.body, cx: 0, cy: 0, r: R, rot: 0, c: colorOf(a), w: 2, fill: 0.1 })
+    .forEach((j, i) => out.push({ t: 'body', body: j.rune.body, cx: 0, cy: 0, r: R * 1.18, rot: 60 + i * 37, c: colorOf(j.rune), w: 1.3, dash: true, inner: starInner(j.rune.body, j.rune.rarity) }))
+  out.push({ t: 'body', body: a.body, cx: 0, cy: 0, r: R, rot: 0, c: colorOf(a), w: 2, fill: 0.1, inner: anchor.inner })
   cores.forEach(({ layer, rune }) => ring(layer, rune, 1.5))
 
   // Tangents: inside the anchor, pointing at its heart, each on a stem to the edge it touches.
-  tangentSpots(a.body, tangents.length).forEach((spot, i) => {
+  tangentSpots(a.body, tangents.length, anchor.inner).forEach((spot, i) => {
     const rune = tangents[i].rune
     const [x, y, s] = [spot.x * R, spot.y * R, spot.s * R]
     const dir = (Math.atan2(-y, -x) * 180) / Math.PI
     const away = dir + 180
-    const back = backOf(rune.body, s)
+    const back = backOf(rune.body, s, starInner(rune.body, rune.rarity))
     const [ux, uy] = [Math.cos(rad(away)), Math.sin(rad(away))]
     const edge = a.body === 'crescent' ? Math.hypot(x, y) + s * 1.6 : edgeAt(anchor, away)
     out.push({ t: 'line', x1: x + ux * back, y1: y + uy * back, x2: ux * edge, y2: uy * edge, c: colorOf(rune), w: 1 })
-    out.push({ t: 'point', body: rune.body, cx: x, cy: y, r: s, dir, c: colorOf(rune), w: 1.3 })
+    out.push({ t: 'point', body: rune.body, cx: x, cy: y, r: s, dir, c: colorOf(rune), w: 1.3, inner: starInner(rune.body, rune.rarity) })
   })
 
   // The anchor's mark.
@@ -400,9 +457,9 @@ function layout(sigil: Sigil): Prim[] {
     const [ux, uy] = [Math.cos(rad(deg)), Math.sin(rad(deg))]
     const e = edgeAt(outer, deg)
     const [ex, ey] = [outer.cx + ux * e, outer.cy + uy * e]
-    const d = stem + backOf(rune.body, s)
+    const d = stem + backOf(rune.body, s, starInner(rune.body, rune.rarity))
     out.push({ t: 'line', x1: ex, y1: ey, x2: ex + ux * stem, y2: ey + uy * stem, c: colorOf(rune), w: 1.1 })
-    out.push({ t: 'point', body: rune.body, cx: ex + ux * d, cy: ey + uy * d, r: s, dir: deg, c: colorOf(rune), w: 1.5 })
+    out.push({ t: 'point', body: rune.body, cx: ex + ux * d, cy: ey + uy * d, r: s, dir: deg, c: colorOf(rune), w: 1.5, inner: starInner(rune.body, rune.rarity) })
   })
   return out
 }
@@ -436,16 +493,19 @@ function paint(prims: Prim[], scale: number, ox: number, oy: number): string {
       const cy = Number(Y(p.cy))
       const r = p.r * scale
       if (p.t === 'point') {
-        const d = p.body === 'circle' ? dropPath(r, p.dir, cx, cy) : bodyPath(p.body, r, p.dir + 90, cx, cy, true)
+        const d = p.body === 'circle' ? dropPath(r, p.dir, cx, cy) : bodyPath(p.body, r, p.dir + 90, cx, cy, true, p.inner)
         return `<path d="${d}" fill="${p.c}" fill-opacity="0.12" stroke="${p.c}" stroke-width="${w(p.w)}" ${ln}/>`
       }
-      const main = `<path d="${bodyPath(p.body, r, p.rot, cx, cy)}" fill="${p.fill ? p.c : 'none'}"${p.fill ? ` fill-opacity="${p.fill}"` : ''} stroke="${p.c}" stroke-width="${w(p.w)}"${p.dash ? ` stroke-dasharray="${f(4 * scale + 1)} ${f(2.5 * scale + 1)}"` : ''} ${ln}/>`
+      const main = `<path d="${bodyPath(p.body, r, p.rot, cx, cy, false, p.inner)}" fill="${p.fill ? p.c : 'none'}"${p.fill ? ` fill-opacity="${p.fill}"` : ''} stroke="${p.c}" stroke-width="${w(p.w)}"${p.dash ? ` stroke-dasharray="${f(4 * scale + 1)} ${f(2.5 * scale + 1)}"` : ''} ${ln}/>`
       if (!p.seal) return main
       // The seal's second line, just inside the first. A polygon's edges sit cos(π/n) of its radius in, so it shrinks
       // further (a triangle twice as far); a crescent's two arcs move apart from their own centres.
       const gap = SEAL_GAP * scale
-      const shrink = isGon(p.body) ? gap / Math.cos(Math.PI / SIDES[p.body]) : gap
-      const second = p.body === 'crescent' ? crescentInset(r, gap, p.rot, cx, cy) : bodyPath(p.body, Math.max(r * 0.4, r - shrink), p.rot, cx, cy)
+      // Shrinking a polygon or star by gap ÷ sin(half its corner's angle) keeps the lines gap apart along its edges.
+      const n = SIDES[p.body]
+      const tipHalf = isGon(p.body) ? Math.atan2(p.inner * Math.sin(Math.PI / n), 1 - p.inner * Math.cos(Math.PI / n)) : Math.PI / 2
+      const shrink = gap / Math.sin(tipHalf)
+      const second = p.body === 'crescent' ? crescentInset(r, gap, p.rot, cx, cy) : bodyPath(p.body, Math.max(r * 0.4, r - shrink), p.rot, cx, cy, false, p.inner)
       return second ? main + `<path d="${second}" fill="none" stroke="${p.c}" stroke-width="${w(p.w * 0.75)}" ${ln}/>` : main
     })
     .join('')

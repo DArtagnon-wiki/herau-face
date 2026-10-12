@@ -1,6 +1,6 @@
 import { bodyWithSides, elementMote, GUARD_MOTE, LINK_MOTE, mote, REACH_MOTE, standardDeck, type RuneSpec } from './deck'
 import { standardSetup, type Setup } from './game'
-import type { Catalyst, Elemental, Mote, MoteKind } from './types'
+import type { Catalyst, Elemental, Mote, MoteKind, Rarity } from './types'
 
 // Decks from points along a run, for feeling and simulating the power arc.
 // Each keeps the standard deck's 14 runes and upgrades a few of them, about
@@ -68,17 +68,22 @@ const M = (k: Exclude<MoteKind, 'element'>) => mote(k)
 /** The N-gon that holds exactly these motes. */
 const gon = (...motes: Mote[]): RuneSpec => ({ body: bodyWithSides(motes.length), motes })
 const tri = gon
+/** The same rune at a rarity: archetype runes are uncommon, their payoffs rare. */
+const as = (rarity: Rarity, spec: RuneSpec): RuneSpec => ({ ...spec, rarity })
+const U = (...motes: Mote[]) => as('uncommon', gon(...motes))
+const RR = (...motes: Mote[]) => as('rare', gon(...motes))
 const cres = (...motes: Mote[]): RuneSpec => ({ body: 'crescent', motes })
 const circ = (e: Elemental): RuneSpec => ({ body: 'circle', motes: [E(e)] })
 const PLAIN = tri(LINK_MOTE, REACH_MOTE, GUARD_MOTE)
 const FOUR: Elemental[] = ['water', 'earth', 'air', 'fire']
 
 /** The standard deck with each listed element's first crescent made into a triangle holding these motes. */
-const shaped = (by: Partial<Record<Elemental, Mote[]>>, rest: (e: Elemental) => RuneSpec = (e) => cres(E(e), LINK_MOTE)): RuneSpec[] => {
+const shaped = (by: Partial<Record<Elemental, Mote[] | RuneSpec>>, rest: (e: Elemental) => RuneSpec = (e) => cres(E(e), LINK_MOTE)): RuneSpec[] => {
   const deck: RuneSpec[] = []
   for (const e of FOUR) deck.push(circ(e))
   for (const e of FOUR) {
-    deck.push(by[e] ? tri(...by[e]!) : rest(e))
+    const b = by[e]
+    deck.push(!b ? rest(e) : Array.isArray(b) ? tri(...b) : b)
     deck.push(rest(e))
   }
   deck.push(PLAIN, PLAIN)
@@ -108,11 +113,11 @@ export const ARCHETYPE_DECKS: ArchetypeDeck[] = [
     [],
     {
       note: 'Each element’s triangle holds a link and a glaze, so its sigils defend as they work; the plain triangles hold a lute, a crucible and a press, so Ward kept becomes power.',
-      deck: () => shaped({ water: [E('water'), L, M('glaze')], earth: [E('earth'), L, M('glaze')], air: [E('air'), L, M('glaze')], fire: [E('fire'), L, M('glaze')] }).map((r) => (r === PLAIN ? tri(M('lute'), M('crucible'), M('press')) : r)),
+      deck: () => shaped(Object.fromEntries(FOUR.map((e) => [e, U(E(e), L, M('glaze'))]))).map((r) => (r === PLAIN ? RR(M('lute'), M('crucible'), M('press')) : r)),
     },
     {
       note: 'Each element’s hexagon holds three links, a glaze and a lute; the plain runes are hexagons of a reach, two crucibles, two presses and a guard.',
-      deck: () => shaped(Object.fromEntries(FOUR.map((e) => [e, [E(e), L, L, L, M('glaze'), M('lute')]]))).map((r) => (r === PLAIN ? tri(REACH_MOTE, M('crucible'), M('crucible'), M('press'), M('press'), GUARD_MOTE) : r)),
+      deck: () => shaped(Object.fromEntries(FOUR.map((e) => [e, U(E(e), L, L, L, M('glaze'), M('lute'))]))).map((r) => (r === PLAIN ? RR(REACH_MOTE, M('crucible'), M('crucible'), M('press'), M('press'), GUARD_MOTE) : r)),
     },
   ),
   ...archetype(
@@ -122,11 +127,11 @@ export const ARCHETYPE_DECKS: ArchetypeDeck[] = [
     ['pelican'],
     {
       note: 'Water and earth triangles anchor with cohobation and a link; every crescent distils instead of linking; the pelican.',
-      deck: () => shaped({ water: [E('water'), M('cohobation'), L], earth: [E('earth'), M('cohobation'), L] }, (e) => cres(E(e), M('distillation'))),
+      deck: () => shaped({ water: U(E('water'), M('cohobation'), L), earth: U(E('earth'), M('cohobation'), L) }, (e) => cres(E(e), M('distillation'))),
     },
     {
       note: 'Every element’s hexagon anchors with cohobation, three links and a reach; crescents distil; the pelican.',
-      deck: () => shaped(Object.fromEntries(FOUR.map((e) => [e, [E(e), M('cohobation'), L, L, L, REACH_MOTE]])), (e) => cres(E(e), M('distillation'))),
+      deck: () => shaped(Object.fromEntries(FOUR.map((e) => [e, U(E(e), M('cohobation'), L, L, L, REACH_MOTE)])), (e) => cres(E(e), M('distillation'))),
     },
   ),
   ...archetype(
@@ -137,12 +142,12 @@ export const ARCHETYPE_DECKS: ArchetypeDeck[] = [
     {
       note: 'One water square holds multiplication, a link and a reach; two earth crescents calcine to thin the deck; earth and air get the usual triangles.',
       deck: () =>
-        shaped({ earth: [E('earth'), L, L], air: [E('air'), L, L] }).map((r, i) => (i === 4 ? gon(E('water'), M('multiplication'), L, REACH_MOTE) : r.body === 'crescent' && r.motes[0].elemental === 'earth' ? cres(E('earth'), M('calcination')) : r)),
+        shaped({ earth: [E('earth'), L, L], air: [E('air'), L, L] }).map((r, i) => (i === 4 ? RR(E('water'), M('multiplication'), L, REACH_MOTE) : r.body === 'crescent' && r.motes[0].elemental === 'earth' ? cres(E('earth'), M('calcination')) : r)),
     },
     {
       note: 'The great rune is a water pentagon holding multiplication, a link, a reach and calcination, so each cast also burns more of the deck and it comes round sooner; the other triangles stay at mid-run strength.',
       deck: () =>
-        shaped({ water: [E('water'), M('multiplication'), L, REACH_MOTE, M('calcination')], earth: [E('earth'), L, L], air: [E('air'), L, L], fire: [E('fire'), L, L] }).map((r) =>
+        shaped({ water: RR(E('water'), M('multiplication'), L, REACH_MOTE, M('calcination')), earth: [E('earth'), L, L], air: [E('air'), L, L], fire: [E('fire'), L, L] }).map((r) =>
           r.body === 'crescent' && r.motes[0].elemental === 'earth' ? cres(E('earth'), M('calcination')) : r,
         ),
     },
@@ -154,13 +159,13 @@ export const ARCHETYPE_DECKS: ArchetypeDeck[] = [
     ['aqua-vitae'],
     {
       note: 'Earth triangles anchor with digestion and a link; earth crescents inscribe with rectification; a water triangle; aqua vitae.',
-      deck: () => shaped({ water: [E('water'), L, L], earth: [E('earth'), M('digestion'), L] }).map((r) => (r.body === 'crescent' && r.motes[0].elemental === 'earth' ? cres(E('earth'), M('rectification')) : r)),
+      deck: () => shaped({ water: [E('water'), L, L], earth: U(E('earth'), M('digestion'), L) }).map((r) => (r.body === 'crescent' && r.motes[0].elemental === 'earth' ? as('uncommon', cres(E('earth'), M('rectification'))) : r)),
     },
     {
       note: 'Hexagons with four links and a reach, the earth one with digestion in place of a link; earth crescents rectify; aqua vitae.',
       deck: () =>
-        shaped(Object.fromEntries(FOUR.map((e) => [e, e === 'earth' ? [E(e), M('digestion'), L, L, L, REACH_MOTE] : [E(e), L, L, L, L, REACH_MOTE]]))).map((r) =>
-          r.body === 'crescent' && r.motes[0].elemental === 'earth' ? cres(E('earth'), M('rectification')) : r,
+        shaped(Object.fromEntries(FOUR.map((e) => [e, e === 'earth' ? U(E(e), M('digestion'), L, L, L, REACH_MOTE) : [E(e), L, L, L, L, REACH_MOTE]]))).map((r) =>
+          r.body === 'crescent' && r.motes[0].elemental === 'earth' ? as('uncommon', cres(E('earth'), M('rectification'))) : r,
         ),
     },
   ),
@@ -176,12 +181,12 @@ export const ARCHETYPE_DECKS: ArchetypeDeck[] = [
         circ('earth'),
         tri(E('water'), L, L),
         tri(E('water'), L, L),
-        cres(E('water'), M('resonance')),
-        cres(E('water'), M('resonance')),
+        as('uncommon', cres(E('water'), M('resonance'))),
+        as('uncommon', cres(E('water'), M('resonance'))),
         cres(E('water'), L),
         cres(E('water'), L),
-        cres(E('earth'), M('magnesia')),
-        cres(E('earth'), M('magnesia')),
+        as('rare', cres(E('earth'), M('magnesia'))),
+        as('rare', cres(E('earth'), M('magnesia'))),
         cres(E('earth'), L),
         cres(E('earth'), L),
         PLAIN,
@@ -195,12 +200,12 @@ export const ARCHETYPE_DECKS: ArchetypeDeck[] = [
         circ('earth'),
         tri(E('water'), L, L, L, L, REACH_MOTE),
         tri(E('water'), L, L, L, L, REACH_MOTE),
-        cres(E('water'), M('resonance')),
-        cres(E('water'), M('resonance')),
-        cres(E('water'), M('resonance')),
+        as('uncommon', cres(E('water'), M('resonance'))),
+        as('uncommon', cres(E('water'), M('resonance'))),
+        as('uncommon', cres(E('water'), M('resonance'))),
         cres(E('water'), L),
-        cres(E('earth'), M('magnesia')),
-        cres(E('earth'), M('magnesia')),
+        as('rare', cres(E('earth'), M('magnesia'))),
+        as('rare', cres(E('earth'), M('magnesia'))),
         tri(E('earth'), L, L, L, L, REACH_MOTE),
         cres(E('earth'), L),
         PLAIN,
@@ -215,11 +220,11 @@ export const ARCHETYPE_DECKS: ArchetypeDeck[] = [
     ['caput-mortuum'],
     {
       note: 'The mid-run triangles, with calcination in place of a link on water and earth, burn slag and plain circles; the caput mortuum turns each burn into power.',
-      deck: () => shaped({ water: [E('water'), L, M('calcination')], earth: [E('earth'), L, M('calcination')], air: [E('air'), L, L], fire: [E('fire'), L, L] }),
+      deck: () => shaped({ water: U(E('water'), L, M('calcination')), earth: U(E('earth'), L, M('calcination')), air: [E('air'), L, L], fire: [E('fire'), L, L] }),
     },
     {
       note: 'The late-run hexagons, with calcination in place of a link on every element; the caput mortuum.',
-      deck: () => shaped(Object.fromEntries(FOUR.map((e) => [e, [E(e), L, L, L, M('calcination'), REACH_MOTE]]))),
+      deck: () => shaped(Object.fromEntries(FOUR.map((e) => [e, U(E(e), L, L, L, M('calcination'), REACH_MOTE)]))),
     },
   ),
 ]
