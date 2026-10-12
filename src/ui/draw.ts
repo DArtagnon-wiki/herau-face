@@ -645,23 +645,18 @@ export interface VesselOptions {
   previewSigil?: Sigil | null
   /** The earth band to mark on the rim, when the target constrains earth. */
   band?: Range
+  /** A table entry just cast, drawn so it can bloom into place. */
+  freshId?: number
 }
 
-export function vesselSvg(pools: Pool[], table: TableEntry[], earth: number, opts: VesselOptions = {}): string {
+/**
+ * The amalgam itself: its pools as wedges, the earth band and the earth
+ * edge. Separate from the rest of the vessel so an animation can redraw just
+ * this while the amalgam changes.
+ */
+export function amalgamMarkup(pools: Pool[], earth: number, opts: VesselOptions = {}): string {
   const total = pools.reduce((s, p) => s + p.kg, 0)
   const parts: string[] = []
-
-  parts.push(`<circle r="160" fill="none" stroke="var(--gilt)" stroke-opacity="0.35" stroke-width="1"/>`)
-  parts.push(`<circle r="155" fill="none" stroke="var(--gilt)" stroke-opacity="0.18" stroke-width="0.6"/>`)
-  for (let i = 0; i < 48; i++) {
-    const a = (i / 48) * Math.PI * 2
-    const r0 = i % 4 === 0 ? 150 : 153
-    parts.push(`<line x1="${f(Math.cos(a) * r0)}" y1="${f(Math.sin(a) * r0)}" x2="${f(Math.cos(a) * 155)}" y2="${f(Math.sin(a) * 155)}" stroke="var(--gilt)" stroke-opacity="0.35" stroke-width="0.6"/>`)
-  }
-  for (const g of [0, 1, 2] as Grade[]) {
-    parts.push(`<circle r="${GRADE_RADIUS[g]}" fill="none" stroke="var(--ink)" stroke-opacity="0.08" stroke-width="0.8"/>`)
-  }
-
   let at = 0
   for (const p of orderedPools(pools)) {
     const frac = total > 0 ? p.kg / total : 0
@@ -688,13 +683,33 @@ export function vesselSvg(pools: Pool[], table: TableEntry[], earth: number, opt
     parts.push(`<path d="${arc(112, Math.min(edge, pe), Math.max(edge, pe))}" fill="none" stroke="var(--earth)" stroke-opacity="0.55" stroke-width="1.2" stroke-dasharray="3 3"/>`)
     parts.push(`<circle cx="${f(Math.cos(pe) * 112)}" cy="${f(Math.sin(pe) * 112)}" r="4" fill="var(--night)" stroke="var(--earth)" stroke-width="1.5"/>`)
   }
+  return parts.join('')
+}
+
+export function vesselSvg(pools: Pool[], table: TableEntry[], earth: number, opts: VesselOptions = {}): string {
+  const parts: string[] = []
+  // The rim turns slowly, a dial on the vessel.
+  const rim: string[] = []
+  rim.push(`<circle r="160" fill="none" stroke="var(--gilt)" stroke-opacity="0.35" stroke-width="1"/>`)
+  rim.push(`<circle r="155" fill="none" stroke="var(--gilt)" stroke-opacity="0.18" stroke-width="0.6"/>`)
+  for (let i = 0; i < 48; i++) {
+    const a = (i / 48) * Math.PI * 2
+    const r0 = i % 4 === 0 ? 150 : 153
+    rim.push(`<line x1="${f(Math.cos(a) * r0)}" y1="${f(Math.sin(a) * r0)}" x2="${f(Math.cos(a) * 155)}" y2="${f(Math.sin(a) * 155)}" stroke="var(--gilt)" stroke-opacity="0.35" stroke-width="0.6"/>`)
+  }
+  parts.push(`<g class="vessel-rim">${rim.join('')}</g>`)
+  for (const g of [0, 1, 2] as Grade[]) {
+    parts.push(`<circle r="${GRADE_RADIUS[g]}" fill="none" stroke="var(--ink)" stroke-opacity="0.08" stroke-width="0.8"/>`)
+  }
+  parts.push(`<g class="amalgam">${amalgamMarkup(pools, earth, opts)}</g>`)
 
   const slots = 12
   table.slice(-slots).forEach((entry, i) => {
     const a = TOP + ((i + 0.5) / slots) * Math.PI * 2
     const body = sigilBody(entry.sigil, 0.42, 25)
     const threatened = entry.id === opts.threatenedId
-    parts.push(`<g transform="translate(${f(Math.cos(a) * 131)} ${f(Math.sin(a) * 131)})">${threatened ? `<circle r="${f(body.radius + 3)}" fill="none" stroke="var(--fire)" stroke-width="1.2" stroke-dasharray="2 2"/>` : ''}${body.markup}</g>`)
+    const inner = entry.id === opts.freshId ? `<g class="fresh">${body.markup}</g>` : body.markup
+    parts.push(`<g transform="translate(${f(Math.cos(a) * 131)} ${f(Math.sin(a) * 131)})">${threatened ? `<circle r="${f(body.radius + 3)}" fill="none" stroke="var(--fire)" stroke-width="1.2" stroke-dasharray="2 2"/>` : ''}${inner}</g>`)
   })
   if (opts.previewSigil && table.length < slots) {
     const a = TOP + ((table.length + 0.5) / slots) * Math.PI * 2
@@ -781,19 +796,19 @@ export function starSvg(start: Pool[], steps: StarStep[], opts: StarOptions = {}
   // The composition, segment by segment around the circle.
   const bands: string[] = []
   const ticks: string[] = []
-  bands.push(compositionBands(start, ri, R, top, tip(0)))
+  // Each step is its own group, so the star can draw itself point by point, clockwise.
+  bands.push(`<g class="star-step" style="--i:0">${compositionBands(start, ri, R, top, tip(0))}</g>`)
   steps.forEach((st, k) => {
     const a0 = tip(k)
     const a1 = k === n - 1 ? top + Math.PI * 2 : tip(k + 1)
     const mid = k === n - 1 ? a0 + (a1 - a0) / 2 : valley(k)
     if (st.endOfTerm) {
-      bands.push(compositionBands(st.after, ri, R, a0, mid))
-      bands.push(compositionBands(st.endOfTerm, ri, R, mid, a1))
+      bands.push(`<g class="star-step" style="--i:${k + 1}">${compositionBands(st.after, ri, R, a0, mid)}${compositionBands(st.endOfTerm, ri, R, mid, a1)}</g>`)
       const [x0, y0] = at(R + 2, mid)
       const [x1, y1] = at(R + 9, mid)
       const [tx, ty] = at(R + 17, mid)
       ticks.push(`<line x1="${f(x0)}" y1="${f(y0)}" x2="${f(x1)}" y2="${f(y1)}" stroke="var(--gilt)" stroke-width="1.2"/><text x="${f(tx)}" y="${f(ty)}" class="star-term">${st.term}</text>`)
-    } else bands.push(compositionBands(st.after, ri, R, a0, a1))
+    } else bands.push(`<g class="star-step" style="--i:${k + 1}">${compositionBands(st.after, ri, R, a0, a1)}</g>`)
   })
 
   // The earth band as two dotted rings, where the earth's edge should end up.
@@ -827,7 +842,7 @@ export function starSvg(start: Pool[], steps: StarStep[], opts: StarOptions = {}
     .map((st, k) => {
       const [x, y] = at(fit.r, tip(k))
       const body = sigilBody(st.sigil, 1, fit.rho * 0.94)
-      return `<g transform="translate(${f(x)} ${f(y)})">${body.markup}</g>`
+      return `<g transform="translate(${f(x)} ${f(y)})"><g class="star-step star-sigil" style="--i:${k + 1}">${body.markup}</g></g>`
     })
     .join('')
 

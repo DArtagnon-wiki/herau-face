@@ -6,7 +6,9 @@ import { addRune, deckSpecs, editRune, findRune, removeRune, setComposition, set
 import { DEFAULT_SETTINGS, autoBurn, burnsOf, resistanceMult, cast, castsLeft, discardRunes, endTerm, invalidReason, newGame, payment, powerBonus, previewCast, previewEnd, standardSetup, termsUsed, type CastOutcome, type CastPreview, type EndOutcome, type GameState, type Settings, type Setup, type TermOutcome } from './sim/game'
 import { REACH_PER_POWER, WARD_PER_POWER, candidatePools, canJoin, openLinks, resolve, type Resolution } from './sim/sigil'
 import type { Body, Catalyst, Elemental, Grade, JoinKind, Pool, Rarity, Rune, Sigil } from './sim/types'
-import { AFFINITY_VAR, joinSketch, moteColor, runeSvg, sigilSvg, starSvg, vesselSvg, type StarStep } from './ui/draw'
+import { AFFINITY_VAR, amalgamMarkup, joinSketch, moteColor, runeSvg, sigilSvg, starSvg, vesselSvg, type StarStep } from './ui/draw'
+import { sound } from './ui/sound'
+import { animate, easeOut, lerpPools } from './ui/motion'
 import { ARCHETYPE_DECKS, PRESETS, presetByKey } from './sim/presets'
 import { CATALYSTS, effectiveSigil } from './sim/catalysts'
 import { DEFAULT_EQUATION, runepath, sourcePools, take, terms, type Equation } from './sim/equation'
@@ -43,6 +45,25 @@ interface UI {
   pile: 'draw' | 'discard' | 'burned' | null
   /** Which rune calcination burns: an id, null for none, or undefined to let the rule choose. */
   burn?: number | null
+  /** What the last action changed, for the next render to animate once. */
+  fx: Fx | null
+}
+
+/** One action's effects, played once by the render that follows it. */
+interface Fx {
+  /** The table entry just cast, to bloom into place. */
+  freshId?: number
+  /** The amalgam before and after, to tween the glyph between. */
+  from?: Pool[]
+  to?: Pool[]
+  /** Runes just drawn into the hand, to deal in. */
+  dealt?: number[]
+  /** Quintessence before and after, to count down. */
+  quint?: [number, number]
+  /** The commission's turn: its flare, what Ward caught, what was paid. */
+  strike?: { flare: number; absorbed: number; paid: number }
+  /** The commission just ended, so its star draws itself. */
+  ending?: boolean
 }
 
 const ui: UI = {
@@ -64,6 +85,7 @@ const ui: UI = {
   copied: false,
   radial: null,
   pile: null,
+  fx: null,
 }
 
 type JoinOption = { kind: JoinKind; label: string; gives: string }
@@ -140,6 +162,13 @@ function startGame(seed = Date.now() % 1_000_000) {
   resetComposer()
 }
 
+/** A fresh hand: deal every rune in. */
+function dealFx() {
+  const ids = ui.game?.hand.map((r) => r.id) ?? []
+  sound.deal(ids.length)
+  ui.fx = { dealt: ids }
+}
+
 function resetComposer() {
   ui.anchorId = null
   ui.joins = []
@@ -163,6 +192,20 @@ function currentSigil(): Sigil | null {
     anchor,
     joins: ui.joins.map((j) => ({ kind: j.kind, rune: runeById(j.id)! })).filter((j) => j.rune),
   }
+}
+
+/** Classes for the glyph from the commission's turn just played: struck when quintessence was paid, warded when Ward caught a flare. */
+const fxClass = () => {
+  const st = ui.fx?.strike
+  if (!st) return ''
+  return `${st.paid > 0 ? ' struck' : ''}${st.absorbed > 0 ? ' warded' : ''}`
+}
+
+/** Hand ids, to tell which runes a draw just added. */
+const handIds = (g: GameState | null) => new Set((g?.hand ?? []).map((r) => r.id))
+const newIn = (before: GameState | null, after: GameState | null) => {
+  const had = handIds(before)
+  return (after?.hand ?? []).filter((r) => !had.has(r.id)).map((r) => r.id)
 }
 
 const linksWord = (n: number) => `${n} link${n === 1 ? '' : 's'}`
@@ -813,13 +856,14 @@ function tipView(g: GameState, sigil: Sigil, r: Resolution): string {
 }
 
 function handView(g: GameState): string {
-  return `<section class="hand" aria-label="Hand">
+  return `<section class="hand${ui.fx?.strike ? ' after-turn' : ''}" aria-label="Hand">
     ${g.hand
       .map((h) => {
         const role = roleOf(h.id)
         const marked = ui.marked.has(h.id)
         const blocked = !role && !ui.discarding && ui.anchorId !== null && !canJoin(currentSigil()!, h)
-        return `<button class="card ${role ? 'in-rune' : ''} ${marked ? 'marked' : ''} ${blocked ? 'blocked' : ''}" data-act="card" data-id="${h.id}" style="--c:${AFFINITY_VAR[h.affinity]}" aria-label="${h.rarity !== 'common' ? RARITY_NAMES[h.rarity] + ' ' : ''}${ELEMENT_NAME[h.affinity]} ${BODY_NAMES[h.body].toLowerCase()}, power ${h.power}, ${linksWord(h.links)}${role ? ', ' + role : ''}">
+        const dealt = ui.fx?.dealt?.indexOf(h.id) ?? -1
+        return `<button class="card ${role ? 'in-rune' : ''} ${marked ? 'marked' : ''} ${blocked ? 'blocked' : ''} ${dealt >= 0 ? 'dealt' : ''}" data-act="card" data-id="${h.id}" style="--c:${AFFINITY_VAR[h.affinity]};--d:${Math.max(0, dealt)}" aria-label="${h.rarity !== 'common' ? RARITY_NAMES[h.rarity] + ' ' : ''}${ELEMENT_NAME[h.affinity]} ${BODY_NAMES[h.body].toLowerCase()}, power ${h.power}, ${linksWord(h.links)}${role ? ', ' + role : ''}">
           <span class="card-value num">${h.power}</span>
           ${pips(h.links)}
           ${runeSvg(h, 56)}
@@ -870,7 +914,7 @@ function endView(g: GameState): string {
   const c = COMMISSIONS[g.commission]
   const steps = levelSteps(g)
   const star = steps.length
-    ? `<figure class="end-star">${starSvg(g.start, steps, {
+    ? `<figure class="end-star${ui.fx?.ending ? ' drawing' : ''}">${starSvg(g.start, steps, {
         band: constrained(g.target.earth) ? g.target.earth : undefined,
         title: won ? c.product : c.source.replace(/^The /, ''),
         subtitle: `${kg(totalKg(g.pools))} · ${termsUsed(g)} term${termsUsed(g) === 1 ? '' : 's'}`,
@@ -1148,11 +1192,14 @@ function gameView(g: GameState): string {
         <p class="eyebrow">${COMMISSIONS[g.commission].boss ? 'Boss commission' : 'Commission'}</p>
         <h1 class="title">${COMMISSIONS[g.commission].source.replace(/^The /, '')} <span class="arrow">→</span> ${productName(g.commission, g.target)}</h1>
       </div>
-      <a class="jump" href="#sandbox" data-act="to-sandbox">Sandbox</a>
-      <div class="quint" aria-label="Quintessence ${num(g.quintessence)} of ${g.settings.stock}">
+      <div class="top-tools">
+        <button class="jump sound-toggle" data-act="sound" aria-pressed="${sound.enabled}" aria-label="Sound ${sound.enabled ? 'on' : 'off'}">${sound.enabled ? 'Sound' : 'Muted'}</button>
+        <a class="jump" href="#sandbox" data-act="to-sandbox">Sandbox</a>
+      </div>
+      <div class="quint${ui.fx?.strike && ui.fx.strike.paid > 0 ? ' drained' : ''}" aria-label="Quintessence ${num(g.quintessence)} of ${g.settings.stock}">
         <span class="label">Quintessence</span>
-        <span class="num quint-num">${num(g.quintessence)}</span>
-        <span class="quint-bar"><span style="width:${qPct}%"></span></span>
+        <span class="num quint-num">${num(ui.fx?.quint ? ui.fx.quint[0] : g.quintessence)}</span>
+        <span class="quint-bar"><span style="width:${ui.fx?.quint ? Math.max(0, Math.min(100, (ui.fx.quint[0] / g.settings.stock) * 100)) : qPct}%"></span></span>
       </div>
     </header>
 
@@ -1160,13 +1207,13 @@ function gameView(g: GameState): string {
     ${intentView(g, end, preview?.end?.pools ?? preview?.cast.pools ?? end.pools)}
 
     <section class="vessel panel">
-      ${vesselSvg(g.pools, g.table, share, { previewShare: preview ? shares(preview.cast.pools).earth : undefined, selectedKey: selected, previewSigil: sigil, band: constrained(g.target.earth) ? g.target.earth : undefined })}
       <div class="vessel-read">
         <p class="substance ${name === COMMISSIONS[g.commission].product ? 'is-clay' : ''}">${name}</p>
         <p class="read-line"><span class="num">${kg(totalKg(g.pools))}</span> · target ${ELEMENT_ORDER.filter((e) => constrained(g.target[e])).map((e) => `${e} ${rangeText(g.target[e])}`).join(', ')}</p>
         <div class="tchips">${targetChips(g)}</div>
       </div>
       ${poolsView(g, sigil, selected)}
+      <div class="vessel-glyph${fxClass()}">${vesselSvg(ui.fx?.from ?? g.pools, g.table, ui.fx?.from ? shares(ui.fx.from).earth : share, { previewShare: preview ? shares(preview.cast.pools).earth : undefined, selectedKey: selected, previewSigil: sigil, band: constrained(g.target.earth) ? g.target.earth : undefined, freshId: ui.fx?.freshId })}</div>
     </section>
 
     ${lastTermView(g)}
@@ -1189,6 +1236,34 @@ const root = document.getElementById('app')!
 
 function render() {
   root.innerHTML = ui.game ? gameView(ui.game) : startView()
+  const fx = ui.fx
+  ui.fx = null
+  if (fx && ui.game) runFx(ui.game, fx)
+}
+
+/** Play an action's effects on the page just rendered: tween the glyph and count the quintessence down. */
+function runFx(g: GameState, fx: Fx) {
+  if (fx.from && fx.to) {
+    const from = fx.from
+    const to = fx.to
+    const band = constrained(g.target.earth) ? g.target.earth : undefined
+    animate('glyph', fx.strike ? 900 : 650, (t) => {
+      const el = root.querySelector('.vessel-glyph .amalgam')
+      if (!el) return
+      const p = lerpPools(from, to, easeOut(t))
+      el.innerHTML = amalgamMarkup(p, shares(p).earth, { band })
+    })
+  }
+  if (fx.quint && fx.quint[0] !== fx.quint[1]) {
+    const [a, b] = fx.quint
+    animate('quint', 800, (t) => {
+      const v = a + (b - a) * easeOut(t)
+      const n = root.querySelector('.quint-num')
+      const bar = root.querySelector<HTMLElement>('.quint-bar span')
+      if (n) n.textContent = num(v)
+      if (bar) bar.style.width = `${Math.max(0, Math.min(100, (v / g.settings.stock) * 100))}%`
+    })
+  }
 }
 
 function tapCard(id: number, rect?: DOMRect) {
@@ -1212,6 +1287,7 @@ function tapCard(id: number, rect?: DOMRect) {
   if (ui.anchorId === null) {
     ui.anchorId = id
     ui.poolKey = undefined
+    sound.tap(rune)
     return
   }
   const sigil = currentSigil()!
@@ -1308,17 +1384,26 @@ root.addEventListener('click', (e) => {
   if (!el || (el as HTMLButtonElement).disabled) return
   const act = el.dataset.act
   const g = ui.game
+  sound.unlock()
   switch (act) {
+    case 'sound':
+      sound.setEnabled(!sound.enabled)
+      break
     case 'start':
       readTuning()
       startGame()
+      dealFx()
       window.scrollTo({ top: 0 })
       break
     case 'card':
       tapCard(Number(el.dataset.id), el.getBoundingClientRect())
       break
     case 'radial-pick':
-      if (ui.radial) ui.joins.push({ kind: el.dataset.kind as JoinKind, id: ui.radial.id })
+      if (ui.radial) {
+        ui.joins.push({ kind: el.dataset.kind as JoinKind, id: ui.radial.id })
+        const r = g?.hand.find((h) => h.id === ui.radial!.id)
+        if (r) sound.join(r, el.dataset.kind as JoinKind)
+      }
       ui.radial = null
       break
     case 'radial-close':
@@ -1348,31 +1433,55 @@ root.addEventListener('click', (e) => {
       ui.marked = new Set()
       break
     case 'discard-confirm':
-      if (g) ui.game = discardRunes(g, [...ui.marked])
-      resetComposer()
+      if (g) {
+        const n = ui.marked.size
+        ui.game = discardRunes(g, [...ui.marked])
+        const dealt = newIn(g, ui.game)
+        sound.discard(n)
+        sound.deal(dealt.length)
+        resetComposer()
+        ui.fx = { dealt }
+      } else resetComposer()
       break
     case 'cast': {
       const sigil = currentSigil()
       if (g && sigil && !invalidReason(g, sigil)) {
-        ui.game = cast(g, sigil, ui.poolKey, burnsOf(sigil) > 0 ? { burn: burnChoice(g, sigil) } : {})
+        const next = cast(g, sigil, ui.poolKey, burnsOf(sigil) > 0 ? { burn: burnChoice(g, sigil) } : {})
+        ui.game = next
         resetComposer()
+        const last = next.casts.at(-1)!
+        sound.cast(sigil, last.resolution)
+        const dealt = newIn(g, next).filter((id) => id !== sigil.anchor.id)
+        if (dealt.length) sound.deal(dealt.length)
+        if (next.phase === 'won') sound.win()
+        ui.fx = { freshId: next.table.at(-1)?.id, from: g.pools, to: next.pools, dealt, ending: next.phase !== 'compose' }
       }
       break
     }
     case 'end-term':
       if (g) {
-        ui.game = endTerm(g)
+        const next = endTerm(g)
+        ui.game = next
         resetComposer()
+        const t = next.history.at(-1)!
+        sound.turn(t.intent.moves.filter((m) => m.flare > 0).map((m) => m.flare), t.absorbed, t.paid)
+        const dealt = newIn(g, next)
+        if (dealt.length) setTimeout(() => sound.deal(dealt.length), 450)
+        if (next.phase === 'won') sound.win()
+        if (next.phase === 'lost') sound.lose()
+        ui.fx = { from: g.pools, to: t.pools, strike: { flare: t.flare, absorbed: t.absorbed, paid: t.paid }, quint: [g.quintessence, next.quintessence], dealt, ending: next.phase !== 'compose' }
       }
       break
     case 'restart':
       readTuning()
       startGame()
+      dealFx()
       window.scrollTo({ top: 0 })
       break
     case 'replay':
       readTuning()
       startGame(ui.seed)
+      dealFx()
       window.scrollTo({ top: 0 })
       break
     case 'copy-csv': {

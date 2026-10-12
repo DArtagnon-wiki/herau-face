@@ -457,3 +457,43 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--gilt); }
 .rune-power { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .rune-power .fine { margin: 0; font-size: 14px; color: var(--ink-faint); }
 .presets .seg.six button i, .deck-group-line i { color: var(--gilt-bright); font-style: italic; }
+
+/* Sound toggle ------------------------------------------------------------- */
+.top-tools { display: flex; flex-direction: column; gap: 6px; align-items: center; align-self: center; }
+.sound-toggle[aria-pressed='false'] { color: var(--ink-faint); border-color: rgba(239, 232, 255, 0.18); }
+
+/* Animation: the glyph, casts, the commission's turn, dealing, the star ----- */
+.vessel-glyph { position: relative; display: grid; place-items: center; }
+.vessel-glyph > .vessel-svg { grid-area: 1 / 1; }
+.vessel-glyph::before, .vessel-glyph::after {
+  content: ''; grid-area: 1 / 1; width: min(300px, 78vw); aspect-ratio: 1; border-radius: 50%; pointer-events: none; opacity: 0;
+}
+@media (min-width: 720px) { .vessel-glyph::before, .vessel-glyph::after { width: 360px; } }
+@media (prefers-reduced-motion: no-preference) {
+  /* The rim turns slowly, a dial on the vessel. */
+  .vessel-rim { transform-box: fill-box; transform-origin: center; animation: rim-turn 240s linear infinite; }
+  @keyframes rim-turn { to { transform: rotate(360deg); } }
+  /* A sigil just cast blooms into its place on the table. */
+  .vessel-svg .fresh { transform-box: fill-box; transform-origin: center; animation: bloom 720ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  @keyframes bloom { 0% { opacity: 0; transform: scale(2.4); } 55% { opacity: 1; } 100% { opacity: 1; transform: scale(1); } }
+  /* The commission's turn: a blow that gets through shakes the glyph and flashes fire; Ward that catches one pulses gold. */
+  .vessel-glyph.struck > .vessel-svg { animation: shake 460ms ease-out 120ms; }
+  @keyframes shake { 0%, 100% { transform: none; } 15% { transform: translate(-6px, 2px); } 30% { transform: translate(5px, -3px); } 45% { transform: translate(-3px, 2px); } 60% { transform: translate(3px, 1px); } 80% { transform: translate(-1px, 0); } }
+  .vessel-glyph.struck::after { box-shadow: 0 0 0 2px var(--fire), inset 0 0 60px rgba(255, 79, 114, 0.55); animation: flash 700ms ease-out 120ms; }
+  @keyframes flash { 12% { opacity: 0.95; } 100% { opacity: 0; } }
+  .vessel-glyph.warded::before { border: 2px solid var(--gilt-bright); box-shadow: 0 0 24px rgba(246, 227, 168, 0.5); animation: ward-pulse 900ms ease-out; }
+  @keyframes ward-pulse { 0% { opacity: 0.95; transform: scale(0.82); } 100% { opacity: 0; transform: scale(1.1); } }
+  .quint.drained .quint-num { animation: drained 800ms ease-out 200ms; }
+  @keyframes drained { 25% { color: var(--warn); transform: scale(1.15); } }
+  /* Runes drawn into the hand are dealt in, one after another; after the commission's turn, once it has struck. */
+  .card.dealt { animation: deal 380ms cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(var(--d) * 55ms); }
+  .hand.after-turn .card.dealt { animation-delay: calc(450ms + var(--d) * 55ms); }
+  @keyframes deal { from { opacity: 0; transform: translateY(28px) rotate(-5deg) scale(0.9); } to { opacity: 1; transform: none; } }
+  /* The commission ends: the card rises, and its star draws itself point by point, clockwise. */
+  .end-card { animation: end-in 420ms ease-out both; }
+  @keyframes end-in { from { opacity: 0; transform: translateY(18px) scale(0.97); } }
+  .end-star.drawing .star-step { animation: star-in 560ms ease-out both; animation-delay: calc(300ms + var(--i) * 160ms); }
+  .end-star.drawing .star-sigil { transform-box: fill-box; transform-origin: center; animation-name: star-sigil-in; }
+  @keyframes star-in { from { opacity: 0; } }
+  @keyframes star-sigil-in { from { opacity: 0; transform: scale(0.4) rotate(-30deg); } }
+}

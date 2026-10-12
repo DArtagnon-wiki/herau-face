@@ -624,6 +624,21 @@ Circumgician is built on Pixi.js, TypeScript and Vite, and most of its look is g
 | The Mire, fired into brick | Its force or power is entire if it be converted into earth. |
 | A finished run | So was the world created. |
 
+## Sound and motion (prototyped)
+
+Every sound is synthesized in the page, with no files, and every motion says what just changed. Both are first passes, to be shaped with the alchemical symbology later.
+
+| Moment | Sound | Motion |
+| --- | --- | --- |
+| Tap an anchor, join a rune | The rune's element voice: earth a low hollow triangle, water a sine with vibrato, fire a filtered saw, air a breathy high sine, all on one D minor pentatonic. Rings sound an octave up, side links a fifth, tangents a fourth down; entwines are muted | The radial menu pops |
+| Cast | The sigil as an arpeggio from the anchor out to the seal, then a bell for a transmutation (louder for more kilos), bright high bells for purifying, a dull one for adulterating, a glassy chime for Ward | The sigil blooms into its place on the table; the amalgam eases to its new mix |
+| The commission's turn | A low blow for each flare, a glassy chime where Ward catches one, a sinking tone for quintessence paid; a breath of wind when calm | Ward pulses gold round the glyph; a blow that gets through shakes it and flashes fire; quintessence counts down |
+| Draw, discard | A flick for each rune | New runes deal in, one after another |
+| Commission ends | The scale rising in bells over a low swell; a falling line on failure | The end card rises and the star draws itself point by point, clockwise |
+| Always | | The vessel's rim turns slowly, a dial |
+
+Sound starts on the first tap, as browsers require, and a Sound button mutes it. Reduced-motion settings turn the animations off.
+
 ## Open questions
 
 | Question | Current proposal |

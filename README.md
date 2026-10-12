@@ -143,6 +143,10 @@ The power arc's target: by the end of a run of 20 or more commissions, mud to cl
 
 The simulated player plans each term for big hands and high-link anchors: it tries the best sigil of every anchor and size, plus every ring chain of two or three, plays the rest of the term out greedily from each, and starts with the one that ends best. The opening deck still uses the exhaustive greedy player, so its numbers match those above.
 
+### Sound and motion
+
+`src/ui/sound.ts` synthesizes every sound with Web Audio: each element has a voice on one D minor pentatonic, so a cast sounds as a chord, arpeggiated from the anchor out to the seal, followed by a bell for what it did. The commission's turn thuds for each flare, chimes where Ward catches one and sinks for quintessence paid. The Sound button mutes it, remembered between visits. `src/ui/motion.ts` and the styles animate what changed: the glyph's amalgam eases between states, a cast sigil blooms onto the table, the commission's blows shake the glyph and Ward pulses round it, quintessence counts down, new runes deal in, and the end star draws itself clockwise. Each action records its effects once and the next render plays them, so tapping around doesn't replay them. Reduced-motion settings turn animation off. The glyph now sits below its legend: the amalgam's name, target chips and pool buttons come first.
+
 ### Archetype decks
 
 Six archetypes, each with motes of its own (DESIGN.md, Archetypes), are playable from "Or an archetype deck" on the start screen and in the Sandbox, at the mid-run deck's budget with a 7-rune hand or a late version with an 8-rune hand. The motes are in `src/sim/deck.ts`, the catalysts in `src/sim/catalysts.ts`, the decks in `src/sim/presets.ts`.
