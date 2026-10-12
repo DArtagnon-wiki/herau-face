@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { elementMote, LINK_MOTE, makeRune } from '../sim/deck'
 import type { Body, Elemental, JoinKind, Rune, Sigil } from '../sim/types'
-import { bodyPath, sigilBody, starInner, starSvg } from './draw'
+import { bodyPath, moonDepth, sigilBody, starInner, starSvg, sunReach } from './draw'
 
 let id = 1
 const rune = (body: Body, e?: Elemental, links = 2): Rune =>
@@ -19,12 +19,14 @@ describe('drawing a sigil', () => {
     expect(strokes(sigilBody(two).markup, 'earth')).toBe(1)
   })
 
-  it('runs a crescent seal\'s second line parallel to both of its arcs', () => {
+  it('draws a crescent seal as the moon with earthshine and a second limb outside it', () => {
     const m = sigilBody(sigil(rune('triangle', 'fire'), ['circumscribe', rune('crescent', 'water')])).markup
     const paths = m.split('<path ').filter((x) => x.includes('stroke="var(--water)"'))
-    expect(paths).toHaveLength(2)
-    // Each outline is two arcs: the back and the hollow.
-    for (const path of paths) expect(path.match(/ A /g)).toHaveLength(2)
+    // The faint unlit disc, the crescent (limb and terminator), and the seal's second limb.
+    expect(paths).toHaveLength(3)
+    expect(paths.filter((x) => x.includes('stroke-opacity="0.16"'))).toHaveLength(1)
+    expect(paths.filter((x) => (x.match(/ A /g) ?? []).length === 2 && !x.includes('stroke-opacity'))).toHaveLength(1)
+    expect(paths.filter((x) => (x.match(/ A /g) ?? []).length === 1)).toHaveLength(1)
   })
 
   it('marks the anchor with a dot and draws side links and tangents on stems', () => {
@@ -60,7 +62,19 @@ describe('rarity as stars', () => {
     expect(starInner('square', 'rare')).toBeLessThan(starInner('square', 'uncommon'))
     expect(starInner('crescent', 'rare')).toBe(1)
     const corners = (d: string) => (d.match(/L/g) ?? []).length + 1
-    expect(corners(bodyPath('pentagon', 10, 0, 0, 0, false, starInner('pentagon', 'common')))).toBe(5)
-    expect(corners(bodyPath('pentagon', 10, 0, 0, 0, false, starInner('pentagon', 'rare')))).toBe(10)
+    expect(corners(bodyPath('pentagon', 10, 0, 0, 0, false, 'common'))).toBe(5)
+    expect(corners(bodyPath('pentagon', 10, 0, 0, 0, false, 'rare'))).toBe(10)
+  })
+
+  it('gives rarer suns rays and rarer moons thinner crescents', () => {
+    const rays = (d: string) => (d.match(/M/g) ?? []).length - 1
+    expect(rays(bodyPath('circle', 10, 0, 0, 0, false, 'common'))).toBe(0)
+    expect(rays(bodyPath('circle', 10, 0, 0, 0, false, 'uncommon'))).toBe(8)
+    expect(rays(bodyPath('circle', 10, 0, 0, 0, false, 'rare'))).toBe(16)
+    expect(sunReach('rare')).toBeGreaterThan(sunReach('uncommon'))
+    // An eighth, a sixteenth and a thirty-second of the moon lit: a quarter, an eighth and a sixteenth of the radius thick.
+    expect(1 - moonDepth('common')).toBeCloseTo(0.25)
+    expect(1 - moonDepth('uncommon')).toBeCloseTo(0.125)
+    expect(1 - moonDepth('rare')).toBeCloseTo(0.0625)
   })
 })

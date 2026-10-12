@@ -39,6 +39,9 @@ A rune is a body holding motes. The body is an N-gon with N bowls (a circle is a
 | Square | 5 | 1 | 4 |
 | Pentagon | 5 | 1 | 5 |
 | Hexagon | 5 | 1 | 6 |
+| Heptagon | 5 | 1 | 7 |
+
+Power belongs to each rune, not its shape: the table's power is only the default for runes made without their own, and the Sandbox sets any rune's power from 0 to 25.
 
 | Mote | Effect |
 | --- | --- |
@@ -76,8 +79,8 @@ The Sandbox panel changes the commission in progress, live (any mote, archetype 
 Every sigil is drawn the way the design doc's notation reads (`src/ui/draw.ts`): the anchor innermost with a dot at its heart; circumscribed runes nest outward and inscribed runes inward, in runepath order; the seal has a double line; side links hang outside on stems, pointing out; tangents sit inside, pointing in, on stems to the edge they touch; entwined runes lace through, dashed. Where the sketch left room:
 
 - A crescent holds what it rings, or what is inscribed in it, in its hollow. As a seal, its second line runs parallel to both arcs, the back and the hollow, and closes in shorter horns.
-- Runes are N-gons with N bowls, from the circle (1) and crescent (2) to the hexagon (6). A polygon inside one of its own kind turns half a side, so nested triangles read as halves of a hexagram rather than as a seal's double line.
-- Rarity shows in the shape: common polygons are plain, uncommon have shallow divots, rare are pointy stars. The Sandbox sets any rune's rarity; it changes only the drawing for now. Archetype decks mark their enablers uncommon and payoffs rare.
+- Runes are N-gons with N bowls, from the circle (1) and crescent (2) to the heptagon (7). A polygon inside one of its own kind turns half a side, so nested triangles read as halves of a hexagram rather than as a seal's double line.
+- Rarity shows in the shape: common polygons are plain, uncommon have shallow divots, rare are pointy stars. A circle is the sun: uncommon throws 8 short rays, rare 16 long and short. A crescent is the moon, an eighth lit when common, a sixteenth uncommon, a thirty-second rare, with a faint line round its unlit rest. The Sandbox sets any rune's rarity; it changes only the drawing for now. Archetype decks mark their enablers uncommon and payoffs rare.
 
 ![Runes by rarity](docs/rune-rarity.png)
 

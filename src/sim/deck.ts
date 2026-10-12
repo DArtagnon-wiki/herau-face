@@ -39,13 +39,13 @@ export interface Forge {
   values: MoteValues
 }
 
-export const BODY_LIST: Body[] = ['circle', 'crescent', 'triangle', 'square', 'pentagon', 'hexagon']
-export const BODY_NAMES: Record<Body, string> = { circle: 'Circle', crescent: 'Crescent', triangle: 'Triangle', square: 'Square', pentagon: 'Pentagon', hexagon: 'Hexagon' }
+export const BODY_LIST: Body[] = ['circle', 'crescent', 'triangle', 'square', 'pentagon', 'hexagon', 'heptagon']
+export const BODY_NAMES: Record<Body, string> = { circle: 'Circle', crescent: 'Crescent', triangle: 'Triangle', square: 'Square', pentagon: 'Pentagon', hexagon: 'Hexagon', heptagon: 'Heptagon' }
 
 /** Sides of each body, and so its bowls: an N-gon holds N motes. */
-export const SIDES: Record<Body, number> = { circle: 1, crescent: 2, triangle: 3, square: 4, pentagon: 5, hexagon: 6 }
+export const SIDES: Record<Body, number> = { circle: 1, crescent: 2, triangle: 3, square: 4, pentagon: 5, hexagon: 6, heptagon: 7 }
 
-/** The body with this many sides, from a circle (1) to a hexagon (6). */
+/** The body with this many sides, from a circle (1) to a heptagon (7). */
 export const bodyWithSides = (n: number): Body => BODY_LIST[Math.min(BODY_LIST.length, Math.max(1, n)) - 1]
 
 export const DEFAULT_FORGE: Forge = {
@@ -162,6 +162,8 @@ export interface RuneSpec {
   junk?: boolean
   /** Common unless given. */
   rarity?: Rarity
+  /** Its own power; its body's default in the forge unless given. Power belongs to the rune, not the shape. */
+  power?: number
 }
 
 export const RARITIES: Rarity[] = ['common', 'uncommon', 'rare']
@@ -187,7 +189,8 @@ export function makeRune(id: number, spec: RuneSpec, forge: Forge = DEFAULT_FORG
   return {
     id,
     body: spec.body,
-    power: power ?? b.power,
+    power: power ?? spec.power ?? b.power,
+    ...(spec.power !== undefined ? { ownPower: spec.power } : {}),
     bowls,
     motes,
     rarity: spec.rarity ?? 'common',
@@ -213,10 +216,10 @@ export function makeRune(id: number, spec: RuneSpec, forge: Forge = DEFAULT_FORG
 }
 
 /** Re-apply the forge's numbers to an existing rune, keeping its id, body and motes. */
-export const reforge = (r: Rune, forge: Forge): Rune => (r.junk ? r : makeRune(r.id, { body: r.body, motes: r.motes, rarity: r.rarity }, forge, undefined, r.stacks))
+export const reforge = (r: Rune, forge: Forge): Rune => (r.junk ? r : makeRune(r.id, { body: r.body, motes: r.motes, rarity: r.rarity, power: r.ownPower }, forge, undefined, r.stacks))
 
 /** The rune after one more cast: a multiplication mote makes its other motes count once more. */
-export const grow = (r: Rune, forge: Forge): Rune => (r.multiplication ? makeRune(r.id, { body: r.body, motes: r.motes, rarity: r.rarity }, forge, r.power, r.stacks + 1) : r)
+export const grow = (r: Rune, forge: Forge): Rune => (r.multiplication ? makeRune(r.id, { body: r.body, motes: r.motes, rarity: r.rarity, power: r.ownPower }, forge, r.power, r.stacks + 1) : r)
 
 const FOUR: Elemental[] = ['water', 'earth', 'air', 'fire']
 

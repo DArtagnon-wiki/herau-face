@@ -174,8 +174,9 @@ export function terms(sigil: Sigil, source: Pool, eq: Equation, path: Runepath):
   const power = anchor.power + path.steps.reduce((p, s) => p + s.rune.power, 0)
   const resistance = eq.base * GRADE_MULT[source.grade] * eq.step ** (path.flips + (eq.purifyStep === false ? 0 : pure))
   const out = outputs(sigil)
-  const reachUp = (anchor.power + joins.filter((j) => j.kind === 'side').reduce((p, j) => p + j.rune.power, 0)) * out.reachMult
-  const reachDown = anchor.power + joins.filter((j) => j.kind === 'tangent').reduce((p, j) => p + j.rune.power, 0)
+  // Reach floors at 1 either way, so a powerless anchor neither divides by nothing nor takes nothing for it.
+  const reachUp = Math.max(1, anchor.power + joins.filter((j) => j.kind === 'side').reduce((p, j) => p + j.rune.power, 0)) * out.reachMult
+  const reachDown = Math.max(1, anchor.power + joins.filter((j) => j.kind === 'tangent').reduce((p, j) => p + j.rune.power, 0))
   const multiplier = path.steps.reduce((m, s) => (s.kind === 'circumscribe' ? m * (eq.ring + s.rune.boost) : m / (eq.inscribe + s.rune.boost)), 1)
   const digest = !transmutes(path) && netPurity(path) > 0 ? [anchor, ...joins.map((j) => j.rune)].reduce((d, r) => d + r.digestion, 0) : 0
   return { path, purifies: pure, power, resistance, reachUp, reachDown, authority: Math.log(1 + power / resistance), multiplier, digest }

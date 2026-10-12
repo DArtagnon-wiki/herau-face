@@ -24,11 +24,46 @@ function rotate([x, y]: Pt, deg: number): Pt {
   return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)]
 }
 
-// Crescent geometry (unit radius): outer circle at the origin, inner circle
-// offset toward the horns. Horns point up by default.
-const CRESCENT_INNER = { dx: 0.45, r: 0.8 }
-const CRESCENT_HORN_X = (CRESCENT_INNER.dx ** 2 + 1 - CRESCENT_INNER.r ** 2) / (2 * CRESCENT_INNER.dx)
-const CRESCENT_HORN_Y = Math.sqrt(1 - CRESCENT_HORN_X ** 2)
+// A circle is the sun and a crescent the moon, and each shows rarity its own
+// way: a rarer sun throws rays, a rarer moon is a thinner crescent.
+
+/** Rays round a sun: none when common, short ones when uncommon, long and short when rare. Lengths are shares of the radius. */
+const SUN_RAYS: Record<Rarity, { n: number; long: number; short: number }> = {
+  common: { n: 0, long: 0, short: 0 },
+  uncommon: { n: 8, long: 0.24, short: 0.24 },
+  rare: { n: 16, long: 0.44, short: 0.22 },
+}
+const RAY_GAP = 0.1
+
+/** How far a sun reaches, rays included, as a share of its radius. */
+export const sunReach = (rarity: Rarity = 'common') => (SUN_RAYS[rarity].n ? 1 + RAY_GAP + SUN_RAYS[rarity].long : 1)
+
+/** The rays round a sun of radius r, as path segments; skip leaves out rays toward some directions (a drop's tip). */
+function raysPath(r: number, cx: number, cy: number, rotDeg: number, rarity: Rarity, skip?: (deg: number) => boolean): string {
+  const rays = SUN_RAYS[rarity]
+  let d = ''
+  for (let i = 0; i < rays.n; i++) {
+    const deg = rotDeg - 90 + (360 * i) / rays.n
+    if (skip?.(deg)) continue
+    const len = i % 2 ? rays.short : rays.long
+    const [ux, uy] = [Math.cos((deg * Math.PI) / 180), Math.sin((deg * Math.PI) / 180)]
+    const a = r * (1 + RAY_GAP)
+    const b = r * (1 + RAY_GAP + len)
+    d += ` M ${f(cx + ux * a)} ${f(cy + uy * a)} L ${f(cx + ux * b)} ${f(cy + uy * b)}`
+  }
+  return d
+}
+
+/** How much of the moon a crescent shows lit: an eighth when common, a sixteenth when uncommon, a thirty-second when rare. */
+const MOON_LIT: Record<Rarity, number> = { common: 1 / 8, uncommon: 1 / 16, rare: 1 / 32 }
+
+/**
+ * How far below the horns a crescent's terminator dips, as a share of the
+ * radius. The lit limb runs round the bottom half and the terminator is a
+ * half-ellipse, so the crescent is 1 − depth thick at its middle: a quarter of
+ * the radius for a common (eighth) moon.
+ */
+export const moonDepth = (rarity: Rarity = 'common') => 1 - 2 * MOON_LIT[rarity]
 
 /** Whether a body is a polygon: a triangle or more sides. */
 export const isGon = (body: Body) => SIDES[body] >= 3
@@ -64,21 +99,23 @@ const starry = (body: Body, inner: number) => isGon(body) && inner < Math.cos(Ma
 
 /**
  * Outline of a body at radius r, centred on (cx, cy), rotated rotDeg. A
- * pointing polygon has a corner at rotDeg − 90. With inner, a polygon is drawn
- * as a star whose divots sit at that share of its radius (see starInner).
+ * pointing polygon has a corner at rotDeg − 90. Rarity shapes it: a polygon
+ * becomes a pointier star (see starInner), a circle a sun with rays, a
+ * crescent a thinner moon (see moonDepth). A crescent's horns point up.
  */
-export function bodyPath(body: Body, r: number, rotDeg = 0, cx = 0, cy = 0, pointUp = false, inner?: number): string {
+export function bodyPath(body: Body, r: number, rotDeg = 0, cx = 0, cy = 0, pointUp = false, rarity: Rarity = 'common'): string {
+  const inner = starInner(body, rarity)
   const at = (p: Pt) => {
     const [x, y] = rotate(p, rotDeg)
     return `${f(cx + x * r)} ${f(cy + y * r)}`
   }
   if (body === 'circle') {
-    return `M ${f(cx - r)} ${f(cy)} A ${f(r)} ${f(r)} 0 1 0 ${f(cx + r)} ${f(cy)} A ${f(r)} ${f(r)} 0 1 0 ${f(cx - r)} ${f(cy)} Z`
+    return `M ${f(cx - r)} ${f(cy)} A ${f(r)} ${f(r)} 0 1 0 ${f(cx + r)} ${f(cy)} A ${f(r)} ${f(r)} 0 1 0 ${f(cx - r)} ${f(cy)} Z` + raysPath(r, cx, cy, rotDeg, rarity)
   }
   if (isGon(body)) {
     const n = SIDES[body]
     const corners = gonPoints(n, pointUp)
-    if (inner === undefined || !starry(body, inner)) return `M ${corners.map(at).join(' L ')} Z`
+    if (!starry(body, inner)) return `M ${corners.map(at).join(' L ')} Z`
     // A star: each divot sits between two corners, at the inner share of the radius.
     const pts: Pt[] = []
     corners.forEach((c, i) => {
@@ -89,41 +126,32 @@ export function bodyPath(body: Body, r: number, rotDeg = 0, cx = 0, cy = 0, poin
     })
     return `M ${pts.map(at).join(' L ')} Z`
   }
-  // Crescent with horns up: rotate the horns-right construction by -90°.
-  const base = rotDeg - 90
-  const atC = (p: Pt) => {
-    const [x, y] = rotate(p, base)
-    return `${f(cx + x * r)} ${f(cy + y * r)}`
-  }
-  const top: Pt = [CRESCENT_HORN_X, -CRESCENT_HORN_Y]
-  const bottom: Pt = [CRESCENT_HORN_X, CRESCENT_HORN_Y]
-  const ri = CRESCENT_INNER.r * r
-  return `M ${atC(top)} A ${f(r)} ${f(r)} 0 1 0 ${atC(bottom)} A ${f(ri)} ${f(ri)} 0 1 1 ${atC(top)} Z`
+  // The moon: the lit limb round the bottom from horn to horn, back along the terminator's half-ellipse.
+  const depth = moonDepth(rarity)
+  return `M ${at([-1, 0])} A ${f(r)} ${f(r)} 0 0 0 ${at([1, 0])} A ${f(r)} ${f(depth * r)} ${f(rotDeg)} 0 1 ${at([-1, 0])} Z`
 }
 
-/**
- * The seal's second line inside a crescent: the outer arc drawn smaller and the
- * hollow's arc drawn larger, both about their own centres, so the line runs
- * parallel to the first all the way round and meets itself in shorter horns.
- * Empty when the crescent is too thin to hold it.
- */
-function crescentInset(r: number, gap: number, rotDeg: number, cx: number, cy: number): string {
-  const d = CRESCENT_INNER.dx * r
-  const outer = r - gap
-  const hollow = CRESCENT_INNER.r * r + gap
-  const x = (d * d + outer * outer - hollow * hollow) / (2 * d)
-  const yy = outer * outer - x * x
-  if (outer <= 0 || yy <= 0) return ''
-  const y = Math.sqrt(yy)
+/** The unlit rest of the moon, for a faint earthshine line round a crescent. */
+const earthshine = (r: number, cx: number, cy: number) => `M ${f(cx - r)} ${f(cy)} A ${f(r)} ${f(r)} 0 1 0 ${f(cx + r)} ${f(cy)} A ${f(r)} ${f(r)} 0 1 0 ${f(cx - r)} ${f(cy)} Z`
+
+/** A crescent seal's second line: the lit limb again, just outside it, from horn to horn. A thin moon has no room inside. */
+function crescentSeal(r: number, gap: number, rotDeg: number, cx: number, cy: number): string {
+  const R = r + gap
   const at = (p: Pt) => {
-    const [px, py] = rotate(p, rotDeg - 90)
-    return `${f(cx + px)} ${f(cy + py)}`
+    const [x, y] = rotate(p, rotDeg)
+    return `${f(cx + x * R)} ${f(cy + y * R)}`
   }
-  return `M ${at([x, -y])} A ${f(outer)} ${f(outer)} 0 ${x > 0 ? 1 : 0} 0 ${at([x, y])} A ${f(hollow)} ${f(hollow)} 0 ${x > d ? 1 : 0} 1 ${at([x, -y])} Z`
+  return `M ${at([-1, 0])} A ${f(R)} ${f(R)} 0 0 0 ${at([1, 0])}`
 }
 
-/** Where each bowl sits on a body, in unit coordinates (horns up for a crescent), by how many bowls it has. A star's bowls draw in and shrink a little to fit its points. */
-function bowlSpots(body: Body, n: number, inner = starInner(body)): { at: Pt[]; r: number } {
+/** Where each bowl sits on a body, in unit coordinates (horns up for a crescent), by how many bowls it has. A star's bowls draw in and shrink a little to fit its points; a crescent's are beads along its band. */
+function bowlSpots(body: Body, n: number, rarity: Rarity = 'common'): { at: Pt[]; r: number } {
+  const inner = starInner(body, rarity)
+  if (body === 'crescent') {
+    const depth = moonDepth(rarity)
+    const angles = n <= 1 ? [90] : Array.from({ length: n }, (_, i) => 90 - 34 + (68 * i) / (n - 1))
+    return { at: angles.map((a) => [Math.cos(rad(a)), ((1 + depth) / 2) * Math.sin(rad(a))] as Pt), r: 0.15 }
+  }
   const plain = plainBowlSpots(body, n)
   if (!starry(body, inner)) return plain
   const q = inner / Math.cos(Math.PI / SIDES[body])
@@ -148,7 +176,7 @@ function plainBowlSpots(body: Body, n: number): { at: Pt[]; r: number } {
     return { at: [[0, -0.58], [0.5, 0.29], [-0.5, 0.29], [0, 0.36], [-0.31, -0.18], [0.31, -0.18]].slice(0, n) as Pt[], r: 0.14 }
   }
   // An N-gon's bowls sit in its corners, read clockwise from the top.
-  const reach: Record<number, [number, number]> = { 4: [0.5, 0.17], 5: [0.55, 0.155], 6: [0.58, 0.14] }
+  const reach: Record<number, [number, number]> = { 4: [0.5, 0.17], 5: [0.55, 0.155], 6: [0.58, 0.14], 7: [0.6, 0.125] }
   const [rho, br] = reach[sides] ?? [0.58, 0.14]
   const turn = (p: Pt) => (Math.atan2(p[1], p[0]) * 180) / Math.PI
   const corners = gonPoints(sides)
@@ -231,13 +259,13 @@ function moteMark(m: Mote | undefined, x: number, y: number, br: number): string
 }
 
 function bowls(rune: Rune, r: number): string {
-  const spec = bowlSpots(rune.body, Math.max(rune.bowls, rune.motes.length), starInner(rune.body, rune.rarity))
+  const spec = bowlSpots(rune.body, Math.max(rune.bowls, rune.motes.length), rune.rarity)
   return spec.at.map((p, i) => moteMark(rune.motes[i], p[0] * r, p[1] * r, spec.r * r)).join('')
 }
 
-/** A rune as it appears on a card: its body in line, with each bowl showing its mote. */
+/** A rune as it appears on a card: its body in line, with each bowl showing its mote. A sun shrinks to keep its rays on the card. */
 export function runeSvg(rune: Rune, size = 56): string {
-  const r = size * 0.42
+  const r = (size * 0.42) / (rune.body === 'circle' ? sunReach(rune.rarity) : 1)
   const box = `viewBox="${-size / 2} ${-size / 2} ${size} ${size}" width="${size}" height="${size}"`
   if (rune.junk) {
     return `<svg class="glyph" ${box} aria-hidden="true">
@@ -247,7 +275,8 @@ export function runeSvg(rune: Rune, size = 56): string {
   }
   const c = AFFINITY_VAR[rune.affinity]
   return `<svg class="glyph" ${box} aria-hidden="true">
-    <path d="${bodyPath(rune.body, r, 0, 0, 0, false, starInner(rune.body, rune.rarity))}" fill="${c}" fill-opacity="0.08" stroke="${c}" stroke-width="1.6" stroke-linejoin="round"/>
+    ${rune.body === 'crescent' ? `<path d="${earthshine(r, 0, 0)}" fill="none" stroke="${c}" stroke-opacity="0.18" stroke-width="1"/>` : ''}
+    <path d="${bodyPath(rune.body, r, 0, 0, 0, false, rune.rarity)}" fill="${c}" fill-opacity="0.08" stroke="${c}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
     ${bowls(rune, r)}
   </svg>`
 }
@@ -274,11 +303,12 @@ interface Layer {
   rot: number
   /** Where a star's divots sit, as a share of its radius (see starInner); 1 for circles and crescents. */
   inner: number
+  rarity: Rarity
 }
 
 type Prim =
-  | { t: 'body'; body: Body; cx: number; cy: number; r: number; rot: number; c: string; w: number; fill?: number; dash?: boolean; seal?: boolean; inner: number }
-  | { t: 'point'; body: Body; cx: number; cy: number; r: number; dir: number; c: string; w: number; inner: number }
+  | { t: 'body'; body: Body; cx: number; cy: number; r: number; rot: number; c: string; w: number; fill?: number; dash?: boolean; seal?: boolean; rarity: Rarity }
+  | { t: 'point'; body: Body; cx: number; cy: number; r: number; dir: number; c: string; w: number; rarity: Rarity }
   | { t: 'line'; x1: number; y1: number; x2: number; y2: number; c: string; w: number }
   | { t: 'dot'; cx: number; cy: number; r: number; c: string }
 
@@ -291,14 +321,16 @@ const colorOf = (r: Rune) => (r.junk ? 'var(--slag)' : AFFINITY_VAR[r.affinity])
  * centre), and how the inner turns. A crescent cradles what it holds in its
  * hollow; a triangle holds another triangle inverted.
  */
-function holds(outer: Body, inner: Body, outerInner = starInner(outer)): { k: number; dy: number; flip: boolean } {
+function holds(outer: Body, inner: Body, outerRarity: Rarity = 'common'): { k: number; dy: number; flip: boolean } {
   if (outer === 'circle') return { k: 1.3, dy: 0, flip: false }
   if (isGon(outer)) {
     const n = SIDES[outer]
-    // Room for the inner body inside the outer's edges, or a star's divots, which sit outerInner of its radius in.
-    return { k: (n === 3 ? 1.075 : 1.15) / outerInner, dy: 0, flip: inner === outer }
+    // Room for the inner body inside the outer's edges, or a star's divots, which sit starInner of its radius in.
+    return { k: (n === 3 ? 1.075 : 1.15) / starInner(outer, outerRarity), dy: 0, flip: inner === outer }
   }
-  return { k: 1.95, dy: -0.25, flip: false }
+  // A moon holds what it rings in its dark part, between the top of its disc and the terminator.
+  const depth = moonDepth(outerRarity)
+  return { k: 1 / (0.85 * ((1 + depth) / 2)), dy: -(1 - depth) / 2, flip: false }
 }
 
 /** How far a polygon nested in its own kind turns: half a side, so a triangle in a triangle points down. */
@@ -323,7 +355,15 @@ function edgeAt(l: Layer, deg: number): number {
 }
 
 /** Where tangents sit inside an anchor of radius 1, and how big each is. */
-function tangentSpots(body: Body, n: number, inner = starInner(body)): { x: number; y: number; s: number }[] {
+function tangentSpots(body: Body, n: number, rarity: Rarity = 'common'): { x: number; y: number; s: number }[] {
+  const inner = starInner(body, rarity)
+  if (body === 'crescent') {
+    // In the moon's dark part, just above the terminator, spread along it.
+    const depth = moonDepth(rarity)
+    const sets: Record<number, number[]> = { 1: [90], 2: [65, 115], 3: [45, 90, 135], 4: [35, 72, 108, 145] }
+    const angles = sets[n] ?? Array.from({ length: n }, (_, i) => 30 + (120 * i) / Math.max(1, n - 1))
+    return angles.map((a) => ({ x: 0.82 * Math.cos(rad(a)), y: depth * Math.sin(rad(a)) - 0.2, s: n > 3 ? 0.11 : 0.13 }))
+  }
   const spots = plainTangentSpots(body, n)
   if (!starry(body, inner)) return spots
   // A star's points are narrower than a polygon's corners, so its tangents draw in and shrink.
@@ -384,14 +424,20 @@ function sideAngles(n: number, outer: Layer): number[] {
 }
 
 /** How far a pointing rune's back sits behind its centre: a pointing polygon has a corner forward, and an edge or a corner behind. */
-const backOf = (body: Body, r: number, inner = starInner(body)) => (isGon(body) ? (SIDES[body] % 2 ? r * inner : r) : r)
+const backOf = (body: Body, r: number, rarity: Rarity = 'common') => (isGon(body) ? (SIDES[body] % 2 ? r * starInner(body, rarity) : r) : r)
+
+/** How far a layer's outline, rays included, reaches along a direction: where side links hang from. */
+const reachAt = (l: Layer, deg: number) => edgeAt(l, deg) * (l.body === 'circle' ? sunReach(l.rarity) : 1)
+
+/** How much bigger than its radius a layer stands, for what rings it: a sun's rays need room. */
+const standOf = (body: Body, rarity: Rarity) => (body === 'circle' ? sunReach(rarity) : 1)
 
 /** Lay a sigil out at scale 1, as primitives in sigil coordinates. */
 function layout(sigil: Sigil): Prim[] {
   const out: Prim[] = []
   const a = sigil.anchor
   const R = UNIT
-  const anchor: Layer = { body: a.body, cx: 0, cy: 0, r: R, rot: 0, inner: starInner(a.body, a.rarity) }
+  const anchor: Layer = { body: a.body, cx: 0, cy: 0, r: R, rot: 0, inner: starInner(a.body, a.rarity), rarity: a.rarity }
   const path = runepath(sigil)
   const steps: { rune: Rune; kind: 'circumscribe' | 'inscribe' }[] = path
     ? path.steps.map((st) => ({ rune: st.rune, kind: st.kind }))
@@ -403,10 +449,9 @@ function layout(sigil: Sigil): Prim[] {
   let outer = anchor
   const rings: { layer: Layer; rune: Rune }[] = []
   for (const st of steps.filter((x) => x.kind === 'circumscribe')) {
-    const ringInner = starInner(st.rune.body, st.rune.rarity)
-    const h = holds(st.rune.body, outer.body, ringInner)
-    const r = outer.r * h.k
-    const layer: Layer = { body: st.rune.body, cx: outer.cx, cy: outer.cy - h.dy * r, r, rot: h.flip ? halfTurn(st.rune.body, outer.rot) : 0, inner: ringInner }
+    const h = holds(st.rune.body, outer.body, st.rune.rarity)
+    const r = outer.r * h.k * standOf(outer.body, outer.rarity)
+    const layer: Layer = { body: st.rune.body, cx: outer.cx, cy: outer.cy - h.dy * r, r, rot: h.flip ? halfTurn(st.rune.body, outer.rot) : 0, inner: starInner(st.rune.body, st.rune.rarity), rarity: st.rune.rarity }
     rings.push({ layer, rune: st.rune })
     outer = layer
   }
@@ -414,38 +459,40 @@ function layout(sigil: Sigil): Prim[] {
   let inner = anchor
   const cores: { layer: Layer; rune: Rune }[] = []
   for (const st of steps.filter((x) => x.kind === 'inscribe')) {
-    const h = holds(inner.body, st.rune.body, inner.inner)
-    const crowded = inner === anchor && tangents.length > 0 && inner.body !== 'crescent'
-    const k = crowded ? (inner.body === 'circle' ? 1.9 : 3.4) : h.k
-    const layer: Layer = { body: st.rune.body, cx: inner.cx, cy: inner.cy + h.dy * inner.r, r: inner.r / k, rot: h.flip ? halfTurn(st.rune.body, inner.rot) : 0, inner: starInner(st.rune.body, st.rune.rarity) }
+    const h = holds(inner.body, st.rune.body, inner.rarity)
+    // Tangents crowd an anchor's heart, or a moon's dark part above its terminator, so what it holds shrinks to make room.
+    const crowded = inner === anchor && tangents.length > 0
+    const k = (crowded ? (inner.body === 'circle' ? 1.9 : inner.body === 'crescent' ? h.k * 1.5 : 3.4) : h.k) * standOf(st.rune.body, st.rune.rarity)
+    const layer: Layer = { body: st.rune.body, cx: inner.cx, cy: inner.cy + h.dy * inner.r, r: inner.r / k, rot: h.flip ? halfTurn(st.rune.body, inner.rot) : 0, inner: starInner(st.rune.body, st.rune.rarity), rarity: st.rune.rarity }
     cores.push({ layer, rune: st.rune })
     inner = layer
   }
 
   const ring = (l: Layer, rune: Rune, w: number) =>
-    out.push({ t: 'body', body: l.body, cx: l.cx, cy: l.cy, r: l.r, rot: l.rot, c: colorOf(rune), w, seal: rune === seal, inner: l.inner })
+    out.push({ t: 'body', body: l.body, cx: l.cx, cy: l.cy, r: l.r, rot: l.rot, c: colorOf(rune), w, seal: rune === seal, rarity: l.rarity })
   rings.forEach(({ layer, rune }) => ring(layer, rune, 1.7))
   sigil.joins
     .filter((j) => j.kind === 'entwine')
-    .forEach((j, i) => out.push({ t: 'body', body: j.rune.body, cx: 0, cy: 0, r: R * 1.18, rot: 60 + i * 37, c: colorOf(j.rune), w: 1.3, dash: true, inner: starInner(j.rune.body, j.rune.rarity) }))
-  out.push({ t: 'body', body: a.body, cx: 0, cy: 0, r: R, rot: 0, c: colorOf(a), w: 2, fill: 0.1, inner: anchor.inner })
+    .forEach((j, i) => out.push({ t: 'body', body: j.rune.body, cx: 0, cy: 0, r: R * 1.18, rot: 60 + i * 37, c: colorOf(j.rune), w: 1.3, dash: true, rarity: j.rune.rarity }))
+  out.push({ t: 'body', body: a.body, cx: 0, cy: 0, r: R, rot: 0, c: colorOf(a), w: 2, fill: 0.1, rarity: a.rarity })
   cores.forEach(({ layer, rune }) => ring(layer, rune, 1.5))
 
   // Tangents: inside the anchor, pointing at its heart, each on a stem to the edge it touches.
-  tangentSpots(a.body, tangents.length, anchor.inner).forEach((spot, i) => {
+  tangentSpots(a.body, tangents.length, a.rarity).forEach((spot, i) => {
     const rune = tangents[i].rune
     const [x, y, s] = [spot.x * R, spot.y * R, spot.s * R]
     const dir = (Math.atan2(-y, -x) * 180) / Math.PI
     const away = dir + 180
-    const back = backOf(rune.body, s, starInner(rune.body, rune.rarity))
+    const back = backOf(rune.body, s, rune.rarity)
     const [ux, uy] = [Math.cos(rad(away)), Math.sin(rad(away))]
-    const edge = a.body === 'crescent' ? Math.hypot(x, y) + s * 1.6 : edgeAt(anchor, away)
+    // In a moon, the stem runs out to the terminator: the half-ellipse x² + (y ÷ depth)² = 1.
+    const edge = a.body === 'crescent' && uy > 0 ? R / Math.hypot(ux, uy / moonDepth(a.rarity)) : edgeAt(anchor, away)
     out.push({ t: 'line', x1: x + ux * back, y1: y + uy * back, x2: ux * edge, y2: uy * edge, c: colorOf(rune), w: 1 })
-    out.push({ t: 'point', body: rune.body, cx: x, cy: y, r: s, dir, c: colorOf(rune), w: 1.3, inner: starInner(rune.body, rune.rarity) })
+    out.push({ t: 'point', body: rune.body, cx: x, cy: y, r: s, dir, c: colorOf(rune), w: 1.3, rarity: rune.rarity })
   })
 
   // The anchor's mark.
-  const dot = a.body === 'crescent' ? { x: 0, y: 0.7 * R } : { x: 0, y: 0 }
+  const dot = a.body === 'crescent' ? { x: 0, y: ((1 + moonDepth(a.rarity)) / 2) * R } : { x: 0, y: 0 }
   out.push({ t: 'dot', cx: dot.x, cy: dot.y, r: Math.max(2, R * 0.11), c: colorOf(a) })
 
   // Side links: hung outside the outermost layer, pointing out.
@@ -455,28 +502,31 @@ function layout(sigil: Sigil): Prim[] {
     const s = R * 0.48
     const stem = R * 0.32
     const [ux, uy] = [Math.cos(rad(deg)), Math.sin(rad(deg))]
-    const e = edgeAt(outer, deg)
+    const e = reachAt(outer, deg)
     const [ex, ey] = [outer.cx + ux * e, outer.cy + uy * e]
-    const d = stem + backOf(rune.body, s, starInner(rune.body, rune.rarity))
+    const d = stem + backOf(rune.body, s, rune.rarity)
     out.push({ t: 'line', x1: ex, y1: ey, x2: ex + ux * stem, y2: ey + uy * stem, c: colorOf(rune), w: 1.1 })
-    out.push({ t: 'point', body: rune.body, cx: ex + ux * d, cy: ey + uy * d, r: s, dir: deg, c: colorOf(rune), w: 1.5, inner: starInner(rune.body, rune.rarity) })
+    out.push({ t: 'point', body: rune.body, cx: ex + ux * d, cy: ey + uy * d, r: s, dir: deg, c: colorOf(rune), w: 1.5, rarity: rune.rarity })
   })
   return out
 }
 
-/** A circle that points: a drop whose tip faces dir. */
-function dropPath(r: number, dir: number, cx: number, cy: number): string {
+/** A circle that points: a drop whose tip faces dir. A rarer one keeps its sun's rays round its back. */
+function dropPath(r: number, dir: number, cx: number, cy: number, rarity: Rarity = 'common'): string {
   const rho = r * 0.78
   const tip = r * 1.3
   const al = Math.acos(rho / tip)
   const t = rad(dir)
   const p = (ang: number, d: number) => `${f(cx + Math.cos(ang) * d)} ${f(cy + Math.sin(ang) * d)}`
-  return `M ${p(t, tip)} L ${p(t + al, rho)} A ${f(rho)} ${f(rho)} 0 1 1 ${p(t - al, rho)} Z`
+  const nearTip = (deg: number) => Math.abs(((deg - dir + 540) % 360) - 180) < 60
+  return `M ${p(t, tip)} L ${p(t + al, rho)} A ${f(rho)} ${f(rho)} 0 1 1 ${p(t - al, rho)} Z` + raysPath(rho, cx, cy, dir + 90, rarity, nearTip)
 }
 
 function extent(p: Prim): [number, number, number, number] {
   if (p.t === 'line') return [Math.min(p.x1, p.x2), Math.min(p.y1, p.y2), Math.max(p.x1, p.x2), Math.max(p.y1, p.y2)]
-  const r = p.t === 'point' && p.body === 'circle' ? p.r * 1.3 : p.r
+  if (p.t === 'dot') return [p.cx - p.r, p.cy - p.r, p.cx + p.r, p.cy + p.r]
+  const sun = p.body === 'circle' ? sunReach(p.rarity) : 1
+  const r = p.t === 'point' && p.body === 'circle' ? p.r * Math.max(1.3, 0.78 * sun) : p.r * sun
   return [p.cx - r, p.cy - r, p.cx + r, p.cy + r]
 }
 
@@ -493,19 +543,20 @@ function paint(prims: Prim[], scale: number, ox: number, oy: number): string {
       const cy = Number(Y(p.cy))
       const r = p.r * scale
       if (p.t === 'point') {
-        const d = p.body === 'circle' ? dropPath(r, p.dir, cx, cy) : bodyPath(p.body, r, p.dir + 90, cx, cy, true, p.inner)
+        const d = p.body === 'circle' ? dropPath(r, p.dir, cx, cy, p.rarity) : bodyPath(p.body, r, p.dir + 90, cx, cy, true, p.rarity)
         return `<path d="${d}" fill="${p.c}" fill-opacity="0.12" stroke="${p.c}" stroke-width="${w(p.w)}" ${ln}/>`
       }
-      const main = `<path d="${bodyPath(p.body, r, p.rot, cx, cy, false, p.inner)}" fill="${p.fill ? p.c : 'none'}"${p.fill ? ` fill-opacity="${p.fill}"` : ''} stroke="${p.c}" stroke-width="${w(p.w)}"${p.dash ? ` stroke-dasharray="${f(4 * scale + 1)} ${f(2.5 * scale + 1)}"` : ''} ${ln}/>`
+      const main = (p.body === 'crescent' && !p.dash ? `<path d="${earthshine(r, cx, cy)}" fill="none" stroke="${p.c}" stroke-opacity="0.16" stroke-width="${w(p.w * 0.6)}"/>` : '') + `<path d="${bodyPath(p.body, r, p.rot, cx, cy, false, p.rarity)}" fill="${p.fill ? p.c : 'none'}"${p.fill ? ` fill-opacity="${p.fill}"` : ''} stroke="${p.c}" stroke-width="${w(p.w)}"${p.dash ? ` stroke-dasharray="${f(4 * scale + 1)} ${f(2.5 * scale + 1)}"` : ''} ${ln}/>`
       if (!p.seal) return main
       // The seal's second line, just inside the first. A polygon's edges sit cos(π/n) of its radius in, so it shrinks
       // further (a triangle twice as far); a crescent's two arcs move apart from their own centres.
       const gap = SEAL_GAP * scale
       // Shrinking a polygon or star by gap ÷ sin(half its corner's angle) keeps the lines gap apart along its edges.
       const n = SIDES[p.body]
-      const tipHalf = isGon(p.body) ? Math.atan2(p.inner * Math.sin(Math.PI / n), 1 - p.inner * Math.cos(Math.PI / n)) : Math.PI / 2
+      const inner = starInner(p.body, p.rarity)
+      const tipHalf = isGon(p.body) ? Math.atan2(inner * Math.sin(Math.PI / n), 1 - inner * Math.cos(Math.PI / n)) : Math.PI / 2
       const shrink = gap / Math.sin(tipHalf)
-      const second = p.body === 'crescent' ? crescentInset(r, gap, p.rot, cx, cy) : bodyPath(p.body, Math.max(r * 0.4, r - shrink), p.rot, cx, cy, false, p.inner)
+      const second = p.body === 'crescent' ? crescentSeal(r, gap, p.rot, cx, cy) : bodyPath(p.body, Math.max(r * 0.4, r - shrink), p.rot, cx, cy, false, p.rarity)
       return second ? main + `<path d="${second}" fill="none" stroke="${p.c}" stroke-width="${w(p.w * 0.75)}" ${ln}/>` : main
     })
     .join('')

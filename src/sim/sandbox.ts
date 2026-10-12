@@ -38,7 +38,7 @@ export function deckSpecs(state: GameState): RuneSpec[] {
   return [...state.hand, ...state.draw, ...state.discard]
     .filter((r) => !r.junk)
     .sort((a, b) => a.id - b.id)
-    .map((r) => ({ body: r.body, motes: r.motes.slice(), ...(r.rarity !== 'common' ? { rarity: r.rarity } : {}) }))
+    .map((r) => ({ body: r.body, motes: r.motes.slice(), ...(r.rarity !== 'common' ? { rarity: r.rarity } : {}), ...(r.ownPower !== undefined ? { power: r.ownPower } : {}) }))
 }
 
 export const findRune = (state: GameState, id: number): { rune: Rune; at: 'hand' | 'draw' | 'discard' } | undefined => {

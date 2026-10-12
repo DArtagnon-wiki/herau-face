@@ -955,7 +955,7 @@ function editorView(g: GameState): string {
   if (ui.editing === null) return `<p class="hint">Pick a rune above to change its body and motes, or make a new one.</p>`
   const found = ui.editing === 'new' ? undefined : findRune(g, ui.editing)
   if (ui.editing !== 'new' && !found) return ''
-  const spec: RuneSpec = found ? { body: found.rune.body, motes: found.rune.motes, rarity: found.rune.rarity } : ui.draft
+  const spec: RuneSpec = found ? { body: found.rune.body, motes: found.rune.motes, rarity: found.rune.rarity, power: found.rune.ownPower } : ui.draft
   const preview = found ? found.rune : buildDeck([spec], g.forge)[0]
   const bowls = SIDES[spec.body]
   const own = abilities(preview)
@@ -974,7 +974,15 @@ function editorView(g: GameState): string {
     <div class="seg" role="group" aria-label="Rarity">
       ${RARITIES.map((x) => `<button data-act="sb-rarity" data-rarity="${x}" class="${(spec.rarity ?? 'common') === x ? 'is-on' : ''}" aria-pressed="${(spec.rarity ?? 'common') === x}">${RARITY_NAMES[x]}</button>`).join('')}
     </div>
-    <p class="fine">Rarity shows in a polygon’s shape: common runes are plain, uncommon have shallow divots, rare are pointy stars. It changes nothing else yet.</p>
+    <p class="fine">Rarity shows in the shape: polygons grow pointier, suns throw rays, moons thin to a sliver. It changes nothing else yet.</p>
+    <div class="rune-power"><span class="label">Power</span>
+      <span class="stepper" role="group" aria-label="Rune power">
+        <button data-act="sb-rune-power" data-delta="-1" ${preview.power <= 0 ? 'disabled' : ''} aria-label="Less power">−</button>
+        <b class="num">${preview.power}</b>
+        <button data-act="sb-rune-power" data-delta="1" ${preview.power >= 25 ? 'disabled' : ''} aria-label="More power">+</button>
+      </span>
+      <span class="fine">${spec.power === undefined ? `the ${BODY_NAMES[spec.body].toLowerCase()}’s default` : 'its own'}</span>
+    </div>
     <div class="bowls">${bowls ? Array.from({ length: bowls }, (_, i) => moteSelect(i, spec.motes[i] ? moteKey(spec.motes[i]) : undefined)).join('') : '<p class="hint">This body has no bowls.</p>'}</div>
     <div class="row">
       ${ui.editing === 'new' ? `<button class="primary" data-act="sb-add">Add to hand</button>` : `<button data-act="sb-copy">Add a copy to hand</button><button data-act="sb-remove">Remove from deck</button>`}
@@ -1045,7 +1053,7 @@ function sandboxView(g: GameState): string {
     <div class="sb-section">
       <h3>Shapes</h3>
       <div class="shape-table" role="table">
-        <div class="shape-row head" role="row"><span></span><span class="label">Power</span><span class="label">Links</span><span class="label">Bowls</span></div>
+        <div class="shape-row head" role="row"><span></span><span class="label">Default power</span><span class="label">Links</span><span class="label">Bowls</span></div>
         ${BODY_LIST.map(
           (b) => `<div class="shape-row" role="row">
             <span class="shape-name">${runeSvg(buildDeck([{ body: b, motes: [] }], f)[0], 30)}${BODY_NAMES[b]}</span>
@@ -1060,7 +1068,7 @@ function sandboxView(g: GameState): string {
         <span class="mv"><span class="mote-dot" style="background:var(--opal)"></span>Guard mote +${stepper('values.guard', f.values.guard, 'guard', 'guard mote Ward')} Ward</span>
         <span class="mv"><span class="mote-dot" style="background:var(--opal)"></span>Boost mote +${stepper('values.boost', f.values.boost, 'boost', 'boost mote multiplier')} multiplier</span>
       </div>
-      <p class="fine">An N-gon holds N bowls: a circle is a 1-gon, a crescent a 2-gon. Changing a rune to a body with fewer sides drops the motes that no longer fit. <button class="link-btn" data-act="sb-reset-forge">Reset shapes and motes</button></p>
+      <p class="fine">An N-gon holds N bowls: a circle is a 1-gon, a crescent a 2-gon. Changing a rune to a body with fewer sides drops the motes that no longer fit. Power belongs to each rune: a body’s power is only the default for runes without their own, set in the rune editor below. <button class="link-btn" data-act="sb-reset-forge">Reset shapes and motes</button></p>
     </div>
     <div class="sb-section">
       <h3>Runes</h3>
@@ -1080,13 +1088,13 @@ function sandboxView(g: GameState): string {
 function editSpec(fn: (spec: RuneSpec) => RuneSpec) {
   const g = ui.game!
   if (ui.editing === 'new') {
-    ui.draft = fn({ body: ui.draft.body, motes: ui.draft.motes.slice(), rarity: ui.draft.rarity })
+    ui.draft = fn({ body: ui.draft.body, motes: ui.draft.motes.slice(), rarity: ui.draft.rarity, power: ui.draft.power })
     return
   }
   if (typeof ui.editing !== 'number') return
   const found = findRune(g, ui.editing)
   if (!found) return
-  ui.game = editRune(g, ui.editing, fn({ body: found.rune.body, motes: found.rune.motes.slice(), rarity: found.rune.rarity }))
+  ui.game = editRune(g, ui.editing, fn({ body: found.rune.body, motes: found.rune.motes.slice(), rarity: found.rune.rarity, power: found.rune.ownPower }))
 }
 
 function setBowl(i: number, key: string) {
@@ -1436,13 +1444,16 @@ root.addEventListener('click', (e) => {
     case 'sb-rarity':
       editSpec((spec) => ({ ...spec, rarity: el.dataset.rarity as Rarity }))
       break
+    case 'sb-rune-power':
+      if (g) editSpec((spec) => ({ ...spec, power: Math.min(25, Math.max(0, (spec.power ?? g.forge.bodies[spec.body].power) + Number(el.dataset.delta))) }))
+      break
     case 'sb-add':
-      if (g) ui.game = addRune(g, { body: ui.draft.body, motes: ui.draft.motes.slice(0, SIDES[ui.draft.body]), rarity: ui.draft.rarity })
+      if (g) ui.game = addRune(g, { body: ui.draft.body, motes: ui.draft.motes.slice(0, SIDES[ui.draft.body]), rarity: ui.draft.rarity, power: ui.draft.power })
       break
     case 'sb-copy':
       if (g && typeof ui.editing === 'number') {
         const found = findRune(g, ui.editing)
-        if (found) ui.game = addRune(g, { body: found.rune.body, motes: found.rune.motes.slice(), rarity: found.rune.rarity })
+        if (found) ui.game = addRune(g, { body: found.rune.body, motes: found.rune.motes.slice(), rarity: found.rune.rarity, power: found.rune.ownPower })
       }
       break
     case 'sb-remove':

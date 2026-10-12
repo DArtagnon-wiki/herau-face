@@ -8,7 +8,7 @@ export type Grade = 0 | 1 | 2 | 3
  * A rune's body: an N-gon with N bowls, a circle counting as a 1-gon and a
  * crescent as a 2-gon. The body sets its bowls; the forge sets power and links.
  */
-export type Body = 'circle' | 'crescent' | 'triangle' | 'square' | 'pentagon' | 'hexagon'
+export type Body = 'circle' | 'crescent' | 'triangle' | 'square' | 'pentagon' | 'hexagon' | 'heptagon'
 
 /** How rare a rune is. A polygon shows it as a star: common runes are plain N-gons, uncommon have shallow divots, rare are pointy. */
 export type Rarity = 'common' | 'uncommon' | 'rare'
@@ -49,7 +49,10 @@ export interface Mote {
 export interface Rune {
   id: number
   body: Body
+  /** Its own power: set when the rune was made, otherwise its body's default in the forge. */
   power: number
+  /** The power it was made with, when that isn't its body's default. */
+  ownPower?: number
   bowls: number
   motes: Mote[]
   rarity: Rarity

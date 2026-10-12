@@ -384,7 +384,7 @@ describe('the sandbox', () => {
   })
 
   it('holds as many motes as a body has sides, and drops the rest', () => {
-    expect(BODY_LIST.map((b) => makeRune(1, { body: b, motes: Array.from({ length: 8 }, () => LINK_MOTE) }).motes.length)).toEqual([1, 2, 3, 4, 5, 6])
+    expect(BODY_LIST.map((b) => makeRune(1, { body: b, motes: Array.from({ length: 8 }, () => LINK_MOTE) }).motes.length)).toEqual([1, 2, 3, 4, 5, 6, 7])
     const s = newGame(undefined, 22)
     const tri = [...s.hand, ...s.draw].find((r) => r.body === 'triangle')!
     const asCircle = editRune(s, tri.id, { body: 'circle', motes: tri.motes })

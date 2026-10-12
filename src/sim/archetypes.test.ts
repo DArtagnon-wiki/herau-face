@@ -248,3 +248,23 @@ describe('press, homing magnesia and purity targets', () => {
     expect(miss(clay, t)).toBeGreaterThan(miss(fine, t))
   })
 })
+
+describe('power belongs to the rune', () => {
+  it('lets a rune carry its own power through growth, reforging and restarts', () => {
+    const sun = makeRune(1, { body: 'circle', motes: [elementMote('fire')], power: 20 })
+    expect(sun.power).toBe(20)
+    const plain = makeRune(2, { body: 'heptagon', motes: [], power: 0 })
+    expect(plain.power).toBe(0)
+    expect(plain.bowls).toBe(7)
+    const forge = { ...DEFAULT_FORGE, bodies: { ...DEFAULT_FORGE.bodies, circle: { power: 9, links: 1 } } }
+    expect(makeRune(3, { body: 'circle', motes: [] }, forge).power).toBe(9)
+    expect(makeRune(4, { body: 'circle', motes: [], power: 20 }, forge).power).toBe(20)
+  })
+
+  it('takes nothing for a powerless anchor rather than dividing by it', () => {
+    const anchor = makeRune(5, { body: 'heptagon', motes: [elementMote('water'), LINK_MOTE], power: 0 })
+    const res = resolveEquation(sigil(anchor, ['circumscribe', r('earth')]), pools(['water', 0, 18], ['earth', 1, 18]), undefined, DEFAULT_EQUATION)
+    expect(Number.isFinite(res.converted)).toBe(true)
+    expect(res.converted).toBeLessThan(5)
+  })
+})
