@@ -182,6 +182,84 @@ Runes improve by changing what their bowls hold; the deck grows by earning new r
 - **Formulae (proposed).** Consumables that level up a join type, like Balatro's planet cards.
 - **Catalysts (proposed).** The game's jokers and relics: passive modifiers in limited slots. A catalyst speeds a reaction without being used up, as these change every cast and stay. Examples: vitriol adds 2 power to runepaths that end in fire; sal ammoniac counts tangents twice in reach down; the alkahest, a rare one, skips the first flip of every runepath. Alchemical vessels, such as the athanor and alembic, could name the slots that hold them.
 
+## Archetypes
+
+Six archetypes, each built on a resource of its own, so a mote, rune or catalyst can feed one or pay it off. Plain stat motes (link, reach, guard, boost) stay as commons, the glue every deck uses. An archetype's identity comes from uncommon enablers, rare payoffs and the catalysts that reward it. Names are working names.
+
+| Archetype | Its resource | Enablers | Payoffs | Tested by |
+| --- | --- | --- | --- | --- |
+| Consistent ward | Ward that doesn't depend on the draw | Glaze, crucible, lute | Press | One huge flare; flares that pierce Ward |
+| Combo | Casts in a term | Cohobation, distillation | Pelican; loops that never end | Commissions that flare for every cast past a count |
+| One great rune | One rune's growth | Multiplication, lodestone | The rune finishes alone; projection keeps it growing across the run | Moves that drain the strongest rune, binds |
+| Purity maxing | Purity grade | Rectification, digestion | Exaltation, aqua vitae, purity targets | Purity-gated enemies (see Purity as a goal) |
+| Element mastery | One or two elements | Resonance, mercurial | Magnesia, attunement | Targets in other elements, tight trace bands |
+| Deck thinning | Deck size | Calcination, dissolving in the workshop | Salt of the caput mortuum, reshuffle triggers | Commissions that seed slag, like the Mire |
+
+**Consistent ward.** Today Ward is spiky: it needs entwines or guard runes in hand, and they compete with progress. This archetype's Ward rides on sigils the player casts anyway, or arrives without casting.
+
+- **Glaze:** its sigil gains 2 Ward for every rune in it, so a big progress sigil also defends.
+- **Crucible:** when drawn, +3 Ward this term.
+- **Lute:** Ward from its sigil lasts until a flare spends it. Luting sealed an alchemist's vessel with clay.
+- **Press (payoff):** its rune gains +0.5 power for every Ward held when it is cast, so a wall becomes progress, like Slay the Spire's Body Slam.
+
+**Combo.** Runes that come back make loops; a loop that pays for itself never ends.
+
+- **Cohobation** (pouring a distillate back over its residue): when it anchors, it returns to hand after the cast.
+- **Distillation:** when its sigil resolves, draw a rune.
+- **Finite loops:** a cohobating anchor casts again with each join left in hand, so a hand of six makes five casts instead of two.
+- **Infinite loops:** if every join drawn also draws a rune, the hand never shrinks. That needs a thin deck of distilling runes, so combo leans on thinning, as in Slay the Spire.
+- **Pelican (catalyst):** +2 Ward each time a rune returns to hand. The pelican is the vessel of circulation.
+- **The finish rule makes an infinite loop a win:** the commission ends the moment it is in band, and a loop can farm product first. Some commissions should answer it by flaring for every cast past a count, like Slay the Spire's Time Eater.
+
+**One great rune.** One rune grows each time it is cast until, a few passes through the draw later, it finishes a commission alone, like Searing Blow or Rampage.
+
+- **Multiplication** (the stage that increases the stone's power): each time its rune is cast, its other motes count once more for the rest of the commission. With a reach mote, Reach goes ×1.5, ×2.25, ×3.4; with a link mote, the sigil it anchors grows. What the player feeds it decides what it becomes.
+- **Lodestone (rare):** its rune returns to the top of the draw pile, so it is in every hand. Probably too strong beside multiplication; thinning is the fairer way to see it often.
+- **Projection (rare):** when the rune finishes a commission, it keeps +1 power for the run.
+
+**Purity maxing.** Purity as a goal, further down, gives purifying its uses; these motes make it efficient.
+
+- **Rectification:** an inscribe with it purifies two grades for one step of resistance.
+- **Digestion:** a sigil that only purifies also takes a quarter of the pool, so purifying keeps up with bulk work.
+- **Exaltation (rare):** purity can reach perfect.
+- **Aqua vitae (catalyst):** while 80% of the amalgam is medium or purer, every rune has +3 power.
+
+**Element mastery.** The deck commits to one or two elements and homes in on them fast.
+
+- **Resonance:** +2 power for every other rune of its element in the sigil.
+- **Mercurial:** takes the anchor's element when joined, so any rune fits a mono-element sigil.
+- **Magnesia (as the seal):** the sigil also draws from every other element's pools, a quarter as much, into the seal's element, never past the middle of that element's band. It homes the amalgam in on the target.
+- **Attunement (catalyst, one element):** a step into that element costs one fewer flip, at least one.
+
+**Deck thinning.** Ineffective runes and slag leave, so the best runes come round more often.
+
+- **Calcination** (burning to ash, the first stage of the work): when its sigil resolves, burn a rune from hand for the rest of the commission, slag first. Burned slag is gone for good.
+- **Dissolving** in the workshop retires a rune for the run and returns its motes.
+- **Salt of the caput mortuum (catalyst):** every rune has +1 power for each rune burned this commission. The caput mortuum is the dead residue left after distilling.
+- **Reshuffle triggers (proposed):** effects that fire each time the draw pile is reshuffled, which a thin deck does often.
+
+**Archetypes lean on each other.** Thinning shortens the loop for combo and for the great rune. Pure pools lend Ward, so purity feeds consistent ward. A mono-element sigil purifies by inscribing its own element, so mastery and purity share runes. Pelican turns combo's loops into Ward.
+
+**Prototyped.** Twelve of these motes (all but lodestone, projection, exaltation and mercurial) and three catalysts (pelican, aqua vitae, the caput mortuum) are in the prototype. Each archetype has a deck at the mid-run deck's budget of about ten upgrades with a 7-rune hand, and a late version at about twenty with an 8-rune hand. Simulated with the equation, 100 commissions against mud and 60 against the Mire:
+
+| Deck | Mud: quintessence spent (median), terms | The Mire, late version: won | What sets it apart |
+| --- | --- | --- | --- |
+| Baseline: mid-run, late-run | 5, 3 terms | 72% | 1.9 sigils a term; Ward absorbs 77% of mud's flares |
+| Consistent ward | 0, 5 terms | 92%, wins costing a median of 0 | Ward absorbs 98% of mud's flares and 91% of the Mire's |
+| Combo | 0, 3 terms | 92% | 3.9 sigils a term; anchors return 5 times a commission, 8.6 against the Mire |
+| One great rune | 4, 3 terms | 60% | Against the Mire the great rune grows 3 times and moves 87% of the kilos |
+| Purity maxing | 6, 3 terms | 73% | Fine clay in a median of 10 terms; the mid-run deck takes 21 |
+| Element mastery | 0, 2 terms | 93% | 29% of mud commissions finish in one term, 42% of the Mire's; magnesia pulls in 2.4 kg of traces, 14 kg from the Mire |
+| Deck thinning | 5, 4 terms | 88% | Burns 1.7 runes a commission against mud, 3.2 against the Mire |
+
+- **Each archetype wins its own way.** Each deck's signature measure moves only for that deck: Ward absorbed, sigils a term, the great rune's share of the work, terms on fine clay, one-term finishes, runes burned.
+- **Ward needed a payoff.** Without press, the late ward deck won 42% against the Mire. It ground through 17 terms while slag piled up. Turning held Ward into power lifted it to 92%.
+- **Magnesia had to home in.** Drawing a flat quarter dragged traces under their band, and a deck without air or fire runes could not raise them again. The late mastery deck won 38%, and some fights never ended. Stopping at the middle of each band made it the fastest deck.
+- **Purity needs a goal.** Against plain mud and the Mire the purity deck plays like the baseline, because nothing rewards purity there. Fine clay, mud that must finish with at least half its earth pure, is the prototype's first purity target: the purity deck takes 10 terms, the mid-run deck 21.
+- **A great rune has to be the deck's engine.** The first late version carried two reach motes and emptied the Mire's water on its first cast, before growing at all. Rebuilt with mid-run triangles around it, and calcination on the great rune itself, it does 87% of the work. Multiplication counts the calcination too, so it burns more of the deck as it grows. It wins only 60%: one rune is a high-variance plan.
+- **Short commissions hide growth and thinning.** Mud ends in about 3 terms, before multiplication or calcination pays; they show against the Mire.
+- **Coherent decks beat generic upgrades.** Five of the six late archetype decks beat the late-run deck on a similar budget. The budgets are rough, so this is a tuning target, not a verdict. It matches Slay the Spire, where a coherent deck beats a pile of good cards.
+
 ## Power arc
 
 By the end of a run the player should crush the commissions that once pushed them: mud to clay in one term, two at most, or played on at leisure to make far more clay than the mud held. The prototype's late-run deck does both.

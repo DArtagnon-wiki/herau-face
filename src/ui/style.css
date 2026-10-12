@@ -437,3 +437,20 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--gilt); }
   @keyframes slide { from { opacity: 0.6; translate: 0 24px; } to { opacity: 1; translate: 0 0; } }
 }
 .presets .seg.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* Archetypes: deck picker, mote legend, catalysts, burn picker ------------- */
+.presets .seg.six { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.presets .seg.six button { font-size: 13px; padding-inline: 6px; }
+.presets .seg.tier { margin-top: 2px; }
+.fine-toggle { display: flex; align-items: center; gap: 8px; font-size: 15.5px; color: var(--ink-soft); }
+.mote-legend { list-style: none; margin: 4px 0 14px; padding: 0; display: grid; gap: 6px; }
+.mote-legend li { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 10px; font-size: 15.5px; color: var(--ink-soft); }
+.mote-legend b { color: var(--gilt-bright); font-weight: 600; }
+.catalyst-mark { display: inline-block; width: 10px; height: 10px; transform: rotate(45deg); border: 1.5px solid var(--gilt-bright); background: rgba(246, 227, 168, 0.18); }
+.catalyst-mark.big { width: 14px; height: 14px; margin: 8px; }
+.catalysts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.catalyst { display: inline-flex; align-items: center; gap: 7px; font-size: 14.5px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--panel-edge); color: var(--gilt-bright); background: rgba(217, 184, 114, 0.08); }
+.piles:has(> button:nth-of-type(3)) { grid-template-columns: 1fr 1fr 1fr; }
+.burn-pick { display: grid; gap: 4px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--panel-edge); }
+.burn-pick select { width: 100%; min-width: 0; }
+.burn-pick .fine { font-size: 13.5px; color: var(--ink-faint); }

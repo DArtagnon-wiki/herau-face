@@ -35,6 +35,8 @@ export interface Outputs {
   reachMult: number
   /** Ward from guard motes, included in ward. */
   guard: number
+  /** Ward from glaze motes (per rune in the sigil), included in ward. */
+  glaze: number
   /** True when an inscribed rune shares the anchor's affinity: the sigil purifies. */
   condense: boolean
   /** Number of off-affinity inscribes; each halves Reach. */
@@ -63,8 +65,9 @@ export function outputs(sigil: Sigil): Outputs {
   const all = runesOf(sigil)
   const reachMult = all.reduce((m, r) => m * r.reachMult, 1)
   const guard = all.reduce((g, r) => g + r.guard, 0)
+  const glaze = all.reduce((g, r) => g + r.glaze, 0) * all.length
   reach *= 0.5 ** fine * reachMult
-  ward += guard
+  ward += guard + glaze
 
   let route: Elemental[] | null = null
   if (anchor.affinity !== 'none') {
@@ -74,7 +77,7 @@ export function outputs(sigil: Sigil): Outputs {
       if (j.rune.affinity !== route[route.length - 1]) route.push(j.rune.affinity)
     }
   }
-  return { reach, force, ward, reachMult, guard, condense, fine, route }
+  return { reach, force, ward, reachMult, guard, glaze, condense, fine, route }
 }
 
 export interface Resolution {
@@ -91,6 +94,8 @@ export interface Resolution {
   produced: number
   yieldFactor: number
   pools: Pool[]
+  /** Kilos a magnesia seal drew from other elements' pools into its element. */
+  gathered?: { source: Pool; kg: number }[]
 }
 
 const none = (out: Outputs, pools: Pool[], note: string, source?: Pool): Resolution => ({

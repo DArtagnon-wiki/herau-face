@@ -20,7 +20,14 @@ export interface Range {
   max: number
 }
 
-export type Target = Record<Elemental, Range>
+/** A purity target: at least `share` of the element's kilos must be at `grade` or purer. */
+export interface PurityTarget {
+  elemental: Elemental
+  grade: Grade
+  share: number
+}
+
+export type Target = Record<Elemental, Range> & { purity?: PurityTarget }
 
 const ANY: Range = { min: 0, max: 1 }
 
@@ -88,7 +95,22 @@ export const cloneTarget = (t: Target): Target => ({
   water: { ...t.water },
   air: { ...t.air },
   fire: { ...t.fire },
+  ...(t.purity ? { purity: { ...t.purity } } : {}),
 })
+
+/** Fine clay (a purity target, proposed in DESIGN.md): clay whose earth is at least half pure. */
+export const FINE_CLAY_PURITY: PurityTarget = { elemental: 'earth', grade: 2, share: 0.5 }
+
+/** The share of an element's kilos at this grade or purer. */
+export function gradeShare(pools: Pool[], e: Elemental, grade: Grade): number {
+  const mine = pools.filter((p) => p.elemental === e)
+  const kg = mine.reduce((s, p) => s + p.kg, 0)
+  return kg > 0 ? mine.filter((p) => p.grade >= grade).reduce((s, p) => s + p.kg, 0) / kg : 0
+}
+
+/** Whether the amalgam meets the target's purity, when it has one. */
+export const purityMet = (pools: Pool[], target: Target): boolean =>
+  !target.purity || gradeShare(pools, target.purity.elemental, target.purity.grade) >= target.purity.share
 
 export const constrained = (r: Range) => r.min > 0 || r.max < 1
 export const within = (s: number, r: Range) => (r.min <= 0 || s > r.min) && (r.max >= 1 || s < r.max)
@@ -98,7 +120,7 @@ export const shares = (pools: Pool[]): Record<Elemental, number> =>
   Object.fromEntries(ELEMENTALS.map((e) => [e, share(pools, e)])) as Record<Elemental, number>
 
 export function inBand(pools: Pool[], target: Target = CLAY_TARGET): boolean {
-  return ELEMENTALS.every((e) => within(share(pools, e), target[e]))
+  return ELEMENTALS.every((e) => within(share(pools, e), target[e])) && purityMet(pools, target)
 }
 
 /**
@@ -116,6 +138,8 @@ export function miss(pools: Pool[], target: Target = CLAY_TARGET): number {
     const width = Math.max(0.005, hi - lo)
     total += Math.max(0, lo - s, s - hi) / width
   }
+  // A purity target's shortfall counts like being a fifth of the way out of a band per 4% short.
+  if (target.purity) total += Math.max(0, target.purity.share - gradeShare(pools, target.purity.elemental, target.purity.grade)) / 0.2
   return total
 }
 

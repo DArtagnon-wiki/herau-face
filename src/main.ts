@@ -1,13 +1,14 @@
 import './ui/style.css'
 import { GRADE_NAMES, poolKey, totalKg } from './sim/alchemy'
-import { COMMISSIONS, actChances, chancesFor, cloneTarget, combatOf, effectsFor, elementOdds, constrained, inBand, shares, substanceName, within, type CommissionKey, type Range } from './sim/commission'
-import { BODY_LIST, BODY_NAMES, DEFAULT_FORGE, GEMS, MOTE_OPTIONS, buildDeck, cloneForge, moteEffect, moteFromKey, moteKey, moteName, type Forge, type RuneSpec } from './sim/deck'
+import { COMMISSIONS, FINE_CLAY_PURITY, actChances, chancesFor, cloneTarget, combatOf, effectsFor, elementOdds, constrained, gradeShare, inBand, shares, substanceName, within, type CommissionKey, type Range } from './sim/commission'
+import { ARCHETYPE_MOTES, BODY_LIST, BODY_NAMES, DEFAULT_FORGE, GEMS, MOTE_OPTIONS, buildDeck, cloneForge, makeRune, mote, moteEffect, moteFromKey, moteKey, moteName, type Forge, type RuneSpec } from './sim/deck'
 import { addRune, deckSpecs, editRune, findRune, removeRune, setComposition, setForge, setTarget } from './sim/sandbox'
-import { DEFAULT_SETTINGS, resistanceMult, cast, castsLeft, discardRunes, endTerm, invalidReason, newGame, payment, previewCast, previewEnd, standardSetup, termsUsed, type CastOutcome, type CastPreview, type EndOutcome, type GameState, type Settings, type Setup, type TermOutcome } from './sim/game'
+import { DEFAULT_SETTINGS, autoBurn, burnsOf, resistanceMult, cast, castsLeft, discardRunes, endTerm, invalidReason, newGame, payment, powerBonus, previewCast, previewEnd, standardSetup, termsUsed, type CastOutcome, type CastPreview, type EndOutcome, type GameState, type Settings, type Setup, type TermOutcome } from './sim/game'
 import { REACH_PER_POWER, WARD_PER_POWER, candidatePools, canJoin, openLinks, resolve, type Resolution } from './sim/sigil'
-import type { Body, Elemental, Grade, JoinKind, Pool, Rune, Sigil } from './sim/types'
+import type { Body, Catalyst, Elemental, Grade, JoinKind, Pool, Rune, Sigil } from './sim/types'
 import { AFFINITY_VAR, joinSketch, moteColor, runeSvg, sigilSvg, starSvg, vesselSvg, type StarStep } from './ui/draw'
-import { PRESETS, presetByKey } from './sim/presets'
+import { ARCHETYPE_DECKS, PRESETS, presetByKey } from './sim/presets'
+import { CATALYSTS, effectiveSigil } from './sim/catalysts'
 import { DEFAULT_EQUATION, runepath, sourcePools, take, terms, type Equation } from './sim/equation'
 
 // ---------------------------------------------------------------------------
@@ -39,7 +40,9 @@ interface UI {
   /** The radial join menu: which hand rune it is open on, and where on screen. */
   radial: { id: number; x: number; y: number } | null
   /** Which pile sheet is open. */
-  pile: 'draw' | 'discard' | null
+  pile: 'draw' | 'discard' | 'burned' | null
+  /** Which rune calcination burns: an id, null for none, or undefined to let the rule choose. */
+  burn?: number | null
 }
 
 const ui: UI = {
@@ -111,13 +114,19 @@ const captureSetup = (g: GameState): Setup => ({
   start: g.start.map((p) => ({ ...p })),
   target: cloneTarget(g.target),
   commission: g.commission,
+  catalysts: [...g.catalysts],
 })
 
 /** A setup with the deck and forge of one setup and the commission of another. */
 const withCommission = (setup: Setup, key: CommissionKey = 'mud'): Setup => {
   const c = COMMISSIONS[key]
-  return { ...setup, commission: key, start: c.start.map((p) => ({ ...p })), target: cloneTarget(c.target) }
+  const target = cloneTarget(c.target)
+  if (key === 'mud' && setup.target.purity) target.purity = { ...setup.target.purity }
+  return { ...setup, commission: key, start: c.start.map((p) => ({ ...p })), target }
 }
+
+/** What the commission makes: fine clay when mud carries the purity target. */
+const productName = (key: CommissionKey, target: { purity?: unknown }) => (key === 'mud' && target.purity ? 'Fine clay' : COMMISSIONS[key].product)
 
 /** The commission being worked, or about to be. */
 const commissionOf = () => COMMISSIONS[ui.game?.commission ?? ui.setup.commission ?? 'mud']
@@ -126,7 +135,7 @@ function startGame(seed = Date.now() % 1_000_000) {
   if (ui.game) ui.setup = captureSetup(ui.game)
   ui.seed = seed
   const st = ui.setup
-  ui.game = newGame({ ...ui.settings }, seed, { forge: cloneForge(st.forge), deck: st.deck, start: st.start.map((p) => ({ ...p })), target: cloneTarget(st.target), commission: st.commission ?? 'mud' })
+  ui.game = newGame({ ...ui.settings }, seed, { forge: cloneForge(st.forge), deck: st.deck, start: st.start.map((p) => ({ ...p })), target: cloneTarget(st.target), commission: st.commission ?? 'mud', catalysts: [...(st.catalysts ?? [])] })
   ui.editing = null
   resetComposer()
 }
@@ -140,6 +149,7 @@ function resetComposer() {
   ui.marked = new Set()
   ui.flash = ''
   ui.radial = null
+  ui.burn = undefined
 }
 
 function runeById(id: number): Rune | undefined {
@@ -176,14 +186,31 @@ function shareLine(g: GameState, pools: Pool[]): string {
   const parts = ELEMENT_ORDER.filter((e) => constrained(g.target[e])).map(
     (e) => `<span class="${within(sh[e], g.target[e]) ? 'good' : 'warn'}">${e} <b class="num">${pctFine(sh[e])}</b></span>`,
   )
-  return parts.join(', ') + (inBand(pools, g.target) ? ' (clay)' : '')
+  const pur = g.target.purity
+  if (pur) {
+    const now = gradeShare(pools, pur.elemental, pur.grade)
+    parts.push(`<span class="${now >= pur.share ? 'good' : 'warn'}">${GRADE_NAMES[pur.grade]} ${pur.elemental} <b class="num">${pctFine(now)}</b></span>`)
+  }
+  return parts.join(', ') + (inBand(pools, g.target) ? ` (${COMMISSIONS[g.commission].product.toLowerCase()})` : '')
 }
 
 /** The abilities a rune's motes add beyond its element and links. */
 function abilities(r: Rune): string[] {
   const out: string[] = []
-  if (r.reachMult > 1) out.push(`Reach ×${r.reachMult}`)
+  if (r.reachMult > 1) out.push(`Reach ×${+r.reachMult.toFixed(2)}`)
   if (r.guard) out.push(`+${r.guard} Ward`)
+  if (r.glaze) out.push(`Glaze ${r.glaze}`)
+  if (r.crucible) out.push(`Crucible ${r.crucible}`)
+  if (r.lute) out.push('Lute')
+  if (r.press) out.push(`Press ×${r.press}`)
+  if (r.cohobation) out.push('Returns')
+  if (r.distill) out.push(`Draws ${r.distill}`)
+  if (r.multiplication) out.push(r.stacks ? `Grown ×${r.stacks + 1}` : 'Grows')
+  if (r.rectify) out.push('Rectifies')
+  if (r.digestion) out.push('Digests')
+  if (r.resonance) out.push('Resonates')
+  if (r.magnesia) out.push('Magnesia')
+  if (r.calcination) out.push(`Burns ${r.calcination}`)
   return out
 }
 
@@ -232,17 +259,42 @@ function commissionPicker(): string {
     <div class="seg two" role="group" aria-label="Commission">${(Object.keys(COMMISSIONS) as CommissionKey[])
       .map((k) => `<button data-act="commission" data-key="${k}" class="${k === cur ? 'is-on' : ''}" aria-pressed="${k === cur}">${COMMISSIONS[k].boss ? 'Boss: ' : ''}${COMMISSIONS[k].source.replace(/^The /, 'the ')} → ${COMMISSIONS[k].product}</button>`)
       .join('')}</div>
+    ${cur === 'mud' ? `<label class="check fine-toggle"><input type="checkbox" data-act="fine" ${fineOn() ? 'checked' : ''}> Fine clay: at least half the earth pure, a purity target</label>` : ''}
   </div>`
+}
+
+/** Whether the commission being worked, or about to be, has the fine-clay purity target. */
+const fineOn = () => !!(ui.game ? ui.game.target.purity : ui.setup.target.purity)
+
+/** The catalysts a setup or game holds, as chips. */
+const catalystChips = (cs: Catalyst[]) =>
+  cs.map((c) => `<span class="catalyst" title="${esc(CATALYSTS[c].effect)}"><span class="catalyst-mark" aria-hidden="true"></span>${CATALYSTS[c].name}</span>`).join('')
+
+/** The archetype motes in a deck, each drawn in a one-bowl circle beside what it does. */
+function moteLegend(setup: Setup): string {
+  const kinds = ARCHETYPE_MOTES.filter((a) => setup.deck.some((r) => r.motes.some((m) => m.kind === a.kind)))
+  if (!kinds.length) return ''
+  return `<ul class="mote-legend">${kinds
+    .map((a) => `<li>${runeSvg(makeRune(0, { body: 'circle', motes: [mote(a.kind)] }, setup.forge), 40)}<span><b>${a.name}</b> ${esc(moteEffect(mote(a.kind), setup.forge.values))}</span></li>`)
+    .join('')}${(setup.catalysts ?? []).map((c) => `<li><span class="catalyst-mark big" aria-hidden="true"></span><span><b>${CATALYSTS[c].name}</b> (catalyst) ${esc(CATALYSTS[c].effect)}</span></li>`).join('')}</ul>`
 }
 
 /** Decks from points along a run: the opening deck, one mid-run and one late. */
 function presetView(): string {
   const cur = presetByKey(ui.preset)
+  const base = ui.preset.replace(/-late$/, '')
+  const late = ui.preset.endsWith('-late')
+  const isArch = ARCHETYPE_DECKS.some((d) => d.key === ui.preset)
   return `<div class="presets">
     <span class="label">Deck from a point in the run</span>
     <div class="seg" role="group" aria-label="Deck from a point in the run">${PRESETS.map(
       (p) => `<button data-act="preset" data-key="${p.key}" class="${p.key === ui.preset ? 'is-on' : ''}" aria-pressed="${p.key === ui.preset}">${p.name.replace(' deck', '')}</button>`,
     ).join('')}</div>
+    <span class="label">Or an archetype deck</span>
+    <div class="seg six" role="group" aria-label="Archetype deck">${ARCHETYPE_DECKS.filter((d) => !d.key.endsWith('-late'))
+      .map((d) => `<button data-act="preset" data-key="${d.key}${late ? '-late' : ''}" class="${d.key === base && isArch ? 'is-on' : ''}" aria-pressed="${d.key === base && isArch}">${d.name}</button>`)
+      .join('')}</div>
+    ${isArch ? `<div class="seg two tier" role="group" aria-label="Archetype deck strength"><button data-act="preset" data-key="${base}" class="${late ? '' : 'is-on'}" aria-pressed="${!late}">Mid-run, hand 7</button><button data-act="preset" data-key="${base}-late" class="${late ? 'is-on' : ''}" aria-pressed="${late}">Late, hand 8</button></div>` : ''}
     ${cur ? `<p class="fine">${cur.note}${cur.key === 'late' && !eqOn() ? ' Try an earth anchor ringed by air, then fire, then earth: the loop multiplies earth ×40.' : ''}</p>` : ''}
   </div>`
 }
@@ -252,7 +304,7 @@ function startView(): string {
   <main class="start">
     <header class="start-head">
       <p class="eyebrow">${commissionOf().boss ? 'A boss commission' : 'A commission'} · prototype</p>
-      <h1>${commissionOf().source.replace(/^The /, '')} to ${commissionOf().product}</h1>
+      <h1>${commissionOf().source.replace(/^The /, '')} to ${productName(commissionOf().key, ui.setup.target)}</h1>
       <p class="lede">${commissionOf().blurb}</p>
       ${commissionPicker()}
     </header>
@@ -261,7 +313,8 @@ function startView(): string {
       <h2>Your deck</h2>
       ${presetView()}
       <ul class="deck-groups">${deckGroups(ui.setup)}</ul>
-      <p class="fine">Gems set the element: ${Object.entries(GEMS).map(([e, g]) => `${g.toLowerCase()} is ${e}`).join(', ')}. Each shows as a drop of its colour. Ability motes show as marks: a ring is a link mote, adding a link; an arrowhead is a reach mote, multiplying the sigil’s reach up; a lozenge is a guard mote, adding Ward; a cross is a boost mote, adding to its rune’s multiplier. The deck is the same each time; the shuffle is not, though your opening hand always has a water and an earth. Once you begin, the Sandbox panel can change any of it.</p>
+      ${moteLegend(ui.setup)}
+      <p class="fine">Gems set the element: ${Object.entries(GEMS).map(([e, g]) => `${g.toLowerCase()} is ${e}`).join(', ')}. Each shows as a drop of its colour. Ability motes show as marks: a ring is a link mote, adding a link; an arrowhead is a reach mote, multiplying the sigil’s reach up; a lozenge is a guard mote, adding Ward; a cross is a boost mote, adding to its rune’s multiplier. An archetype deck’s own motes and catalysts are listed above. The deck is the same each time; the shuffle is not, though your opening hand always has a water and an earth. Once you begin, the Sandbox panel can change any of it.</p>
       <button class="primary wide" data-act="start">Begin the commission</button>
     </section>
 
@@ -392,7 +445,7 @@ function intentView(g: GameState, end: EndOutcome, after: Pool[]): string {
             .map((e) => `<span style="--c:${AFFINITY_VAR[e]}"><span class="dot"></span>${ELEMENT_NAME[e].toLowerCase()} <b class="num">${Math.round(chances[e] * 100)}%</b></span>`)
             .join(' ')}</p>`
     }
-    <p class="intent-term">${g.casts.length ? `${g.casts.length} sigil${g.casts.length === 1 ? '' : 's'} cast this term · Ward <b class="num">${num(g.termWard)}</b>` : 'No sigils cast this term yet'} · ending now ${end.paid > 0 ? `costs <b class="num warn">${num(end.paid)}</b>` : 'costs nothing'}${end.finished ? finishNote : ''}</p>
+    <p class="intent-term">${g.casts.length ? `${g.casts.length} sigil${g.casts.length === 1 ? '' : 's'} cast this term · Ward <b class="num">${num(g.termWard)}</b>` : g.termWard ? `Ward <b class="num">${num(g.termWard)}</b> from runes drawn` : 'No sigils cast this term yet'}${g.keptWard ? ` · lasting Ward <b class="num good">${num(g.keptWard)}</b>` : ''} · ending now ${end.paid > 0 ? `costs <b class="num warn">${num(end.paid)}</b>` : 'costs nothing'}${end.finished ? finishNote : ''}</p>
   </section>`
 }
 
@@ -409,7 +462,8 @@ function describeCast(c: CastOutcome): string {
       ? 'changed nothing'
       : `${kg(r.converted)} of ${GRADE_NAMES[r.source!.grade]} ${r.source!.elemental} became ${kg(r.produced)} of ${GRADE_NAMES[r.target!.grade]} ${r.target!.elemental}`
   const ward = r.outputs.ward ? `, Ward ${num(r.outputs.ward)}` : ''
-  return `${sigilSummary(c.sigil)}: ${change}${ward}.${c.finished ? ` ${COMMISSIONS[ui.game?.commission ?? 'mud'].product}.` : ''}`
+  const drew = r.gathered?.length ? `, and magnesia drew ${r.gathered.map((x) => `${kg(x.kg)} of ${x.source.elemental}`).join(' and ')}` : ''
+  return `${sigilSummary(c.sigil)}: ${change}${drew}${ward}.${c.finished ? ` ${COMMISSIONS[ui.game?.commission ?? 'mud'].product}.` : ''}`
 }
 
 function describeEnd(t: TermOutcome): string {
@@ -426,7 +480,15 @@ function targetChips(g: GameState, pools = g.pools): string {
       const ok = within(sh[e], r)
       return `<span class="tchip ${ok ? 'ok' : ''}" style="--c:${AFFINITY_VAR[e]}"><span class="dot"></span>${ELEMENT_NAME[e]} <b class="num">${pctFine(sh[e])}</b> <span class="num band">${rangeText(r)}</span></span>`
     })
-    .join('')
+    .join('') + purityChip(g, pools)
+}
+
+/** The purity target's chip: how much of the element is pure enough, against the share it needs. */
+function purityChip(g: GameState, pools: Pool[]): string {
+  const p = g.target.purity
+  if (!p) return ''
+  const now = gradeShare(pools, p.elemental, p.grade)
+  return `<span class="tchip ${now >= p.share ? 'ok' : ''}" style="--c:${AFFINITY_VAR[p.elemental]}"><span class="dot"></span>${GRADE_NAMES[p.grade][0].toUpperCase()}${GRADE_NAMES[p.grade].slice(1)} ${p.elemental} <b class="num">${pctFine(now)}</b> <span class="num band">over ${Math.round(p.share * 100)}%</span></span>`
 }
 
 function poolsView(g: GameState, sigil: Sigil | null, selected?: string): string {
@@ -482,6 +544,7 @@ function composerView(g: GameState, sigil: Sigil | null, preview: CastPreview | 
   const castList = g.casts.length
     ? `<ol class="cast-list">${g.casts.map((c) => `<li>${esc(describeCast(c))}</li>`).join('')}</ol>`
     : ''
+  if (sigil && preview && !preview.cast.finished && burnsOf(sigil) > 0) stats += burnPicker(g, sigil)
   const left = castsLeft(g)
   return `
   <section class="composer panel">
@@ -494,17 +557,48 @@ function composerView(g: GameState, sigil: Sigil | null, preview: CastPreview | 
   </section>`
 }
 
+/** The runes in hand a calcining sigil could burn, besides its own. */
+const burnable = (g: GameState, sigil: Sigil) => {
+  const used = new Set([sigil.anchor.id, ...sigil.joins.map((j) => j.rune.id)])
+  return g.hand.filter((r) => !used.has(r.id))
+}
+
+/** Which rune calcination will burn: the player's choice, or the rule's (slag, then plain circles). */
+function burnChoice(g: GameState, sigil: Sigil): number[] {
+  const n = burnsOf(sigil)
+  const pool = burnable(g, sigil)
+  if (ui.burn === null) return []
+  if (ui.burn !== undefined && pool.some((r) => r.id === ui.burn)) return [ui.burn, ...autoBurn(pool.filter((r) => r.id !== ui.burn), n - 1)]
+  return autoBurn(pool, n)
+}
+
+function burnPicker(g: GameState, sigil: Sigil): string {
+  const pool = burnable(g, sigil)
+  const chosen = burnChoice(g, sigil)
+  const name = (r: Rune) => (r.junk ? 'Slag' : `${r.affinity === 'none' ? 'Plain' : ELEMENT_NAME[r.affinity]} ${BODY_NAMES[r.body].toLowerCase()}`)
+  const n = burnsOf(sigil)
+  return `<label class="burn-pick"><span class="label">Calcination burns${n > 1 ? ` ${n}, first` : ''}</span>
+    <select data-burn="1" aria-label="Rune to burn">
+      <option value="none" ${chosen.length ? '' : 'selected'}>Nothing</option>
+      ${pool.map((r) => `<option value="${r.id}" ${chosen[0] === r.id ? 'selected' : ''}>${name(r)}${r.junk ? '' : ` · power ${r.power}`}</option>`).join('')}
+    </select>
+    <span class="fine">Burned runes leave the deck until the commission ends${g.catalysts.includes('caput-mortuum') ? '; the caput mortuum adds +1 power to every rune for each' : ''}.</span>
+  </label>`
+}
+
 /** What a sigil under the equation will do: its runepath, the terms, and the arithmetic. */
 function equationStats(g: GameState, sigil: Sigil, preview: CastPreview): string {
   const mult = resistanceMult(g)
   const eq = { ...g.settings.equation!, base: g.settings.equation!.base * mult }
   const r = preview.cast.resolution
-  const path = runepath(sigil)
+  // Catalysts, resonance and press change runes' power for this cast.
+  const eff = effectiveSigil(sigil, powerBonus(g), g.termWard + g.keptWard)
+  const path = runepath(eff)
   const a = sigil.anchor.affinity
   const route =
     a === 'none' ? 'No element' : path ? [ELEMENT_NAME[a], ...path.steps.map((s) => ELEMENT_NAME[s.to])].join(' → ') + (r.mode === 'purify' ? ' · purify' : r.mode === 'adulterate' ? ' · adulterate' : ' · sealed') : `${ELEMENT_NAME[a]} → no seal yet`
-  const t = path && r.source ? terms(sigil, r.source, eq, path) : null
-  const extras = [r.outputs.reachMult > 1 ? `Reach up ×${r.outputs.reachMult} from motes` : '', r.outputs.guard ? `+${r.outputs.guard} Ward from motes` : ''].filter(Boolean)
+  const t = path && r.source ? terms(eff, r.source, eq, path) : null
+  const extras = [r.outputs.reachMult > 1 ? `Reach up ×${+r.outputs.reachMult.toFixed(2)} from motes` : '', r.outputs.guard ? `+${r.outputs.guard} Ward from motes` : '', ...archetypeNotes(g, sigil, eff, preview)].filter(Boolean)
   let change = r.mode === 'none' ? `<p class="note">${esc(r.mode === 'none' && !path && a !== 'none' ? 'Circumscribe or inscribe a rune to seal the equation: its element is the output.' : r.note)}</p>` : ''
   if (t && r.mode !== 'none') {
     const src = `${GRADE_NAMES[r.source!.grade]} ${r.source!.elemental}`
@@ -512,9 +606,12 @@ function equationStats(g: GameState, sigil: Sigil, preview: CastPreview): string
     const tk = take(eq, t, r.source!.kg)
     const wanted = tk.wanted
     const neutralPart = eq.share ? `${Math.round(eq.share * 100)}% of ${kg(r.source!.kg)}${eq.neutral ? ` + ${num(eq.neutral)} kg` : ''}` : `${num(eq.neutral)} kg`
-    change = `<p class="formula num">${neutralPart} <span class="op">×</span> ${tk.gate < 1 ? `${num(t.power)}<span class="op">÷</span>${num(t.resistance)} <span class="op">×</span> ` : ''}(${num(t.reachUp)} <span class="op">÷</span> ${num(t.reachDown)})<sup>${t.authority.toFixed(2)}</sup> <span class="op">=</span> <b>${kg(r.converted)}</b>${tk.gate < 1 ? ' <span class="warn">· power short</span>' : ''}</p>
+    const digestPart = t.digest ? ` <span class="op">+</span> digestion ${Math.round(t.digest * 100)}% of ${kg(r.source!.kg)}${tk.gate < 1 ? ' × the same' : ''}` : ''
+    change = `<p class="formula num">${neutralPart} <span class="op">×</span> ${tk.gate < 1 ? `${num(t.power)}<span class="op">÷</span>${num(t.resistance)} <span class="op">×</span> ` : ''}(${num(t.reachUp)} <span class="op">÷</span> ${num(t.reachDown)})<sup>${t.authority.toFixed(2)}</sup>${digestPart} <span class="op">=</span> <b>${kg(r.converted)}</b>${tk.gate < 1 ? ' <span class="warn">· power short</span>' : ''}</p>
       <p class="fine">Exponent ln(1 + ${num(t.power)} ÷ ${num(t.resistance)}): power against resistance. Resistance ${num(eq.base)} base × ${GRADE_NAMES[r.source!.grade]} × ${eq.step}<sup>${t.path.flips + t.purifies}</sup> for the steps flipped${t.purifies ? ' and purified' : ''}.${g.intent.resistanceMult ? ` <span class="warn">Stiffened ×${g.intent.resistanceMult} this term.</span>` : ''}</p>
-      <p class="change">${src} → <b class="num">${kg(r.produced)}</b> ${tgt} <span class="of">· output ×${t.multiplier.toFixed(2)}</span>${wanted > r.source!.kg + 1e-9 ? ' <span class="warn">· all there is</span>' : ''}</p>`
+      <p class="change">${src} → <b class="num">${kg(r.produced)}</b> ${tgt} <span class="of">· output ×${t.multiplier.toFixed(2)}</span>${wanted > r.source!.kg + 1e-9 ? ' <span class="warn">· all there is</span>' : ''}</p>${
+        r.gathered?.length ? `<p class="change">Magnesia also draws ${r.gathered.map((x) => `${kg(x.kg)} of ${GRADE_NAMES[x.source.grade]} ${x.source.elemental}`).join(' and ')} into ${r.target!.elemental}, homing in on the bands.</p>` : ''
+      }`
   }
   if (extras.length) change += `<p class="motes-note">${extras.join(' · ')}</p>`
   const after = preview.cast.finished
@@ -534,6 +631,27 @@ function equationStats(g: GameState, sigil: Sigil, preview: CastPreview): string
         <div><span class="label">Ward</span><span class="num big">${num(r.outputs.ward)}</span></div>
       </div>
       ${change}${after}${cost}`
+}
+
+/** What the archetype motes in a sigil will do beyond the arithmetic. */
+function archetypeNotes(g: GameState, sigil: Sigil, eff: Sigil, preview: CastPreview): string[] {
+  const runes = [sigil.anchor, ...sigil.joins.map((j) => j.rune)]
+  const lifted = [eff.anchor, ...eff.joins.map((j) => j.rune)]
+  const out: string[] = []
+  const bonus = powerBonus(g)
+  if (bonus) out.push(`+${num(bonus)} power to every rune from ${g.catalysts.filter((c) => c !== 'pelican').map((c) => CATALYSTS[c].name.toLowerCase()).join(' and ')}`)
+  runes.forEach((r, i) => {
+    const extra = lifted[i].power - r.power - bonus
+    if (extra > 0.05) out.push(`+${num(extra)} power on the ${BODY_NAMES[r.body].toLowerCase()} from ${r.resonance && r.press ? 'resonance and press' : r.resonance ? 'resonance' : 'press'}`)
+  })
+  if (preview.cast.resolution.outputs.glaze) out.push(`+${num(preview.cast.resolution.outputs.glaze)} Ward from glaze`)
+  if (runes.some((r) => r.lute)) out.push('Lute: its Ward lasts until a flare spends it')
+  if (sigil.anchor.cohobation) out.push(`The anchor returns to hand${g.catalysts.includes('pelican') ? ', and the pelican lends Ward' : ''}`)
+  const draws = runes.reduce((n, r) => n + r.distill, 0)
+  if (draws) out.push(`Draws ${draws} after`)
+  const growing = runes.filter((r) => r.multiplication)
+  if (growing.length) out.push(`${growing.length === 1 ? 'Its great rune grows' : 'Its great runes grow'}: its other motes count once more next time`)
+  return out
 }
 
 /** Whether joining this rune this way would be a purifying (+1) or adulterating (−1) step on the runepath. */
@@ -607,21 +725,25 @@ function pilesBar(g: GameState): string {
   return `<nav class="piles" aria-label="Piles">
     <button data-act="pile-open" data-pile="draw" aria-haspopup="dialog">Draw pile <b class="num">${g.draw.length}</b></button>
     <button data-act="pile-open" data-pile="discard" aria-haspopup="dialog">Discard <b class="num">${g.discard.length}</b></button>
+    ${g.burned.length ? `<button data-act="pile-open" data-pile="burned" aria-haspopup="dialog">Burned <b class="num">${g.burned.length}</b></button>` : ''}
+    ${g.catalysts.length ? `<span class="catalysts" aria-label="Catalysts">${catalystChips(g.catalysts)}</span>` : ''}
   </nav>`
 }
 
 function pileSheet(g: GameState): string {
   if (!ui.pile) return ''
-  const runes = (ui.pile === 'draw' ? g.draw : g.discard)
+  const runes = (ui.pile === 'draw' ? g.draw : ui.pile === 'burned' ? g.burned : g.discard)
     .slice()
     .sort((a, b) => BODY_ORDER.indexOf(a.body) - BODY_ORDER.indexOf(b.body) || ORDER.indexOf(a.affinity) - ORDER.indexOf(b.affinity) || a.id - b.id)
   const counts = ORDER.map((e) => [e, runes.filter((h) => h.affinity === e).length] as const)
     .filter(([, n]) => n > 0)
     .map(([e, n]) => `<span style="color:${AFFINITY_VAR[e as keyof typeof AFFINITY_VAR]}">${n} ${e === 'none' ? 'without element' : e}</span>`)
     .join(' · ')
-  const title = ui.pile === 'draw' ? 'Draw pile' : 'Discard pile'
+  const title = ui.pile === 'draw' ? 'Draw pile' : ui.pile === 'burned' ? 'Burned' : 'Discard pile'
   const note =
-    ui.pile === 'draw'
+    ui.pile === 'burned'
+      ? `Burned by calcination: out of the deck until the commission ends; slag is gone for good. ${counts}.`
+      : ui.pile === 'draw'
       ? runes.length
         ? `Sorted, so the draw order stays hidden. ${counts}.`
         : 'Empty: the discard pile reshuffles into it at the next draw.'
@@ -1014,7 +1136,7 @@ function gameView(g: GameState): string {
     <header class="top">
       <div>
         <p class="eyebrow">${COMMISSIONS[g.commission].boss ? 'Boss commission' : 'Commission'}</p>
-        <h1 class="title">${COMMISSIONS[g.commission].source.replace(/^The /, '')} <span class="arrow">→</span> ${COMMISSIONS[g.commission].product}</h1>
+        <h1 class="title">${COMMISSIONS[g.commission].source.replace(/^The /, '')} <span class="arrow">→</span> ${productName(g.commission, g.target)}</h1>
       </div>
       <a class="jump" href="#sandbox" data-act="to-sandbox">Sandbox</a>
       <div class="quint" aria-label="Quintessence ${num(g.quintessence)} of ${g.settings.stock}">
@@ -1143,6 +1265,27 @@ root.addEventListener('change', (e) => {
     render()
     return
   }
+  if ((el as HTMLSelectElement).dataset?.burn) {
+    const v = (el as HTMLSelectElement).value
+    ui.burn = v === 'none' ? null : Number(v)
+    render()
+    return
+  }
+  if ((el as HTMLInputElement).dataset?.act === 'fine') {
+    const on = (el as HTMLInputElement).checked
+    const base = ui.game ? captureSetup(ui.game) : ui.setup
+    const target = cloneTarget(base.target)
+    if (on) target.purity = { ...FINE_CLAY_PURITY }
+    else delete target.purity
+    ui.setup = { ...base, target }
+    if (ui.game) {
+      readTuning()
+      ui.game = null
+      startGame()
+    }
+    render()
+    return
+  }
   const bowl = (el as HTMLSelectElement).dataset?.sbBowl
   if (bowl !== undefined && ui.game) {
     setBowl(Number(bowl), (el as HTMLSelectElement).value)
@@ -1172,7 +1315,7 @@ root.addEventListener('click', (e) => {
       ui.radial = null
       break
     case 'pile-open':
-      ui.pile = el.dataset.pile as 'draw' | 'discard'
+      ui.pile = el.dataset.pile as 'draw' | 'discard' | 'burned'
       break
     case 'pile-close':
       ui.pile = null
@@ -1201,7 +1344,7 @@ root.addEventListener('click', (e) => {
     case 'cast': {
       const sigil = currentSigil()
       if (g && sigil && !invalidReason(g, sigil)) {
-        ui.game = cast(g, sigil, ui.poolKey)
+        ui.game = cast(g, sigil, ui.poolKey, burnsOf(sigil) > 0 ? { burn: burnChoice(g, sigil) } : {})
         resetComposer()
       }
       break

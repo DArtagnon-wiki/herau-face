@@ -28,9 +28,10 @@ import { candidatePools, canJoin } from '../src/sim/sigil'
 import type { Grade, JoinKind, Rune, Sigil } from '../src/sim/types'
 import { ELEMENTALS, poolKey } from '../src/sim/alchemy'
 import { presetByKey } from '../src/sim/presets'
-import { ACT_CHANCE, COMMISSIONS, cloneTarget, expectedThreat, type BossTuning, type CommissionKey } from '../src/sim/commission'
+import { ACT_CHANCE, COMMISSIONS, FINE_CLAY_PURITY, cloneTarget, expectedThreat, type BossTuning, type CommissionKey } from '../src/sim/commission'
 import { mixedDeck } from '../src/sim/deck'
 import { DEFAULT_EQUATION, sourcePools } from '../src/sim/equation'
+import { refinedShare } from '../src/sim/catalysts'
 
 const args = process.argv.slice(2)
 const arg = (name: string) => {
@@ -95,7 +96,7 @@ const naive = args.includes('--naive')
 const noOrganics = args.includes('--no-organics')
 /** --deck opening|mid|late starts from a deck along the run; its hand size applies unless --hand is given. */
 const preset = arg('--deck') ? presetByKey(arg('--deck')!) : undefined
-if (arg('--deck') && !preset) throw new Error(`No deck called ${arg('--deck')}: try opening, mid or late.`)
+if (arg('--deck') && !preset) throw new Error(`No deck called ${arg('--deck')}: try opening, mid, late, or an archetype (ward, combo, great, purity, mastery, thinning, each also -late).`)
 if (preset && !arg('--hand')) settings.handSize = preset.handSize
 const setup = preset ? preset.setup() : standardSetup()
 /**
@@ -147,6 +148,8 @@ for (const b of Object.values(setup.forge.bodies)) {
   if (power) b.power = Number(power)
   b.links += extraLinks
 }
+/** --fine: fine clay, a purity target: clay whose earth is at least half pure. */
+if (args.includes('--fine')) setup.target = { ...setup.target, purity: { ...FINE_CLAY_PURITY } }
 if (noOrganics) {
   setup.start = setup.start.filter((p) => p.elemental === 'earth' || p.elemental === 'water')
   setup.target.air = { min: 0, max: 1 }
@@ -227,7 +230,7 @@ function score(state: GameState, s: Sigil): Scored {
   return best!
 }
 
-const specKey = (r: Rune) => `${r.body}:${r.motes.map((m) => m.elemental ?? m.kind).join(',')}`
+const specKey = (r: Rune) => `${r.body}:${r.motes.map((m) => m.elemental ?? m.kind).join(',')}${r.stacks ? `*${r.stacks}` : ''}`
 /** Sigils that differ only in which of two identical runes they use, or in the order of non-ring joins, are the same. */
 function sigilKey(s: Sigil): string {
   const rings = s.joins.filter((j) => j.kind === 'circumscribe').map((j) => specKey(j.rune))
@@ -367,6 +370,10 @@ function play(seed: number) {
   let wardOnly = 0
   let purified = 0
   let casts = 0
+  let returns = 0
+  let gathered = 0
+  let moved = 0
+  let movedByGreat = 0
   let peak = totalKg(s.pools)
   for (let guard = 0; guard < 200 && s.phase === 'compose'; guard++) {
     peak = Math.max(peak, totalKg(s.pools))
@@ -375,8 +382,15 @@ function play(seed: number) {
     if (best && best.score > endNow + 0.01) {
       if (!best.sigil.joins.some((j) => j.kind === 'circumscribe' || j.kind === 'inscribe')) wardOnly++
       casts++
+      if (best.sigil.anchor.cohobation) returns++
       s = cast(s, best.sigil, best.poolKey)
-      if (s.casts.at(-1)?.resolution.mode === 'purify') purified++
+      const last = s.casts.at(-1) ?? s.history.at(-1)?.casts.at(-1)
+      if (last?.resolution.mode === 'purify') purified++
+      gathered += (last?.resolution.gathered ?? []).reduce((g, x) => g + x.kg, 0)
+      if (last && last.resolution.mode === 'transmute') {
+        moved += last.resolution.converted
+        if ([last.sigil.anchor, ...last.sigil.joins.map((j) => j.rune)].some((r) => r.multiplication)) movedByGreat += last.resolution.converted
+      }
       continue
     }
     if (s.casts.length === 0 && s.discardsLeft > 0) {
@@ -394,7 +408,11 @@ function play(seed: number) {
     }
     s = endTerm(s)
   }
-  return { state: s, discardsUsed, wardOnly, purified, casts, peak: Math.max(peak, totalKg(s.pools)) }
+  const all = [...s.hand, ...s.draw, ...s.discard, ...s.burned]
+  const maxStacks = Math.max(0, ...all.map((r) => r.stacks))
+  const absorbed = s.history.reduce((a, t) => a + t.absorbed, 0)
+  const flares = s.history.reduce((a, t) => a + t.flare, 0)
+  return { state: s, discardsUsed, wardOnly, purified, casts, returns, gathered, maxStacks, moved, movedByGreat, absorbed, flares, burned: s.burned.length, refined: refinedShare(s.pools), peak: Math.max(peak, totalKg(s.pools)) }
 }
 
 /** --trace N prints the first N commissions cast by cast. */
@@ -429,7 +447,7 @@ const f1 = (n: number) => n.toFixed(1)
 const eqNote = settings.equation ? ` · equation: base ${settings.equation.base}, step ×${settings.equation.step}, ring ×${settings.equation.ring}, neutral ${settings.equation.neutral} kg + ${settings.equation.share * 100}% of the pool${settings.equation.gate ? ', power gate' : ''}` : ''
  const mudNote = ` · flares ${settings.flareMin}–${settings.flareMax} +${settings.flareRise}/term · act ${(settings.actChance ?? ACT_CHANCE).join('/')} · combat ${settings.combat ?? 'purity'}${settings.purity ? ' ' + JSON.stringify(settings.purity) : ''} · debuff flare ${settings.debuffFlare}`
  const bossNote = commission !== 'mud' ? ` · ${COMMISSIONS[commission].source} ${JSON.stringify(settings.boss)}${arg('--boss-mass') ? ` ×${arg('--boss-mass')} mass` : ''}` : ''
-const forgeNote = bossNote + eqNote + mudNote + (mix ? ` · deck ${mix} (circles:crescents:triangles)` : '') + (preset ? ` · ${preset.name.toLowerCase()}` : '') + (power || extraLinks ? ` · power ${power ?? 'default'} · +${extraLinks} links` : '') + (farm ? ` · farming to ${farm} kg` : '')
+const forgeNote = (setup.target.purity ? ' · fine clay (half the earth pure)' : '') + bossNote + eqNote + mudNote + (mix ? ` · deck ${mix} (circles:crescents:triangles)` : '') + (preset ? ` · ${preset.name.toLowerCase()}` : '') + (power || extraLinks ? ` · power ${power ?? 'default'} · +${extraLinks} links` : '') + (farm ? ` · farming to ${farm} kg` : '')
 console.log(
   `${games} commissions${forgeNote} · hand ${settings.handSize} · ${settings.castsPerTerm || 'any number of'} sigil${settings.castsPerTerm === 1 ? '' : 's'} a term · flare ×${settings.flareScale} · stock ${settings.stock} · surplus Force ${settings.surplusForce ? 'multiplies' : 'capped'}${naive ? ' · naive player' : ''}${noOrganics ? ' · no organics' : ''}\n`,
 )
@@ -459,5 +477,8 @@ if (won.length && won.length < runs.length) console.log(`among wins: spent media
 if (farm) console.log(`peak mass median ${f1(pct(runs.map((r) => r.peak), 50))} kg, p90 ${f1(pct(runs.map((r) => r.peak), 90))} kg, best ${f1(Math.max(...runs.map((r) => r.peak)))} kg`)
 console.log(`finished in 1 term ${Math.round((100 * won.filter((r) => termsUsed(r.state) <= 1).length) / games)}%, in 2 or fewer ${Math.round((100 * won.filter((r) => termsUsed(r.state) <= 2).length) / games)}%`)
 console.log(buckets.map(([label, f]) => `${label}: ${Math.round((100 * spent.filter(f).length) / games)}%`).join('  '))
+console.log(
+  `archetype signs: Ward absorbed ${Math.round((100 * runs.reduce((a, r) => a + r.absorbed, 0)) / Math.max(1, runs.reduce((a, r) => a + r.flares, 0)))}% of flares · returns ${f1(mean(runs.map((r) => r.returns)))} · biggest growth ${f1(mean(runs.map((r) => r.maxStacks)))} casts, moving ${Math.round((100 * runs.reduce((a, r) => a + r.movedByGreat, 0)) / Math.max(1, runs.reduce((a, r) => a + r.moved, 0)))}% of the kilos · burned ${f1(mean(runs.map((r) => r.burned)))} · gathered ${f1(mean(runs.map((r) => r.gathered)))} kg · medium or purer at the end ${Math.round(100 * mean(runs.map((r) => r.refined)))}%${setup.catalysts?.length ? ` · catalysts ${setup.catalysts.join(', ')}` : ''}`,
+)
 console.log(`sigils a term ${f1(mean(runs.map((r) => r.casts / Math.max(1, termsUsed(r.state)))))} · defence-only sigils ${f1(mean(runs.map((r) => r.wardOnly)))} · purifying ${f1(mean(runs.map((r) => r.purified)))} · discards used ${f1(mean(runs.map((r) => r.discardsUsed)))}`)
 

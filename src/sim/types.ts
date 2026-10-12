@@ -10,7 +10,28 @@ export type Body = 'circle' | 'crescent' | 'triangle'
 /** How one rune joins another in a sigil. 'side' is a side link. */
 export type JoinKind = 'circumscribe' | 'side' | 'entwine' | 'inscribe' | 'tangent'
 
-export type MoteKind = 'element' | 'link' | 'reach' | 'guard' | 'boost'
+export type MoteKind =
+  | 'element'
+  | 'link'
+  | 'reach'
+  | 'guard'
+  | 'boost'
+  // Archetype motes (see DESIGN.md, Archetypes).
+  | 'glaze'
+  | 'crucible'
+  | 'lute'
+  | 'press'
+  | 'cohobation'
+  | 'distillation'
+  | 'multiplication'
+  | 'rectification'
+  | 'digestion'
+  | 'resonance'
+  | 'magnesia'
+  | 'calcination'
+
+/** Passive modifiers held for the whole run, the game's jokers and relics. */
+export type Catalyst = 'pelican' | 'aqua-vitae' | 'caput-mortuum'
 
 /** A mote sits in a bowl and gives the rune its element or an ability. */
 export interface Mote {
@@ -35,6 +56,32 @@ export interface Rune {
   boost: number
   /** Slag from a boss: power 1, no links, no element. */
   junk?: boolean
+  /** Times it has been cast this commission while holding a multiplication mote: its other motes count this many times more. */
+  stacks: number
+  /** Ward its sigil gains for every rune in it (glaze). */
+  glaze: number
+  /** Ward this term when it is drawn (crucible). */
+  crucible: number
+  /** Ward from its sigil lasts until a flare spends it (lute). */
+  lute: boolean
+  /** Power for every Ward held when its sigil is cast (press). */
+  press: number
+  /** When it anchors, it returns to hand after the cast (cohobation). */
+  cohobation: boolean
+  /** Runes drawn when its sigil resolves (distillation). */
+  distill: number
+  /** Grows each time it is cast (multiplication). */
+  multiplication: boolean
+  /** Its inscribe step purifies two grades instead of one (rectification). */
+  rectify: boolean
+  /** The share of the pool a sigil that only purifies also takes (digestion). */
+  digestion: number
+  /** Power for every other rune of its element in the sigil (resonance). */
+  resonance: number
+  /** As the seal, the share drawn from every other element's pools, relative to the main take (magnesia). */
+  magnesia: number
+  /** Runes burned from hand when its sigil resolves (calcination). */
+  calcination: number
 }
 
 /** One elemental at one grade within the amalgam. */

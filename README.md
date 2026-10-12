@@ -19,6 +19,8 @@ npm run simulate -- --deck late --farm 250  # grow the clay to 250 kg before fin
 npm run simulate -- --trace 3             # print the first 3 commissions cast by cast
 npm run simulate -- --farm 400 --ignore-spec --planner  # how fast the opening deck can grow mass at all
 npm run simulate -- --equation             # the alchemical equation instead of Reach × Force
+npm run simulate -- --equation --deck combo   # an archetype deck: ward, combo, great, purity, mastery, thinning (each also -late)
+npm run simulate -- --equation --deck purity --fine   # fine clay: half the earth must end pure
 npm run power      # kilos each deck along the run can move in a term
 npm run build      # dist/index.html, one self-contained page
 ```
@@ -56,7 +58,7 @@ When a commission ends, the end card draws its star: one point for every sigil c
 
 ### Sandbox
 
-The Sandbox panel changes the commission in progress, live: the mud's starting composition (kg and purity per element, which resets the amalgam) and the target bands; each body's power, links and bowls; the reach and guard mote values; any rune's body and motes, wherever it is in the deck; new runes straight into the hand; and removing runes. Restarting keeps every change, and "Restart with the standard deck" undoes them. "Decks along a run" loads the opening, mid-run or late-run deck, on the start screen too. The Tuning panel covers the rest: rules, combat, surplus Force, flare size, quintessence, hand size, sigils a term and discards.
+The Sandbox panel changes the commission in progress, live (any mote, archetype motes included, can go in any bowl): the mud's starting composition (kg and purity per element, which resets the amalgam) and the target bands; each body's power, links and bowls; the reach and guard mote values; any rune's body and motes, wherever it is in the deck; new runes straight into the hand; and removing runes. Restarting keeps every change, and "Restart with the standard deck" undoes them. "Decks along a run" loads the opening, mid-run or late-run deck, on the start screen too. The Tuning panel covers the rest: rules, combat, surplus Force, flare size, quintessence, hand size, sigils a term and discards.
 
 ### Rules the doc leaves open
 
@@ -74,7 +76,7 @@ Every sigil is drawn the way the design doc's notation reads (`src/ui/draw.ts`):
 - A triangle inside a triangle is inverted, so nested triangles read as halves of a hexagram rather than as a seal's double line.
 - Tangents sit in a triangle's corners, in a crescent's band and around a circle. Side links hang off a triangle's edges, a crescent's back, or below a circle.
 - A circle can't point, so a circle that points is drawn as a drop.
-- On cards, motes are marks: a drop of colour for an element, a ring for a link, an arrowhead for reach, a lozenge for guard, a cross for boost. Slag is a dotted grey circle.
+- On cards, motes are marks: a drop of colour for an element, a ring for a link, an arrowhead for reach, a lozenge for guard, a cross for boost. Archetype motes have marks of their own (a crucible, a loop for cohobation, a drop for distillation, an × for multiplication, an arrowhead pointing in for magnesia, and so on); the start screen lists the ones in the chosen deck. Slag is a dotted grey circle.
 
 ![Sigils as the prototype draws them](docs/sigil-gallery.png)
 
@@ -130,6 +132,32 @@ The power arc's target: by the end of a run of 20 or more commissions, mud to cl
 - **Raw power hurts precision.** Power 8 instead of 5 cut one-term finishes from 85% to 52%, because the smallest sigil then overshoots a 2 kg trace.
 
 The simulated player plans each term for big hands and high-link anchors: it tries the best sigil of every anchor and size, plus every ring chain of two or three, plays the rest of the term out greedily from each, and starts with the one that ends best. The opening deck still uses the exhaustive greedy player, so its numbers match those above.
+
+### Archetype decks
+
+Six archetypes, each with motes of its own (DESIGN.md, Archetypes), are playable from "Or an archetype deck" on the start screen and in the Sandbox, at the mid-run deck's budget with a 7-rune hand or a late version with an 8-rune hand. The motes are in `src/sim/deck.ts`, the catalysts in `src/sim/catalysts.ts`, the decks in `src/sim/presets.ts`.
+
+| Archetype | Motes and catalyst | In play |
+| --- | --- | --- |
+| Consistent ward | Glaze (+2 Ward per rune in its sigil), crucible (+3 Ward when drawn), lute (its sigil's Ward lasts until spent), press (+0.5 power per Ward held) | Lasting Ward shows under the commission's moves |
+| Combo | Cohobation (an anchor returns to hand), distillation (draw a rune after casting); the pelican (+2 Ward per return) | The anchor comes back after each cast |
+| One great rune | Multiplication (its other motes count once more each cast), here with calcination on the great rune | Cards show how many times it has grown |
+| Purity maxing | Rectification (inscribed, purifies two grades), digestion (a purifying sigil also takes a quarter of the pool); aqua vitae (+3 power while 80% of the amalgam is medium or purer) | Tick "Fine clay" for a purity target |
+| Element mastery | Resonance (+2 power per other rune of its element in the sigil), magnesia (a seal that also draws other elements in, never past the middle of their bands) | The preview says what magnesia draws |
+| Deck thinning | Calcination (burn a rune from hand after casting); the caput mortuum (+1 power to every rune per rune burned) | Choose what burns under the preview; the Burned pile opens from the bar |
+
+Simulated with the equation (100 commissions against mud, 60 against the Mire): the mid-run deck pays a median of 5 against mud in 3 terms and the late-run deck beats the Mire 72% of the time.
+
+| Deck | Mud: spent, terms | The Mire, late: won | Signature |
+| --- | --- | --- | --- |
+| Consistent ward | 0, 5 | 92% | Ward absorbs 98% of mud's flares, 91% of the Mire's |
+| Combo | 0, 3 | 92% | 3.9 sigils a term against 1.9 |
+| One great rune | 4, 3 | 60% | Against the Mire it grows 3 times and moves 87% of the kilos |
+| Purity maxing | 6, 3 | 73% | Fine clay in 10 terms; the mid-run deck takes 21 |
+| Element mastery | 0, 2 | 93% | 29% of mud and 42% of the Mire finished in one term |
+| Deck thinning | 5, 4 | 88% | Burns 1.7 runes against mud, 3.2 against the Mire |
+
+Ward needed press to turn Ward into progress (42% against the Mire without it), magnesia had to stop at each band's middle (38% when it dragged traces under), and purity changes nothing until something asks for it, so fine clay is the prototype's first purity target.
 
 ### The alchemical equation
 

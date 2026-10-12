@@ -1,4 +1,4 @@
-import type { Body, Elemental, Mote, Rune } from './types'
+import type { Body, Elemental, Mote, MoteKind, Rune } from './types'
 
 // A rune is a body holding motes. The body sets power, links and bowls; the
 // motes in its bowls give the element and any abilities. The numbers behind
@@ -17,7 +17,22 @@ export interface MoteValues {
   guard: number
   /** A boost mote adds this to its rune's multiplier in the equation. */
   boost: number
+  /** A glaze mote: Ward its sigil gains for every rune in it. */
+  glaze?: number
+  /** A crucible mote: Ward when its rune is drawn. */
+  crucible?: number
+  /** A press mote: power for every Ward held when its sigil is cast. */
+  press?: number
+  /** A digestion mote: the share of the pool a sigil that only purifies also takes. */
+  digestion?: number
+  /** A resonance mote: power for every other rune of its element in the sigil. */
+  resonance?: number
+  /** A magnesia mote: what its seal draws from each other element's pools, relative to the main take. */
+  magnesia?: number
 }
+
+/** The archetype motes' numbers, for forges made before they existed. */
+export const ARCHETYPE_VALUES = { glaze: 2, crucible: 3, press: 0.5, digestion: 0.25, resonance: 2, magnesia: 0.25 }
 
 export interface Forge {
   bodies: Record<Body, BodySpec>
@@ -33,7 +48,7 @@ export const DEFAULT_FORGE: Forge = {
     crescent: { power: 5, links: 1, bowls: 2 },
     triangle: { power: 5, links: 1, bowls: 3 },
   },
-  values: { reach: 1.5, guard: 4, boost: 0.1 },
+  values: { reach: 1.5, guard: 4, boost: 0.1, ...ARCHETYPE_VALUES },
 }
 
 export const cloneForge = (f: Forge): Forge => ({
@@ -48,6 +63,23 @@ export const LINK_MOTE: Mote = { kind: 'link' }
 export const REACH_MOTE: Mote = { kind: 'reach' }
 export const GUARD_MOTE: Mote = { kind: 'guard' }
 export const BOOST_MOTE: Mote = { kind: 'boost' }
+export const mote = (kind: Exclude<MoteKind, 'element'>): Mote => ({ kind })
+
+/** Archetype motes in the order the sandbox lists them, with the archetype each serves. */
+export const ARCHETYPE_MOTES: { kind: Exclude<MoteKind, 'element'>; name: string; archetype: string }[] = [
+  { kind: 'glaze', name: 'Glaze', archetype: 'Consistent ward' },
+  { kind: 'crucible', name: 'Crucible', archetype: 'Consistent ward' },
+  { kind: 'lute', name: 'Lute', archetype: 'Consistent ward' },
+  { kind: 'press', name: 'Press', archetype: 'Consistent ward' },
+  { kind: 'cohobation', name: 'Cohobation', archetype: 'Combo' },
+  { kind: 'distillation', name: 'Distillation', archetype: 'Combo' },
+  { kind: 'multiplication', name: 'Multiplication', archetype: 'One great rune' },
+  { kind: 'rectification', name: 'Rectification', archetype: 'Purity maxing' },
+  { kind: 'digestion', name: 'Digestion', archetype: 'Purity maxing' },
+  { kind: 'resonance', name: 'Resonance', archetype: 'Element mastery' },
+  { kind: 'magnesia', name: 'Magnesia', archetype: 'Element mastery' },
+  { kind: 'calcination', name: 'Calcination', archetype: 'Deck thinning' },
+]
 
 /** Every mote the sandbox offers, keyed for form controls. */
 export const MOTE_OPTIONS: { key: string; mote: Mote }[] = [
@@ -59,6 +91,7 @@ export const MOTE_OPTIONS: { key: string; mote: Mote }[] = [
   { key: 'reach', mote: REACH_MOTE },
   { key: 'guard', mote: GUARD_MOTE },
   { key: 'boost', mote: BOOST_MOTE },
+  ...ARCHETYPE_MOTES.map((m) => ({ key: m.kind as string, mote: mote(m.kind) })),
 ]
 export const moteKey = (m: Mote) => (m.kind === 'element' ? m.elemental! : m.kind)
 export const moteFromKey = (key: string): Mote | undefined => MOTE_OPTIONS.find((o) => o.key === key)?.mote
@@ -75,6 +108,8 @@ export function moteName(m: Mote): string {
       return 'Guard mote'
     case 'boost':
       return 'Boost mote'
+    default:
+      return ARCHETYPE_MOTES.find((a) => a.kind === m.kind)!.name
   }
 }
 
@@ -90,6 +125,30 @@ export function moteEffect(m: Mote, values: MoteValues = DEFAULT_FORGE.values): 
       return `+${values.guard} Ward`
     case 'boost':
       return `+${values.boost} multiplier`
+    case 'glaze':
+      return `+${values.glaze ?? ARCHETYPE_VALUES.glaze} Ward per rune in its sigil`
+    case 'crucible':
+      return `+${values.crucible ?? ARCHETYPE_VALUES.crucible} Ward when drawn`
+    case 'lute':
+      return 'Its sigil’s Ward lasts until spent'
+    case 'press':
+      return `+${values.press ?? ARCHETYPE_VALUES.press} power per Ward held`
+    case 'cohobation':
+      return 'Anchoring, returns to hand'
+    case 'distillation':
+      return 'Draw a rune after casting'
+    case 'multiplication':
+      return 'Other motes count once more each cast'
+    case 'rectification':
+      return 'Inscribed, purifies two grades'
+    case 'digestion':
+      return `Purifying takes ${Math.round(100 * (values.digestion ?? ARCHETYPE_VALUES.digestion))}% of the pool too`
+    case 'resonance':
+      return `+${values.resonance ?? ARCHETYPE_VALUES.resonance} power per rune of its element`
+    case 'magnesia':
+      return `As seal, draws ${Math.round(100 * (values.magnesia ?? ARCHETYPE_VALUES.magnesia))}% from other elements`
+    case 'calcination':
+      return 'Burn a rune from hand after casting'
   }
 }
 
@@ -103,13 +162,20 @@ export interface RuneSpec {
 
 /**
  * Build a rune from its body and motes. Motes past the body's bowls are
- * dropped. The first element mote sets the element.
+ * dropped. The first element mote sets the element. A rune holding a
+ * multiplication mote that has been cast `stacks` times counts each of its
+ * other motes 1 + stacks times.
  */
-export function makeRune(id: number, spec: RuneSpec, forge: Forge = DEFAULT_FORGE, power?: number): Rune {
-  if (spec.junk) return { id, body: 'circle', power: 1, bowls: 0, motes: [], affinity: 'none', links: 0, reachMult: 1, guard: 0, boost: 0, junk: true }
+export function makeRune(id: number, spec: RuneSpec, forge: Forge = DEFAULT_FORGE, power?: number, stacks = 0): Rune {
+  const blank = { stacks: 0, glaze: 0, crucible: 0, lute: false, press: 0, cohobation: false, distill: 0, multiplication: false, rectify: false, digestion: 0, resonance: 0, magnesia: 0, calcination: 0 }
+  if (spec.junk) return { id, body: 'circle', power: 1, bowls: 0, motes: [], affinity: 'none', links: 0, reachMult: 1, guard: 0, boost: 0, junk: true, ...blank }
   const b = forge.bodies[spec.body]
+  const v = { ...ARCHETYPE_VALUES, ...forge.values }
   const motes = spec.motes.slice(0, b.bowls)
   const element = motes.find((m) => m.kind === 'element')
+  const multiplication = motes.some((m) => m.kind === 'multiplication')
+  const k = multiplication ? 1 + stacks : 1
+  const n = (kind: MoteKind) => motes.filter((m) => m.kind === kind).length * k
   return {
     id,
     body: spec.body,
@@ -117,15 +183,31 @@ export function makeRune(id: number, spec: RuneSpec, forge: Forge = DEFAULT_FORG
     bowls: b.bowls,
     motes,
     affinity: element?.elemental ?? 'none',
-    links: b.links + motes.filter((m) => m.kind === 'link').length,
-    reachMult: motes.filter((m) => m.kind === 'reach').reduce((x) => x * forge.values.reach, 1),
-    guard: motes.filter((m) => m.kind === 'guard').length * forge.values.guard,
-    boost: motes.filter((m) => m.kind === 'boost').length * (forge.values.boost ?? 0),
+    links: b.links + n('link'),
+    reachMult: forge.values.reach ** n('reach'),
+    guard: n('guard') * forge.values.guard,
+    boost: n('boost') * (forge.values.boost ?? 0),
+    stacks: multiplication ? stacks : 0,
+    glaze: n('glaze') * v.glaze,
+    crucible: n('crucible') * v.crucible,
+    lute: n('lute') > 0,
+    press: n('press') * v.press,
+    cohobation: n('cohobation') > 0,
+    distill: n('distillation'),
+    multiplication,
+    rectify: n('rectification') > 0,
+    digestion: n('digestion') * v.digestion,
+    resonance: n('resonance') * v.resonance,
+    magnesia: n('magnesia') * v.magnesia,
+    calcination: n('calcination'),
   }
 }
 
 /** Re-apply the forge's numbers to an existing rune, keeping its id, body and motes. */
-export const reforge = (r: Rune, forge: Forge): Rune => makeRune(r.id, { body: r.body, motes: r.motes }, forge)
+export const reforge = (r: Rune, forge: Forge): Rune => (r.junk ? r : makeRune(r.id, { body: r.body, motes: r.motes }, forge, undefined, r.stacks))
+
+/** The rune after one more cast: a multiplication mote makes its other motes count once more. */
+export const grow = (r: Rune, forge: Forge): Rune => (r.multiplication ? makeRune(r.id, { body: r.body, motes: r.motes }, forge, r.power, r.stacks + 1) : r)
 
 const FOUR: Elemental[] = ['water', 'earth', 'air', 'fire']
 

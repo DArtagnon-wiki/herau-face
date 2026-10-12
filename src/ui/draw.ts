@@ -125,6 +125,43 @@ function moteMark(m: Mote | undefined, x: number, y: number, br: number): string
       return `${bowl}<path d="M ${f(x - d)} ${f(y)} H ${f(x + d)} M ${f(x)} ${f(y - d)} V ${f(y + d)}" ${ink}/>`
     }
   }
+  // Archetype motes: small marks of their own.
+  const d = br * 0.48
+  const P = (dx: number, dy: number) => `${f(x + dx * d)} ${f(y + dy * d)}`
+  const fill = 'fill="var(--opal)"'
+  const marks: Record<string, string> = {
+    // A coat over the top half.
+    glaze: `<path d="M ${P(-1, 0.15)} A ${f(d)} ${f(d)} 0 0 1 ${P(1, 0.15)} Z" ${fill}/>`,
+    // A crucible: wide mouth, narrow foot.
+    crucible: `<path d="M ${P(-0.95, -0.7)} L ${P(-0.5, 0.8)} L ${P(0.5, 0.8)} L ${P(0.95, -0.7)}" ${ink}/>`,
+    // Lute: the seal of a vessel, two bars.
+    lute: `<path d="M ${P(-0.9, -0.35)} H ${f(x + 0.9 * d)} M ${P(-0.9, 0.35)} H ${f(x + 0.9 * d)}" ${ink}/>`,
+    // Press: a weight bearing down.
+    press: `<path d="M ${P(-0.9, -0.55)} H ${f(x + 0.9 * d)} M ${P(0, -0.55)} V ${f(y + 0.35 * d)}" ${ink}/><path d="M ${P(-0.55, 0.35)} H ${f(x + 0.55 * d)} L ${P(0.4, 0.85)} H ${f(x - 0.4 * d)} Z" ${fill}/>`,
+    // Cohobation: a loop with an arrow.
+    cohobation: `<path d="M ${P(0.8, 0.1)} A ${f(d * 0.8)} ${f(d * 0.8)} 0 1 1 ${P(0.1, -0.8)}" ${ink}/><path d="M ${P(0.1, -1.15)} L ${P(0.55, -0.8)} L ${P(0.1, -0.45)} Z" ${fill}/>`,
+    // Distillation: a falling drop.
+    distillation: `<path d="M ${P(0, -1)} C ${P(0.25, -0.4)} ${P(0.75, 0.05)} ${P(0.7, 0.4)} A ${f(d * 0.7)} ${f(d * 0.7)} 0 0 1 ${P(-0.7, 0.4)} C ${P(-0.75, 0.05)} ${P(-0.25, -0.4)} ${P(0, -1)} Z" ${fill}/>`,
+    // Multiplication: a cross turned on its side.
+    multiplication: `<path d="M ${P(-0.75, -0.75)} L ${P(0.75, 0.75)} M ${P(0.75, -0.75)} L ${P(-0.75, 0.75)}" ${ink}/>`,
+    // Rectification: up twice.
+    rectification: `<path d="M ${P(-0.75, -0.05)} L ${P(0, -0.8)} L ${P(0.75, -0.05)} M ${P(-0.75, 0.75)} L ${P(0, 0)} L ${P(0.75, 0.75)}" ${ink}/>`,
+    // Digestion: a ring round a kernel.
+    digestion: `<circle cx="${f(x)}" cy="${f(y)}" r="${f(d * 0.85)}" ${ink}/><circle cx="${f(x)}" cy="${f(y)}" r="${f(d * 0.3)}" ${fill}/>`,
+    // Resonance: a wave.
+    resonance: `<path d="M ${P(-1, 0.1)} C ${P(-0.6, -0.8)} ${P(-0.2, -0.8)} ${P(0, 0)} S ${P(0.6, 0.9)} ${P(1, -0.1)}" ${ink}/>`,
+    // Calcination: a flame's triangle.
+    calcination: `<path d="M ${P(0, -0.9)} L ${P(0.8, 0.6)} L ${P(-0.8, 0.6)} Z" ${ink}/>`,
+  }
+  if (m.kind === 'magnesia') {
+    // An arrowhead pointing in: it draws toward the rune.
+    const len = Math.hypot(x, y)
+    const [ux, uy] = len > 0.01 ? [-x / len, -y / len] : [0, 1]
+    const [px, py] = [-uy, ux]
+    const pt = (along: number, across: number) => `${f(x + ux * br * along + px * br * across)} ${f(y + uy * br * along + py * br * across)}`
+    return `${bowl}<path d="M ${pt(0.55, 0)} L ${pt(-0.35, 0.45)} L ${pt(-0.15, 0)} L ${pt(-0.35, -0.45)} Z" fill="none" stroke="var(--opal)" stroke-width="0.9" stroke-linejoin="round"/>`
+  }
+  return `${bowl}${marks[m.kind] ?? ''}`
 }
 
 function bowls(rune: Rune, r: number): string {

@@ -1,4 +1,5 @@
-import { GRADE_MULT, MAX_PLAYER_GRADE, poolKey, stepsBetween, transfer } from './alchemy'
+import { GRADE_MULT, MAX_PLAYER_GRADE, elementalKg, poolKey, stepsBetween, totalKg, transfer } from './alchemy'
+import type { Target } from './commission'
 import { outputs, type Resolution } from './sigil'
 import type { Elemental, Grade, Pool, Rune, Sigil } from './types'
 
@@ -56,8 +57,8 @@ export interface PathStep {
   to: Elemental
   /** Qualities flipped on this step: 0 same element, 1 an edge of the square, 2 a diagonal. */
   flips: number
-  /** On a same-element step: +1 when inscribed (purify), −1 when circumscribed (adulterate). 0 otherwise. */
-  purity: -1 | 0 | 1
+  /** On a same-element step: +1 when inscribed (purify; +2 with rectification), −1 when circumscribed (adulterate). 0 otherwise. */
+  purity: number
 }
 
 export interface Runepath {
@@ -105,7 +106,7 @@ export function runepath(sigil: Sigil): Runepath | null {
 
 function step(rune: Rune, kind: PathStep['kind'], from: Elemental, to: Elemental): PathStep {
   const flips = stepsBetween(from, to)
-  const purity = flips === 0 && rune.affinity !== 'none' ? (kind === 'inscribe' ? 1 : -1) : 0
+  const purity = flips === 0 && rune.affinity !== 'none' ? (kind === 'inscribe' ? (rune.rectify ? 2 : 1) : -1) : 0
   return { rune, kind, from, to, flips, purity }
 }
 
@@ -124,7 +125,7 @@ export function outputGrade(path: Runepath, from: Grade): Grade {
   let g: number = from
   for (const s of path.steps) {
     if (s.flips > 0) g = 0
-    else if (s.purity > 0) g = g >= MAX_PLAYER_GRADE ? g : g + 1
+    else if (s.purity > 0) g = g >= MAX_PLAYER_GRADE ? g : Math.min(MAX_PLAYER_GRADE, g + s.purity)
     else if (s.purity < 0) g = Math.max(0, g - 1)
   }
   return g as Grade
@@ -162,6 +163,8 @@ export interface EquationTerms {
   /** ln(1 + power ÷ resistance): how far the sigil can push its reach ratio. */
   authority: number
   multiplier: number
+  /** Share of the pool a sigil that only purifies also takes (digestion motes); 0 otherwise. */
+  digest: number
 }
 
 /** The equation's terms for a sigil against one pool. */
@@ -174,18 +177,20 @@ export function terms(sigil: Sigil, source: Pool, eq: Equation, path: Runepath):
   const reachUp = (anchor.power + joins.filter((j) => j.kind === 'side').reduce((p, j) => p + j.rune.power, 0)) * out.reachMult
   const reachDown = anchor.power + joins.filter((j) => j.kind === 'tangent').reduce((p, j) => p + j.rune.power, 0)
   const multiplier = path.steps.reduce((m, s) => (s.kind === 'circumscribe' ? m * (eq.ring + s.rune.boost) : m / (eq.inscribe + s.rune.boost)), 1)
-  return { path, purifies: pure, power, resistance, reachUp, reachDown, authority: Math.log(1 + power / resistance), multiplier }
+  const digest = !transmutes(path) && netPurity(path) > 0 ? [anchor, ...joins.map((j) => j.rune)].reduce((d, r) => d + r.digestion, 0) : 0
+  return { path, purifies: pure, power, resistance, reachUp, reachDown, authority: Math.log(1 + power / resistance), multiplier, digest }
 }
 
 /** The neutral take for this pool, the power gate, and what the sigil wants after aiming. */
 export function take(eq: Equation, t: EquationTerms, poolKg: number): { neutral: number; gate: number; wanted: number } {
   const neutral = eq.neutral + (eq.share ?? 0) * poolKg
   const gate = eq.gate ? Math.min(1, t.power / t.resistance) : 1
-  return { neutral, gate, wanted: neutral * gate * (t.reachUp / t.reachDown) ** t.authority }
+  // Digestion: a sigil that only purifies also takes a share of the pool, gated by power like the rest.
+  return { neutral, gate, wanted: neutral * gate * (t.reachUp / t.reachDown) ** t.authority + (t.digest ?? 0) * gate * poolKg }
 }
 
 /** Work out exactly what casting this sigil does under the equation. */
-export function resolveEquation(sigil: Sigil, pools: Pool[], selectedKey: string | undefined, eq: Equation): Resolution {
+export function resolveEquation(sigil: Sigil, pools: Pool[], selectedKey: string | undefined, eq: Equation, goal?: Target): Resolution {
   const out = outputs(sigil)
   const none = (note: string, source?: Pool): Resolution => ({
     outputs: out,
@@ -218,6 +223,26 @@ export function resolveEquation(sigil: Sigil, pools: Pool[], selectedKey: string
   const produced = converted * t.multiplier
   const target = { elemental: seal.to, grade: outputGrade(path, source.grade) }
   const mode = transmutes(path) ? 'transmute' : target.grade > source.grade ? 'purify' : target.grade < source.grade ? 'adulterate' : 'transmute'
+  let after = transfer(pools, source, converted, target, produced)
+  // Magnesia: a transmuting seal also draws from every other element's pools,
+  // a share of the main take each, homing in: never past the middle of an
+  // element's band in the target.
+  const gathered: { source: Pool; kg: number }[] = []
+  if (seal.rune.magnesia > 0 && transmutes(path)) {
+    const total = totalKg(after)
+    const room: Partial<Record<Elemental, number>> = {}
+    for (const p of after) {
+      if (p.elemental === seal.to || poolKey(p) === poolKey(source)) continue
+      const band = goal?.[p.elemental]
+      const floor = band && (band.min > 0 || band.max < 1) ? ((band.min + band.max) / 2) * total : 0
+      room[p.elemental] ??= Math.max(0, elementalKg(after, p.elemental) - floor)
+      const kg = Math.min(p.kg, seal.rune.magnesia * converted, room[p.elemental]!)
+      if (kg <= 0.001) continue
+      room[p.elemental]! -= kg
+      gathered.push({ source: p, kg })
+    }
+    for (const g of gathered) after = transfer(after, g.source, g.kg, { elemental: seal.to, grade: 0 }, g.kg * t.multiplier)
+  }
   return {
     outputs: out,
     mode,
@@ -229,6 +254,7 @@ export function resolveEquation(sigil: Sigil, pools: Pool[], selectedKey: string
     converted,
     produced,
     yieldFactor: t.multiplier,
-    pools: transfer(pools, source, converted, target, produced),
+    pools: after,
+    ...(gathered.length ? { gathered } : {}),
   }
 }
