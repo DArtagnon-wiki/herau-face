@@ -23,7 +23,7 @@ A roguelike deckbuilder in the spirit of Balatro: each term you compose sigils f
 | Rune | A card in the deck: a body holding motes in its bowls. |
 | Body | A rune's shape: an N-gon with N bowls, from the circle (a 1-gon) and the crescent (a 2-gon) through triangle, square, pentagon, hexagon and heptagon. It sets links; power belongs to each rune. |
 | Bowl | A slot on a body that holds one mote. An N-gon has N. |
-| Rarity | Common, uncommon or rare, shown in the shape: a polygon grows pointier as a star, a circle (the sun) throws rays, a crescent (the moon) thins from an eighth to a thirty-second lit. |
+| Rarity | Common, uncommon or rare, shown in the shape: a polygon grows pointier as a star, a circle (the sun) throws rays, a crescent (the moon) thins from a 1/8 moon to a 1/32. |
 | Mote | What gives a rune its nature. Gems set the element; ability motes add links, multiply Reach or add Ward. Earned motes fill or replace bowls to upgrade a rune for the rest of the run. |
 | Power | A rune's strength, set by its body. Each join turns it into Force, Reach or Ward. |
 | Links | How many runes a rune holds when it anchors a sigil. |
@@ -108,7 +108,7 @@ A rune is a body holding motes. The body is an N-gon with N bowls, a circle coun
 
 A rune's element is its first gem; a rune without a gem has no element. Mote abilities apply wherever the rune sits in a sigil.
 
-**Rarity shows in the shape.** Runes with the same number of sides are told apart by drawing them as stars: the smaller a star's inner radius, the rarer the rune. A common rune's divots sit on its edges, so it is the regular N-gon; an uncommon rune has shallow divots (inner radius 0.8 of the polygon's); a rare rune is pointy (half). Circles are the sun and crescents the moon, so they show it their own way. A common sun is a plain circle; an uncommon one throws 8 short rays from its surface, a rare one 16 rays, long and short. A crescent is a moon by its lit share: a common one is an eighth lit, a quarter of its radius thick; uncommon a sixteenth; rare a thirty-second, a sliver. A faint line traces the unlit rest of the moon, and what a crescent rings sits in that dark part. In the prototype rarity changes only the drawing. Archetype decks mark their enablers uncommon and their payoffs rare.
+**Rarity shows in the shape.** Runes with the same number of sides are told apart by drawing them as stars: the smaller a star's inner radius, the rarer the rune. A common rune's divots sit on its edges, so it is the regular N-gon; an uncommon rune has shallow divots (inner radius 0.8 of the polygon's); a rare rune is pointy (half). Circles are the sun and crescents the moon, so they show it their own way. A common sun is a plain circle; an uncommon one throws 8 short rays from its surface, a rare one 16 rays, long and short. A crescent is the moon by its phase, where a 1/4 moon is half the disc: a common crescent is a 1/8 moon, half its radius thick; uncommon a 1/16 moon, a quarter; rare a 1/32 moon, an eighth. A faint line traces the unlit rest of the moon, and what a crescent rings sits in that dark part. In the prototype rarity changes only the drawing. Archetype decks mark their enablers uncommon and their payoffs rare.
 
 ![Runes by rarity: each body common, uncommon and rare, and sigils of stars](docs/rune-rarity.png)
 
@@ -643,7 +643,7 @@ Circumgician is built on Pixi.js, TypeScript and Vite, and most of its look is g
 | Is routing through chained circumscribes too strong? | They are the late-run mass engine: earth → air → fire → earth is ×40. Links gate them; tune step costs and yields if loops arrive too early |
 | Names: working title, the currency? | Open. Settled: a card is a rune; what you cast is a sigil |
 | Does a commission finish the moment it is in band, or when the player seals it? | Settled: the moment the amalgam is in range, whether a cast or the commission's own move put it there. Extra product means working off-spec and landing at the end |
-| How do circles and crescents show rarity? | Settled: a rarer sun throws rays; a rarer moon is a thinner crescent, lit an eighth, a sixteenth, a thirty-second |
+| How do circles and crescents show rarity? | Settled: a rarer sun throws rays; a rarer moon is a thinner crescent, a 1/8, 1/16 or 1/32 moon |
 | Should more sides bring more power or links, as well as bowls? | Settled: no. Power belongs to each rune as it is obtained, so a 20-power circle or a 0-power heptagon can exist; reach floors at 1 so a powerless anchor still works |
 | Does a shape's side count cap the reach runes it carries? | Open. The notation sketch hangs three crescents off a triangle and sets four triangles inside a square; the prototype limits joins only by the anchor's links |
 | What does a bigger concentricity trade? | Open: more pay against harsher moves or more traces |

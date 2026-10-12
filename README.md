@@ -80,7 +80,7 @@ Every sigil is drawn the way the design doc's notation reads (`src/ui/draw.ts`):
 
 - A crescent holds what it rings, or what is inscribed in it, in its hollow. As a seal, its second line runs parallel to both arcs, the back and the hollow, and closes in shorter horns.
 - Runes are N-gons with N bowls, from the circle (1) and crescent (2) to the heptagon (7). A polygon inside one of its own kind turns half a side, so nested triangles read as halves of a hexagram rather than as a seal's double line.
-- Rarity shows in the shape: common polygons are plain, uncommon have shallow divots, rare are pointy stars. A circle is the sun: uncommon throws 8 short rays, rare 16 long and short. A crescent is the moon, an eighth lit when common, a sixteenth uncommon, a thirty-second rare, with a faint line round its unlit rest. The Sandbox sets any rune's rarity; it changes only the drawing for now. Archetype decks mark their enablers uncommon and payoffs rare.
+- Rarity shows in the shape: common polygons are plain, uncommon have shallow divots, rare are pointy stars. A circle is the sun: uncommon throws 8 short rays, rare 16 long and short. A crescent is the moon by phase, where a 1/4 moon is half the disc: a 1/8 moon when common (half its radius thick), 1/16 uncommon, 1/32 rare, with a faint line round its unlit rest. The Sandbox sets any rune's rarity; it changes only the drawing for now. Archetype decks mark their enablers uncommon and payoffs rare.
 
 ![Runes by rarity](docs/rune-rarity.png)
 

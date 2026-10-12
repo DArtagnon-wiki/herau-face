@@ -72,9 +72,9 @@ describe('rarity as stars', () => {
     expect(rays(bodyPath('circle', 10, 0, 0, 0, false, 'uncommon'))).toBe(8)
     expect(rays(bodyPath('circle', 10, 0, 0, 0, false, 'rare'))).toBe(16)
     expect(sunReach('rare')).toBeGreaterThan(sunReach('uncommon'))
-    // An eighth, a sixteenth and a thirty-second of the moon lit: a quarter, an eighth and a sixteenth of the radius thick.
-    expect(1 - moonDepth('common')).toBeCloseTo(0.25)
-    expect(1 - moonDepth('uncommon')).toBeCloseTo(0.125)
-    expect(1 - moonDepth('rare')).toBeCloseTo(0.0625)
+    // A 1/8, 1/16 and 1/32 moon, where a 1/4 moon is half the disc: half, a quarter and an eighth of the radius thick.
+    expect(1 - moonDepth('common')).toBeCloseTo(0.5)
+    expect(1 - moonDepth('uncommon')).toBeCloseTo(0.25)
+    expect(1 - moonDepth('rare')).toBeCloseTo(0.125)
   })
 })

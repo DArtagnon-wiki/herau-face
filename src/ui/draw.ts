@@ -54,16 +54,19 @@ function raysPath(r: number, cx: number, cy: number, rotDeg: number, rarity: Rar
   return d
 }
 
-/** How much of the moon a crescent shows lit: an eighth when common, a sixteenth when uncommon, a thirty-second when rare. */
-const MOON_LIT: Record<Rarity, number> = { common: 1 / 8, uncommon: 1 / 16, rare: 1 / 32 }
+/**
+ * A crescent's moon: a 1/8 moon when common, 1/16 uncommon, 1/32 rare. A 1/4
+ * (quarter) moon is half the disc, as thick as its radius, so a 1/8 moon is
+ * half the radius thick, a 1/16 a quarter, a 1/32 an eighth.
+ */
+const MOON_PHASE: Record<Rarity, number> = { common: 1 / 8, uncommon: 1 / 16, rare: 1 / 32 }
 
 /**
  * How far below the horns a crescent's terminator dips, as a share of the
  * radius. The lit limb runs round the bottom half and the terminator is a
- * half-ellipse, so the crescent is 1 − depth thick at its middle: a quarter of
- * the radius for a common (eighth) moon.
+ * half-ellipse, so the crescent is 1 − depth thick at its middle.
  */
-export const moonDepth = (rarity: Rarity = 'common') => 1 - 2 * MOON_LIT[rarity]
+export const moonDepth = (rarity: Rarity = 'common') => 1 - 4 * MOON_PHASE[rarity]
 
 /** Whether a body is a polygon: a triangle or more sides. */
 export const isGon = (body: Body) => SIDES[body] >= 3
