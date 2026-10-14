@@ -1,7 +1,7 @@
 import { normalize } from './alchemy'
 import type { Target } from './commission'
 import { makeRune, reforge, type Forge, type RuneSpec } from './deck'
-import type { GameState } from './game'
+import { allRunes, machinesOn, type GameState } from './game'
 import type { Pool, Rune } from './types'
 
 // Sandbox edits to a commission in progress. Each returns a new state; the
@@ -9,7 +9,17 @@ import type { Pool, Rune } from './types'
 
 const everywhere = (state: GameState, fn: (r: Rune) => Rune | null): GameState => {
   const map = (rs: Rune[]) => rs.map(fn).filter((r): r is Rune => r !== null)
-  return { ...state, hand: map(state.hand), draw: map(state.draw), discard: map(state.discard) }
+  // Table machines hold runes too: a machine whose anchor goes comes off the table, its other runes to the discard pile.
+  if (!machinesOn(state)) return { ...state, hand: map(state.hand), draw: map(state.draw), discard: map(state.discard) }
+  const loose: Rune[] = []
+  const table = state.table.flatMap((t) => {
+    const anchor = fn(t.sigil.anchor)
+    const joins = t.sigil.joins.map((j) => ({ ...j, rune: fn(j.rune) })).filter((j): j is typeof j & { rune: Rune } => j.rune !== null)
+    if (anchor) return [{ ...t, sigil: { anchor, joins } }]
+    loose.push(...joins.map((j) => j.rune))
+    return []
+  })
+  return { ...state, hand: map(state.hand), draw: map(state.draw), discard: [...map(state.discard), ...loose], table }
 }
 
 /** Change body or mote numbers; every rune in the deck takes them at once. */
@@ -17,7 +27,7 @@ export function setForge(state: GameState, forge: Forge): GameState {
   return { ...everywhere(state, (r) => reforge(r, forge)), forge }
 }
 
-const nextId = (state: GameState) => Math.max(0, ...[...state.hand, ...state.draw, ...state.discard].map((r) => r.id)) + 1
+const nextId = (state: GameState) => Math.max(0, ...allRunes(state).map((r) => r.id)) + 1
 
 /** Make a new rune and put it in the hand. It joins the deck from then on. */
 export function addRune(state: GameState, spec: RuneSpec): GameState {
@@ -35,7 +45,7 @@ export function removeRune(state: GameState, id: number): GameState {
 
 /** The whole deck as specs, for starting the next commission with the same runes. */
 export function deckSpecs(state: GameState): RuneSpec[] {
-  return [...state.hand, ...state.draw, ...state.discard]
+  return allRunes(state)
     .filter((r) => !r.junk)
     .sort((a, b) => a.id - b.id)
     .map((r) => ({ body: r.body, motes: r.motes.slice(), ...(r.rarity !== 'common' ? { rarity: r.rarity } : {}), ...(r.ownPower !== undefined ? { power: r.ownPower } : {}) }))

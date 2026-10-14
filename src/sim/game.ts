@@ -236,6 +236,15 @@ export function castsLeft(state: GameState): number {
 export const resistanceMult = (state: Pick<GameState, 'commission' | 'intent' | 'settings'>): number =>
   materialResistance(state.commission, state.settings.boss) * (state.intent.resistanceMult ?? 1)
 
+/** Every rune the commission holds: hand, piles, burned, and those standing in table machines. */
+export const allRunes = (state: Pick<GameState, 'hand' | 'draw' | 'discard' | 'burned' | 'table' | 'settings'>): Rune[] => [
+  ...state.hand,
+  ...state.draw,
+  ...state.discard,
+  ...state.burned,
+  ...(machinesOn(state) ? state.table.flatMap((t) => runesOf(t.sigil)) : []),
+]
+
 /** Whether cast sigils become table machines. */
 export const machinesOn = (state: Pick<GameState, 'settings'>): boolean => (state.settings.machines ?? 0) > 0
 
@@ -472,7 +481,7 @@ export function endTerm(state: GameState): GameState {
   // A commission finishes the moment the amalgam is in range, even when its own move put it there.
   if (e.finished) return { ...next, phase: 'won', seed: rng.state() }
   if (state.intent.junk) {
-    let id = Math.max(0, ...[...next.hand, ...next.draw, ...next.discard].map((r) => r.id))
+    let id = Math.max(0, ...allRunes(next).map((r) => r.id))
     const draw = next.draw.slice()
     for (let i = 0; i < state.intent.junk; i++) draw.splice(rng.int(0, draw.length), 0, makeRune(++id, { body: 'circle', motes: [], junk: true }, state.forge))
     next = { ...next, draw }

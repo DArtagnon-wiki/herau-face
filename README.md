@@ -62,6 +62,20 @@ When a commission ends, the end card draws its star: one point for every sigil c
 
 ![A level's star](docs/level-star.png)
 
+### Table machines (a Tuning switch)
+
+Tuning, Table: Machines turns the table into a few machines (2–4). A cast sigil keeps its runes and stays; each term a machine can fire once with no runes from hand. It gains an open link for every term it stands, so runes from hand can be added first. Taking one apart frees its place (not in a term it fired) and drops its runes into the discard pile. On the page, tap a machine to fire it or add to it; "Take apart" sits under the row.
+
+The point is shorter decisions: with 3 slots, the opening deck's decisions give 22 different results instead of 69, the best move takes 3.1 taps instead of 5, and the best move is usually firing a machine as it stands or adding one rune. Mud gets much easier (the opening deck pays a median of 2 in 3 terms instead of 12 in 6), but the late deck wins only 13% against the Mire: machines lock runes away and keep doing yesterday's job. Sending taken-apart runes back to hand wins the Mire 98% of the time, but then the player recomposes nearly every move. DESIGN.md has the numbers.
+
+```
+npm run simulate -- --equation --deck opening --machines 3            # table machines, 3 slots
+npm run simulate -- --equation --deck late --machines 3 --commission mire --apart hand
+npx tsx scripts/complexity.ts --deck opening --machines 3             # decision complexity with machines
+```
+
+Flags: `--growth N` (links a machine gains a term, 1), `--apart hand|discard` (where taken-apart runes go, discard), `--no-rebuild` (never take one apart).
+
 ### Sandbox
 
 The Sandbox panel changes the commission in progress, live (any mote, archetype motes included, can go in any bowl): the mud's starting composition (kg and purity per element, which resets the amalgam) and the target bands; each body's power and links (bowls are fixed, one per side); the reach and guard mote values; any rune's body and motes, wherever it is in the deck; new runes straight into the hand; removing runes; and discarding from hand to redraw, as often as you like (a run has no discards of its own). Restarting keeps every change, and "Restart with the standard deck" undoes them. "Decks along a run" loads the opening, mid-run or late-run deck, on the start screen too. The Tuning panel covers the rest: rules, combat, surplus Force, flare size, quintessence, hand size, and sigils a term.

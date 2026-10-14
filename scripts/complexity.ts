@@ -113,7 +113,7 @@ for (let g = 0; g < games; g++) {
           fire([{ kind: k, rune: s.hand[i] }])
           for (let j = i + 1; j < s.hand.length && open >= 2; j++) for (const k2 of KINDS) fire([{ kind: k, rune: s.hand[i] }, { kind: k2, rune: s.hand[j] }])
         }
-      if (rebuild) all.push(...castOptions(dismantleMachine(s, e.id), 'rebuild', { apart: e.id }, 1))
+      if (rebuild) for (const o of castOptions(dismantleMachine(s, e.id), 'rebuild', { apart: e.id }, 1)) all.push(o)
     }
     if (!all.length) { s = endTerm(s); continue }
     const top = all.reduce((a, b) => (b.v > a.v ? b : a))

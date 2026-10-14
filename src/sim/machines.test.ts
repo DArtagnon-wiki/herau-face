@@ -3,6 +3,8 @@ import { DEFAULT_EQUATION } from './equation'
 import { DEFAULT_SETTINGS, cast, dismantleMachine, endTerm, extendMachine, fireMachine, fireReason, invalidReason, machineOpen, newGame, previewCast, type GameState } from './game'
 import { makeRune, mote, DEFAULT_FORGE, elementMote, LINK_MOTE } from './deck'
 import type { Rune, Sigil } from './types'
+import { deckSpecs } from './sandbox'
+import { allRunes } from './game'
 
 const settings = { ...DEFAULT_SETTINGS, equation: DEFAULT_EQUATION, machines: 2, machineApart: 'hand' as const }
 
@@ -106,5 +108,15 @@ describe('table machines', () => {
     const next = cast(s, waterToEarth(s))
     expect(next.discard).toHaveLength(2)
     expect(next.table[0].fired).toBeUndefined()
+  })
+
+  it('counts runes in machines as part of the deck: fresh ids skip them, and a restart keeps them', () => {
+    let s = newGame(settings, 3)
+    s = cast(s, waterToEarth(s))
+    s = { ...s, intent: { ...s.intent, junk: 2 } }
+    const next = endTerm(s)
+    const ids = allRunes(next).map((r) => r.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(deckSpecs(s)).toHaveLength(allRunes(s).length)
   })
 })

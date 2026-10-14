@@ -157,13 +157,61 @@ Links therefore compound, and the expected play is one or two high-link sigils a
 
 ## The table
 
-Sigils don't vanish after a term. Each one takes effect, then joins the table around the amalgam, and the table is for show only.
+Sigils don't vanish after a term. Each one takes effect, then joins the table around the amalgam, and the table is for show only. Table machines, a Tuning switch, give it a job again: see Turn complexity.
 
 - **Balance was dropped.** Runes on the table were tallied Earth against Air and Water against Fire, and imbalance added strain each term. Its only decision was whether to play a useless rune for its balance; the point is to play every rune, so balance, strain and the slump that targeted it are gone.
 - **Seeing the runes on the table is fun,** so the table stays as the commission's growing diagram.
 - **Each level ends with its star.** The end card draws a star with one point for every sigil cast, holding that sigil, and between the points the amalgam's composition after it: earth innermost, then water, air and fire, paler where less pure. The level reads clockwise from twelve o'clock, the start just right of the top and the finish just left of it; dotted rings mark the earth band and ticks mark where terms ended.
 
 ![The star of a mud commission: seven points holding seven sigils, the composition between them turning from half water to mostly earth, read clockwise](docs/level-star.png)
+
+## Turn complexity (measured)
+
+Turns felt thinky. `scripts/complexity.ts` lists every legal sigil at each decision the simulated player faces, scores each one, and counts how many give different results and how many come close to the best. Balatro and Slay the Spire were modelled from their opening rules and scored the same way, 2,000 hands each.
+
+| Hand | Legal plays | Different results | Near-best results | Score it in your head? |
+| --- | --- | --- | --- | --- |
+| Balatro, ante 1, no jokers | 218 (plus 218 discards) | 8 | 1 | Yes: read the poker hand |
+| Slay the Spire, Ironclad turn 1 | 50 play orders | 9 | 1 | Yes: add damage and block |
+| Opening deck (hand 6) | 906 sigils | 69 | 2 | No: compose it and read the preview |
+| Mid-run deck (hand 7) | 4,217 | 229 | 2 (mean 4.6) | No |
+| Late-run deck (hand 8) | about 186,000 | about 2,200 | 9 (mean 21) | No |
+
+Near-best results are those within a tenth of the gap between the best result and the median one.
+
+- **The gap is in different results, not legal plays.** Poker ranking collapses Balatro's 218 plays to about 8 results with one obvious winner.
+- **A sigil can't be scored in your head.** The take has an exponent, and resistance doubles for every quality flipped, so the only way to know is to compose and read the preview. A turn is trial-and-error search.
+- **Most turns re-solve a solved problem.** Water → earth is a third of all casts, and making earth about 60%, yet the same exact sigil is cast twice in a commission only 4% of the time (1% mid-run). Each hand rebuilds it from different runes.
+
+### Table machines (prototyped, a Tuning switch)
+
+Composition is the cool factor, so the fix keeps it and makes it last. Under Tuning, Table: Machines:
+
+- **A cast sigil stays** on the table as a machine, up to 2–4 of them.
+- **Each term a machine can fire once,** with no runes from hand.
+- **It gains an open link for every term it stands,** so runes from hand can be added before it fires.
+- **Taking one apart frees its place,** though not in a term it fired. Its runes go to the discard pile.
+
+Measured with 3 slots:
+
+| | Today | Machines |
+| --- | --- | --- |
+| Opening deck: different results per decision | 69 | 22 |
+| Opening deck: near-best results | 2 | 1 |
+| Opening deck: taps for the best move | 5.0 | 3.1 |
+| Mid-run deck: different results | 229 | 19 |
+| Late-run deck: different results | about 2,200 | about 220 |
+| Mud, opening deck: spent (median), terms | 12, 6 | 2, 3 (92% won) |
+| Mud, mid-run deck | 4, 3 | 4, 3 (97% won) |
+| Mud, late-run deck | 0, 2 | 0, 2 (93% won) |
+| The Mire, late-run deck: won | 67% | 13% |
+
+- **Most moves get small.** At the opening, the best move is firing a machine as it stands 40% of the time and adding a rune, then firing, 27% of the time.
+- **Mud gets much easier.** Its pressure would need retuning for machines.
+- **The Mire breaks.** A machine locks runes away and keeps doing yesterday's job. The player tucked its big water hexagon into a small air machine and couldn't get it back when water was what it needed, while its water → earth machine pushed earth past 85%. Taken apart, a machine's runes wait in the discard pile, a long wait in a big late deck.
+- **Variants.** Without growth, a cast fills the anchor's links, so a machine can never be added to. If a machine is never taken apart, the table fills in the first term and stalls: the opening deck wins 67%. If taken-apart runes go straight back to hand, the Mire is won 98% of the time (median 26, in 3 terms), but the player takes a machine apart and recomposes on nearly every move, as thinky as today.
+- **The stalls against mud come from the simulated player.** It judges a machine by its next firing only, so it keeps firing one for its Ward even while that machine pushes fire past its band.
+- **Next to try:** a retune move smaller than taking apart, taking one rune off a machine and back to hand, so a turn is fire, add one rune or remove one. And a simulated player that values a machine for every term it will fire, not just the next.
 
 ## Classes
 
