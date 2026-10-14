@@ -52,10 +52,15 @@ const med = (xs: number[]) => { const a = xs.filter((x) => !Number.isNaN(x)).sor
 const mean = (xs: number[]) => { const a = xs.filter((x) => !Number.isNaN(x)); return a.reduce((p, q) => p + q, 0) / Math.max(1, a.length) }
 type Row = { raw: number; distinct: number; outcomes: number; useful: number; near1: number; near5: number; nearSpread: number; joins: number; simpleLoss: number; taps: number }
 const rows: Row[] = []
+/** Per commission: how often a cast repeats an earlier one exactly, or repeats its route (anchor element → output, and whether it purifies). */
+const repeats = { casts: 0, exact: 0, route: 0 }
+const routeTotals = new Map<string, number>()
 const lateRaw: number[] = []
 
 for (let g = 0; g < games; g++) {
   let s = newGame(settings, 5000 + g, preset.setup())
+  const exactSeen = new Set<string>()
+  const routes = new Map<string, number>()
   for (let guard = 0; guard < 60 && s.phase === 'compose'; guard++) {
     if (!s.hand.length || castsLeft(s) <= 0) { s = endTerm(s); continue }
     const raw = rawCount(s.hand)
@@ -92,6 +97,14 @@ for (let g = 0; g < games; g++) {
       simpleLoss: top.v >= 10000 ? (simple.v >= 10000 ? 0 : NaN) : (top.v - simple.v) / 3,
       taps: 1 + 2 * top.sigil.joins.length + (sourcePools(top.sigil, s.pools).length > 1 ? 1 : 0),
     })
+    const p = previewCast(s, top.sigil, top.pool).cast.resolution
+    const route = `${top.sigil.anchor.affinity}>${p.target?.elemental ?? '-'}${p.mode === 'purify' ? '+' : ''}`
+    repeats.casts++
+    if (exactSeen.has(key(top.sigil))) repeats.exact++
+    if (routes.has(route)) repeats.route++
+    exactSeen.add(key(top.sigil))
+    routes.set(route, (routes.get(route) ?? 0) + 1)
+    routeTotals.set(route, (routeTotals.get(route) ?? 0) + 1)
     s = cast(s, top.sigil, top.pool)
   }
 }
@@ -102,4 +115,6 @@ if (rows.length) {
   console.log(`results within 1 quintessence of the best ${med(rows.map((r) => r.near1))} (mean ${mean(rows.map((r) => r.near1)).toFixed(1)}) · within 5 ${med(rows.map((r) => r.near5))} · within a tenth of the best-to-median gap ${med(rows.map((r) => r.nearSpread))} (mean ${mean(rows.map((r) => r.nearSpread)).toFixed(1)})`)
   console.log(`best sigil's joins: mean ${mean(rows.map((r) => r.joins)).toFixed(1)} · share with 2+ joins ${(100 * rows.filter((r) => r.joins >= 2).length / rows.length).toFixed(0)}% · loss if you only ever use ≤1 join: median ${med(rows.map((r) => r.simpleLoss)).toFixed(1)}, mean ${mean(rows.map((r) => r.simpleLoss)).toFixed(1)} quintessence · taps for the best ${mean(rows.map((r) => r.taps)).toFixed(1)}`)
 }
+if (repeats.casts) console.log(`repeats: ${(100 * repeats.exact / repeats.casts).toFixed(0)}% of casts repeat an earlier composition exactly, ${(100 * repeats.route / repeats.casts).toFixed(0)}% repeat an earlier route (same anchor element, output and purifying)`)
+if (routeTotals.size) console.log(`routes: ${[...routeTotals].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([r, n]) => `${r.replace('>-', ' (Ward only)').replace('>', '→').replace('+', ' purify')} ${(100 * n / repeats.casts).toFixed(0)}%`).join(' · ')}`)
 if (lateRaw.length) console.log(`hands too big to enumerate: ${lateRaw.length}, legal sigils median ${med(lateRaw)}`)
