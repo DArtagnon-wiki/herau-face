@@ -2,7 +2,6 @@
 // simulated player faces, how many distinct results they give, and how many
 // come close to the best. Run: npx tsx scripts/complexity.ts --deck opening|mid|late [--games N]
 
-import { totalKg } from '../src/sim/alchemy'
 import { miss } from '../src/sim/commission'
 import { cast, castsLeft, endTerm, newGame, previewCast, previewEnd, DEFAULT_SETTINGS, type EndOutcome, type GameState } from '../src/sim/game'
 import { canJoin } from '../src/sim/sigil'
