@@ -13,8 +13,14 @@ import {
   DEFAULT_SETTINGS,
   cast,
   castsLeft,
+  dismantleMachine,
   endTerm,
+  extendMachine,
+  fireMachine,
+  machineOpen,
+  machinesOn,
   newGame,
+  tableRoom,
   previewCast,
   previewEnd,
   termsUsed,
@@ -24,6 +30,7 @@ import {
   standardSetup,
 } from '../src/sim/game'
 import { candidatePools, canJoin } from '../src/sim/sigil'
+import type { TableEntry } from '../src/sim/table'
 import type { Grade, JoinKind, Rune, Sigil } from '../src/sim/types'
 import { ELEMENTALS, poolKey } from '../src/sim/alchemy'
 import { presetByKey } from '../src/sim/presets'
@@ -73,6 +80,12 @@ const settings: Settings = {
   if (ch) purity.chance = ch.length === 1 ? { earth: ch[0], water: ch[0], air: ch[0], fire: ch[0] } : { earth: ch[0], water: ch[1], air: ch[2], fire: ch[3] }
   if (Object.keys(purity).length) settings.purity = purity
 }
+/** --machines N: table machines, N slots. Cast sigils stay on the table and fire again once a term. */
+if (arg('--machines')) settings.machines = Number(arg('--machines'))
+/** --no-rebuild: with machines, never take one apart to cast something else. --growth N: links a machine gains a term (1). --apart hand|discard: where its runes go (discard). */
+const noRebuild = args.includes('--no-rebuild')
+if (arg('--growth')) settings.machineGrowth = Number(arg('--growth'))
+if (arg('--apart')) settings.machineApart = arg('--apart') as 'hand' | 'discard'
 if (args.includes('--equation')) {
   settings.equation = {
     base: Number(arg('--base') ?? DEFAULT_EQUATION.base),
@@ -214,11 +227,11 @@ function* sigils(hand: Rune[]): Generator<Sigil> {
 
 type Scored = { sigil: Sigil; poolKey?: string; score: number }
 
-function score(state: GameState, s: Sigil): Scored {
+function score(state: GameState, s: Sigil, tableId?: number): Scored {
   let best: Scored | null = null
   const keys = (state.settings.equation ? sourcePools : candidatePools)(s, state.pools).map(poolKey)
   for (const key of keys.length > 1 ? keys : [undefined]) {
-    const p = previewCast(state, s, key)
+    const p = previewCast(state, s, key, tableId)
     const v = p.cast.finished
       ? totalKg(p.cast.pools) >= farm
         ? 10000 + totalKg(p.cast.pools)
@@ -324,7 +337,7 @@ function rollout(state: GameState, first: Scored): number {
   if (first.score >= 10000) return first.score
   let s = cast(state, first.sigil, first.poolKey)
   let value = first.score
-  while (s.phase === 'compose' && s.hand.length && castsLeft(s) > 0) {
+  while (s.phase === 'compose' && s.hand.length && castsLeft(s) > 0 && tableRoom(s) > 0) {
     const next = beam(s, 4).best
     if (!next || next.score <= value + 0.01) break
     value = next.score
@@ -363,6 +376,52 @@ function bestCast(state: GameState): Scored | null {
   return best
 }
 
+type Join = { kind: JoinKind; rune: Rune }
+/** A move under table machines: cast a new sigil, fire a machine (perhaps adding runes first), or take one apart and cast anew. */
+type Action =
+  | { kind: 'cast'; sigil: Sigil; poolKey?: string; score: number }
+  | { kind: 'fire'; id: number; adds: Join[]; sigil: Sigil; poolKey?: string; score: number }
+  | { kind: 'rebuild'; id: number; sigil: Sigil; poolKey?: string; score: number }
+
+/** The best way to fire this machine: as it stands, or with one or two runes from hand joined first. */
+function bestFire(state: GameState, entry: TableEntry): Action {
+  const open = machineOpen(state, entry)
+  const hand = state.hand
+  let best: Action | null = null
+  const tryAdds = (adds: Join[]) => {
+    const sigil: Sigil = { anchor: entry.sigil.anchor, joins: [...entry.sigil.joins, ...adds] }
+    const x = score(state, sigil, entry.id)
+    if (!best || x.score > best.score) best = { kind: 'fire', id: entry.id, adds, sigil, poolKey: x.poolKey, score: x.score }
+  }
+  tryAdds([])
+  for (let i = 0; i < hand.length && open >= 1; i++) {
+    for (const k of KINDS) {
+      tryAdds([{ kind: k, rune: hand[i] }])
+      for (let j = i + 1; j < hand.length && open >= 2; j++) for (const k2 of KINDS) tryAdds([{ kind: k, rune: hand[i] }, { kind: k2, rune: hand[j] }])
+    }
+  }
+  return best!
+}
+
+function bestAction(state: GameState): Action | null {
+  let best: Action | null = null
+  const consider = (a: Action | null) => {
+    if (a && (!best || a.score > best.score)) best = a
+  }
+  if (tableRoom(state) > 0 && state.hand.length) {
+    const c = bestCast(state)
+    if (c) consider({ kind: 'cast', ...c })
+  }
+  for (const e of state.table) {
+    if (e.fired === state.term) continue
+    consider(bestFire(state, e))
+    if (noRebuild) continue
+    const c = bestCast(dismantleMachine(state, e.id))
+    if (c) consider({ kind: 'rebuild', id: e.id, sigil: c.sigil, poolKey: c.poolKey, score: c.score })
+  }
+  return best
+}
+
 function play(seed: number) {
   let s = newGame(settings, seed, { ...setup, start: setup.start.map((p) => ({ ...p })) })
   let wardOnly = 0
@@ -372,10 +431,39 @@ function play(seed: number) {
   let gathered = 0
   let moved = 0
   let movedByGreat = 0
+  const machine = { casts: 0, fires: 0, extended: 0, added: 0, rebuilds: 0 }
   let peak = totalKg(s.pools)
   for (let guard = 0; guard < 200 && s.phase === 'compose'; guard++) {
     peak = Math.max(peak, totalKg(s.pools))
     const endNow = evalEnd(s, previewEnd(s))
+    if (machinesOn(s)) {
+      const a = castsLeft(s) > 0 ? bestAction(s) : null
+      if (!a || a.score <= endNow + 0.01) {
+        s = endTerm(s)
+        continue
+      }
+      if (!a.sigil.joins.some((j) => j.kind === 'circumscribe' || j.kind === 'inscribe')) wardOnly++
+      casts++
+      if (a.kind === 'cast') {
+        machine.casts++
+        s = cast(s, a.sigil, a.poolKey)
+      } else if (a.kind === 'fire') {
+        machine.fires++
+        if (a.adds.length) {
+          machine.extended++
+          machine.added += a.adds.length
+          s = extendMachine(s, a.id, a.adds.map((j) => ({ kind: j.kind, runeId: j.rune.id })))
+        }
+        s = fireMachine(s, a.id, a.poolKey)
+      } else {
+        machine.rebuilds++
+        s = cast(dismantleMachine(s, a.id), a.sigil, a.poolKey)
+      }
+      const last = s.casts.at(-1) ?? s.history.at(-1)?.casts.at(-1)
+      if (last?.resolution.mode === 'purify') purified++
+      if (last && last.resolution.mode === 'transmute') moved += last.resolution.converted
+      continue
+    }
     const best = castsLeft(s) > 0 && s.hand.length ? bestCast(s) : null
     if (best && best.score > endNow + 0.01) {
       if (!best.sigil.joins.some((j) => j.kind === 'circumscribe' || j.kind === 'inscribe')) wardOnly++
@@ -393,11 +481,11 @@ function play(seed: number) {
     }
     s = endTerm(s)
   }
-  const all = [...s.hand, ...s.draw, ...s.discard, ...s.burned]
+  const all = [...s.hand, ...s.draw, ...s.discard, ...s.burned, ...s.table.flatMap((t) => [t.sigil.anchor, ...t.sigil.joins.map((j) => j.rune)])]
   const maxStacks = Math.max(0, ...all.map((r) => r.stacks))
   const absorbed = s.history.reduce((a, t) => a + t.absorbed, 0)
   const flares = s.history.reduce((a, t) => a + t.flare, 0)
-  return { state: s, wardOnly, purified, casts, returns, gathered, maxStacks, moved, movedByGreat, absorbed, flares, burned: s.burned.length, refined: refinedShare(s.pools), peak: Math.max(peak, totalKg(s.pools)) }
+  return { state: s, machine, wardOnly, purified, casts, returns, gathered, maxStacks, moved, movedByGreat, absorbed, flares, burned: s.burned.length, refined: refinedShare(s.pools), peak: Math.max(peak, totalKg(s.pools)) }
 }
 
 /** --trace N prints the first N commissions cast by cast. */
@@ -465,5 +553,9 @@ console.log(buckets.map(([label, f]) => `${label}: ${Math.round((100 * spent.fil
 console.log(
   `archetype signs: Ward absorbed ${Math.round((100 * runs.reduce((a, r) => a + r.absorbed, 0)) / Math.max(1, runs.reduce((a, r) => a + r.flares, 0)))}% of flares · returns ${f1(mean(runs.map((r) => r.returns)))} · biggest growth ${f1(mean(runs.map((r) => r.maxStacks)))} casts, moving ${Math.round((100 * runs.reduce((a, r) => a + r.movedByGreat, 0)) / Math.max(1, runs.reduce((a, r) => a + r.moved, 0)))}% of the kilos · burned ${f1(mean(runs.map((r) => r.burned)))} · gathered ${f1(mean(runs.map((r) => r.gathered)))} kg · medium or purer at the end ${Math.round(100 * mean(runs.map((r) => r.refined)))}%${setup.catalysts?.length ? ` · catalysts ${setup.catalysts.join(', ')}` : ''}`,
 )
+if (settings.machines) {
+  const per = (k: keyof (typeof runs)[number]['machine']) => f1(mean(runs.map((r) => r.machine[k])))
+  console.log(`machines (${settings.machines} slots, +${settings.machineGrowth ?? 1} link a term, taken apart to ${settings.machineApart ?? 'discard'}${noRebuild ? ', never rebuilt' : ''}): a commission casts ${per('casts')} new sigils, fires machines ${per('fires')} times (${per('extended')} of them after adding ${per('added')} runes), rebuilds ${per('rebuilds')}`)
+}
 console.log(`sigils a term ${f1(mean(runs.map((r) => r.casts / Math.max(1, termsUsed(r.state)))))} · defence-only sigils ${f1(mean(runs.map((r) => r.wardOnly)))} · purifying ${f1(mean(runs.map((r) => r.purified)))}`)
 

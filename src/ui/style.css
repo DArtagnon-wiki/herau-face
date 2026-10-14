@@ -222,6 +222,29 @@ button.wide { width: 100%; }
 .card.in-rune .card-sides { color: var(--gilt-bright); }
 .card.marked { border-color: var(--warn); background: rgba(255, 79, 114, 0.14); }
 
+/* Table machines: sigils that stay and fire again each term. */
+.machines { display: grid; gap: 8px; }
+.machine-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.machine {
+  display: grid; justify-items: center; gap: 2px;
+  padding: 8px 4px 7px;
+  border-color: rgba(217, 184, 114, 0.4);
+  background: rgba(20, 12, 40, 0.7);
+}
+.machine .rune-svg { width: 76px; height: 76px; }
+.machine .m-route { font-size: 11px; letter-spacing: 0.08em; color: var(--ink); text-align: center; }
+.machine .m-state { font-family: var(--font-text); font-size: 13px; font-weight: 600; color: var(--ink-faint); }
+.machine.is-on { border-color: var(--gilt-bright); background: rgba(217, 184, 114, 0.18); }
+.machine.is-on .m-state { color: var(--gilt-bright); }
+.machine.fired:not(.is-on) { opacity: 0.6; }
+.machine.empty {
+  display: grid; place-items: center; min-height: 118px; padding: 8px;
+  border: 1px dashed rgba(217, 184, 114, 0.3); border-radius: 12px;
+  font-family: var(--font-text); font-size: 13px; color: var(--ink-faint); text-align: center;
+}
+.m-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0; }
+.m-tools button { padding: 8px 14px; }
+
 .actions {
   position: sticky;
   bottom: 0;

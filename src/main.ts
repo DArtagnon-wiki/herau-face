@@ -3,9 +3,10 @@ import { GRADE_NAMES, poolKey, totalKg } from './sim/alchemy'
 import { COMMISSIONS, FINE_CLAY_PURITY, actChances, chancesFor, cloneTarget, combatOf, effectsFor, elementOdds, constrained, gradeShare, inBand, shares, substanceName, within, type CommissionKey, type Range } from './sim/commission'
 import { ARCHETYPE_MOTES, BODY_LIST, BODY_NAMES, DEFAULT_FORGE, RARITIES, RARITY_NAMES, SIDES, GEMS, MOTE_OPTIONS, buildDeck, cloneForge, makeRune, mote, moteEffect, moteFromKey, moteKey, moteName, type Forge, type RuneSpec } from './sim/deck'
 import { addRune, deckSpecs, editRune, findRune, removeRune, setComposition, setForge, setTarget } from './sim/sandbox'
-import { DEFAULT_SETTINGS, autoBurn, burnsOf, resistanceMult, cast, castsLeft, discardRunes, endTerm, invalidReason, newGame, payment, powerBonus, previewCast, previewEnd, standardSetup, termsUsed, type CastOutcome, type CastPreview, type EndOutcome, type GameState, type Settings, type Setup, type TermOutcome } from './sim/game'
+import { DEFAULT_SETTINGS, autoBurn, burnsOf, resistanceMult, cast, castsLeft, discardRunes, dismantleMachine, dismantleReason, endTerm, extendMachine, fireMachine, fireReason, invalidReason, machineOpen, machinesOn, newGame, payment, powerBonus, previewCast, previewEnd, standardSetup, termsUsed, type CastOutcome, type CastPreview, type EndOutcome, type GameState, type Settings, type Setup, type TermOutcome } from './sim/game'
 import { REACH_PER_POWER, WARD_PER_POWER, candidatePools, canJoin, openLinks, resolve, type Resolution } from './sim/sigil'
 import type { Body, Catalyst, Elemental, Grade, JoinKind, Pool, Rarity, Rune, Sigil } from './sim/types'
+import type { TableEntry } from './sim/table'
 import { AFFINITY_VAR, amalgamMarkup, joinSketch, moteColor, runeSvg, sigilSvg, starSvg, vesselSvg, type StarStep } from './ui/draw'
 import { sound } from './ui/sound'
 import { animate, easeOut, lerpPools } from './ui/motion'
@@ -28,6 +29,8 @@ interface UI {
   draft: RuneSpec
   seed: number
   anchorId: number | null
+  /** Under table machines: the machine being fired or added to, instead of an anchor from hand. */
+  machineId: number | null
   joins: { kind: JoinKind; id: number }[]
   mode: JoinKind
   poolKey?: string
@@ -75,6 +78,7 @@ const ui: UI = {
   settings: { ...DEFAULT_SETTINGS, equation: { ...DEFAULT_EQUATION } },
   seed: 0,
   anchorId: null,
+  machineId: null,
   joins: [],
   mode: 'circumscribe',
   discarding: false,
@@ -171,6 +175,7 @@ function dealFx() {
 
 function resetComposer() {
   ui.anchorId = null
+  ui.machineId = null
   ui.joins = []
   ui.mode = 'circumscribe'
   ui.poolKey = undefined
@@ -185,7 +190,28 @@ function runeById(id: number): Rune | undefined {
   return ui.game?.hand.find((r) => r.id === id)
 }
 
+/** The table machine being worked, if one is selected. */
+function machineEntry(): TableEntry | undefined {
+  return ui.machineId !== null ? ui.game?.table.find((e) => e.id === ui.machineId) : undefined
+}
+
+/** Open links left in what is being composed. A machine gains links while it stands. */
+function roomLeft(sigil: Sigil): number {
+  const m = machineEntry()
+  return m && ui.game ? machineOpen(ui.game, m) - ui.joins.length : openLinks(sigil)
+}
+
+/** Why the cast button can't go, or null. A machine fires (with any runes added), or only takes runes once it has fired this term. */
+function actionReason(g: GameState, sigil: Sigil | null): string | null {
+  if (!sigil) return 'Choose an anchor.'
+  const m = machineEntry()
+  if (m) return m.fired === g.term ? (ui.joins.length ? null : 'This machine has fired this term.') : fireReason(g, m.id)
+  return invalidReason(g, sigil)
+}
+
 function currentSigil(): Sigil | null {
+  const m = machineEntry()
+  if (m) return { anchor: m.sigil.anchor, joins: [...m.sigil.joins, ...ui.joins.map((j) => ({ kind: j.kind, rune: runeById(j.id)! })).filter((j) => j.rune)] }
   const anchor = ui.anchorId !== null ? runeById(ui.anchorId) : undefined
   if (!anchor) return null
   return {
@@ -384,7 +410,11 @@ function startView(): string {
           : `<p><b>Reach × Force.</b> Reach is how many kilos the sigil grabs; Force is how hard it pushes. Each change needs some Force (impure water to earth needs 5), and what converts is Reach × Force ÷ that need. They multiply, so give each new rune to whichever total is smaller.</p>`
       }
       <p><b>Purity.</b> Every element is impure, medium, pure or perfect. Purer elements resist change more, and when they stir in combat they do less harm: pure ones even lend you Ward. Anything a sigil transmutes comes out impure, so working the amalgam stirs it up. Every runepath step that doesn’t change element purifies, inscribed or circumscribed: repeat the element the path is at, or add a neutral rune (one with no element). Each is one grade up at one more step of resistance. Water → earth → earth makes medium earth, and so does water → earth inside a neutral ring. Purifying before a change of element is wiped out by it, so it costs nothing.</p>
-      <p class="fine">Cast sigils stay on the table around the amalgam, for show.</p>
+      ${
+        ui.settings.machines
+          ? `<p><b>Table machines.</b> A sigil you cast stays on the table as a machine, up to ${ui.settings.machines}. Each term, tap a machine to fire it again, with no runes from hand. While it has open links you can add runes from hand first; it gains a link for every term it stands. Take a machine apart to free its place (not in a term it fired): its runes go to the discard pile.</p>`
+          : `<p class="fine">Cast sigils stay on the table around the amalgam, for show. Tuning can turn them into machines that fire again each term.</p>`
+      }
     </section>
     ${tuningView()}
   </main>`
@@ -445,6 +475,7 @@ function tuningView(): string {
       <label>Flares on other moves <select id="tune-debuff">${[0, 2, 4, 6].map((v) => opt(v, s.debuffFlare ?? 0, v ? `${v}–${v + 2}` : 'none')).join('')}</select></label>
       <label>Quintessence <select id="tune-stock">${opt(60, s.stock)}${opt(100, s.stock)}${opt(140, s.stock)}</select></label>
       <label>Hand size <select id="tune-hand">${[4, 5, 6, 7, 8, 9, 10].map((v) => opt(v, s.handSize)).join('')}</select></label>
+      <label>Table <select id="tune-machines">${opt(0, s.machines ?? 0, 'For show')}${[2, 3, 4].map((v) => opt(v, s.machines ?? 0, `Machines, ${v}`)).join('')}</select></label>
       <label>Sigils a term <select id="tune-casts">${opt(1, s.castsPerTerm)}${opt(2, s.castsPerTerm)}${opt(3, s.castsPerTerm)}${opt(0, s.castsPerTerm, 'Any number')}</select></label>
     </div>
     <p class="fine">${s.equation ? 'The equation: kilos = neutral take × (reach up ÷ reach down)^ln(1 + power ÷ resistance), output × each ring ÷ each inscribe.' : 'Unticking surplus Force uses the design doc’s formula, where Force past the requirement does nothing.'} Changing the rules takes effect on restart. ${ui.game ? `Seed ${ui.seed}.` : ''}</p>
@@ -552,7 +583,17 @@ function poolsView(g: GameState, sigil: Sigil | null, selected?: string): string
 function composerView(g: GameState, sigil: Sigil | null, preview: CastPreview | null): string {
   const anchor = sigil?.anchor
   const used = sigil?.joins.length ?? 0
-  let stats = `<p class="hint">${ui.discarding ? 'Tap the runes to discard, then confirm.' : 'Tap a rune in your hand to make it the anchor. Then tap another to choose how it joins.'}</p>`
+  const m = machineEntry()
+  let stats = `<p class="hint">${ui.discarding ? 'Tap the runes to discard, then confirm.' : `Tap a rune in your hand to make it the anchor${machinesOn(g) ? ', or a machine on the table to fire it or add to it' : ''}. Then tap another to choose how it joins.`}</p>`
+  if (sigil && !preview && !ui.discarding) {
+    const why =
+      m && m.fired === g.term
+        ? ui.joins.length
+          ? 'These runes join the machine, and it fires with them from next term.'
+          : 'This machine has fired this term. Add runes now and it fires with them next term.'
+        : actionReason(g, sigil)
+    if (why) stats = `<p class="note">${esc(why)}</p>`
+  }
   if (sigil && preview && g.settings.equation) {
     stats = equationStats(g, sigil, preview)
   } else if (sigil && preview) {
@@ -592,10 +633,46 @@ function composerView(g: GameState, sigil: Sigil | null, preview: CastPreview | 
   <section class="composer panel">
     ${castList ? `<div class="this-term"><p class="label">This term${Number.isFinite(left) ? ` · ${left} sigil${left === 1 ? '' : 's'} left` : ''}</p>${castList}</div>` : ''}
     <div class="composer-top">
-      <div class="rune-frame">${sigilSvg(sigil)}${anchor ? `<span class="capacity num">${used} of ${linksWord(anchor.links)} used</span>` : ''}</div>
+      <div class="rune-frame">${sigilSvg(sigil)}${m ? `<span class="capacity num">${ui.joins.length} added · ${linksWord(Math.max(0, roomLeft(sigil!)))} open</span>` : anchor ? `<span class="capacity num">${used} of ${linksWord(anchor.links)} used</span>` : ''}</div>
       <div class="stats">${stats}</div>
     </div>
     ${ui.flash ? `<p class="flash">${esc(ui.flash)}</p>` : ''}
+  </section>`
+}
+
+/** What a machine does, in a few words: its route, or that it only purifies or wards. */
+function machineRoute(sigil: Sigil): string {
+  const a = sigil.anchor.affinity
+  if (a === 'none') return 'Ward'
+  const path = runepath(sigil)
+  if (!path) return `${ELEMENT_NAME[a]} · Ward`
+  return path.flips > 0 ? `${ELEMENT_NAME[a]} → ${ELEMENT_NAME[path.seal.to]}` : `${ELEMENT_NAME[a]} · purify`
+}
+
+/** Under table machines: the machines standing on the table, to fire, add to or take apart. */
+function machinesView(g: GameState): string {
+  if (!machinesOn(g)) return ''
+  const slots = g.settings.machines!
+  const tiles = g.table.map((e) => {
+    const on = ui.machineId === e.id
+    const fired = e.fired === g.term
+    const open = machineOpen(g, e)
+    return `<button class="machine ${on ? 'is-on' : ''} ${fired ? 'fired' : ''}" data-act="machine" data-id="${e.id}" aria-pressed="${on}" aria-label="Machine: ${machineRoute(e.sigil)}, ${fired ? 'fired this term' : 'ready'}${open > 0 ? `, ${linksWord(open)} open` : ''}">
+      ${sigilSvg(e.sigil, 76)}
+      <span class="m-route">${machineRoute(e.sigil)}</span>
+      <span class="m-state">${fired ? 'Fired' : 'Ready'}${open > 0 ? ` · ${open} open` : ''}</span>
+    </button>`
+  })
+  for (let i = g.table.length; i < slots; i++) tiles.push(`<div class="machine empty"><span>Empty: cast a sigil to build one</span></div>`)
+  const m = machineEntry()
+  const why = m ? dismantleReason(g, m.id) : null
+  const tools = m
+    ? `<p class="m-tools"><button data-act="machine-apart" ${why ? 'disabled' : ''}>Take apart</button> <span class="fine">${why ?? (g.settings.machineApart === 'hand' ? 'Its runes go back to your hand.' : 'Its runes go to the discard pile.')}</span></p>`
+    : ''
+  return `<section class="machines panel" aria-label="Table machines">
+    <p class="label">Table · ${g.table.length} of ${slots} machines</p>
+    <div class="machine-row">${tiles.join('')}</div>
+    ${tools}
   </section>`
 }
 
@@ -731,7 +808,7 @@ function cardHint(r: Rune): string {
   const own = abilities(r)
   const sigil = currentSigil()
   if (ui.discarding || !sigil) return own.join(', ') || BODY_NAMES[r.body]
-  if (!canJoin(sigil, r)) return 'No open link'
+  if (roomLeft(sigil) <= 0) return 'No open link'
   return 'Tap to join'
 }
 
@@ -860,7 +937,7 @@ function handView(g: GameState): string {
       .map((h) => {
         const role = roleOf(h.id)
         const marked = ui.marked.has(h.id)
-        const blocked = !role && !ui.discarding && ui.anchorId !== null && !canJoin(currentSigil()!, h)
+        const blocked = !role && !ui.discarding && (ui.anchorId !== null || ui.machineId !== null) && roomLeft(currentSigil()!) <= 0
         const dealt = ui.fx?.dealt?.indexOf(h.id) ?? -1
         return `<button class="card ${role ? 'in-rune' : ''} ${marked ? 'marked' : ''} ${blocked ? 'blocked' : ''} ${dealt >= 0 ? 'dealt' : ''}" data-act="card" data-id="${h.id}" style="--c:${AFFINITY_VAR[h.affinity]};--d:${Math.max(0, dealt)}" aria-label="${h.rarity !== 'common' ? RARITY_NAMES[h.rarity] + ' ' : ''}${ELEMENT_NAME[h.affinity]} ${BODY_NAMES[h.body].toLowerCase()}, power ${h.power}, ${linksWord(h.links)}${role ? ', ' + role : ''}">
           <span class="card-value num">${h.power}</span>
@@ -881,8 +958,9 @@ function actionsView(g: GameState, sigil: Sigil | null, preview: CastPreview | n
       <button class="primary" data-act="discard-confirm" ${ui.marked.size ? '' : 'disabled'}>Discard ${ui.marked.size || ''} and redraw</button>
     </div>`
   }
-  const invalid = sigil ? invalidReason(g, sigil) : 'Choose an anchor.'
-  const castLabel = preview?.cast.finished ? 'Cast · finish' : 'Cast'
+  const invalid = actionReason(g, sigil)
+  const m = machineEntry()
+  const castLabel = (m ? (m.fired === g.term ? 'Add to machine' : ui.joins.length ? 'Add and fire' : 'Fire') : 'Cast') + (preview?.cast.finished ? ' · finish' : '')
   return `<div class="actions main">
     <button data-act="clear" ${sigil ? '' : 'disabled'}>Clear</button>
     <button class="primary" data-act="cast" ${invalid ? 'disabled' : ''}>${castLabel}</button>
@@ -1179,7 +1257,9 @@ function historyView(g: GameState): string {
 
 function gameView(g: GameState): string {
   const sigil = currentSigil()
-  const preview = sigil && g.phase === 'compose' && !ui.discarding && !invalidReason(g, sigil) ? previewCast(g, sigil, ui.poolKey) : null
+  const m = machineEntry()
+  const firing = !m || m.fired !== g.term
+  const preview = sigil && g.phase === 'compose' && !ui.discarding && firing && !actionReason(g, sigil) ? previewCast(g, sigil, ui.poolKey, m?.id) : null
   const end = previewEnd(g)
   const selected = preview?.cast.resolution.source ? poolKey(preview.cast.resolution.source) : undefined
   const share = shares(g.pools).earth
@@ -1218,6 +1298,7 @@ function gameView(g: GameState): string {
 
     ${lastTermView(g)}
     ${composerView(g, sigil, preview)}
+    ${machinesView(g)}
     ${handView(g)}
     ${actionsView(g, sigil, preview, end)}
     ${sandboxView(g)}
@@ -1284,6 +1365,16 @@ function tapCard(id: number, rect?: DOMRect) {
     return
   }
   const rune = g.hand.find((h) => h.id === id)!
+  if (ui.machineId !== null) {
+    const sigil = currentSigil()
+    if (!sigil) return resetComposer()
+    if (roomLeft(sigil) <= 0) {
+      ui.flash = 'This machine has no open link. It gains one for each term it stands on the table.'
+      return
+    }
+    ui.radial = { id: rune.id, x: rect ? rect.left + rect.width / 2 : window.innerWidth / 2, y: rect ? rect.top + rect.height / 2 : window.innerHeight / 2 }
+    return
+  }
   if (ui.anchorId === null) {
     ui.anchorId = id
     ui.poolKey = undefined
@@ -1312,6 +1403,7 @@ function readTuning() {
   s.stock = n('tune-stock', s.stock)
   s.handSize = n('tune-hand', s.handSize)
   s.castsPerTerm = n('tune-casts', s.castsPerTerm)
+  s.machines = n('tune-machines', s.machines ?? 0)
   s.flareRise = n('tune-rise', s.flareRise ?? 0)
   s.debuffFlare = n('tune-debuff', s.debuffFlare ?? 0)
   const combat = val('tune-combat')
@@ -1443,8 +1535,36 @@ root.addEventListener('click', (e) => {
         ui.fx = { dealt }
       } else resetComposer()
       break
+    case 'machine': {
+      const id = Number(el.dataset.id)
+      const was = ui.machineId
+      resetComposer()
+      if (was !== id) ui.machineId = id
+      break
+    }
+    case 'machine-apart':
+      if (g && ui.machineId !== null && !dismantleReason(g, ui.machineId)) {
+        const n = 1 + (machineEntry()?.sigil.joins.length ?? 0)
+        ui.game = dismantleMachine(g, ui.machineId)
+        sound.discard(n)
+        resetComposer()
+      }
+      break
     case 'cast': {
       const sigil = currentSigil()
+      const m = machineEntry()
+      if (g && sigil && m && !actionReason(g, sigil)) {
+        let next = ui.joins.length ? extendMachine(g, m.id, ui.joins.map((j) => ({ kind: j.kind, runeId: j.id }))) : g
+        if (m.fired !== g.term) next = fireMachine(next, m.id, ui.poolKey, burnsOf(sigil) > 0 ? { burn: burnChoice(g, sigil) } : {})
+        ui.game = next
+        resetComposer()
+        if (next.casts.length > g.casts.length) {
+          sound.cast(sigil, next.casts.at(-1)!.resolution)
+          if (next.phase === 'won') sound.win()
+          ui.fx = { freshId: m.id, from: g.pools, to: next.pools, dealt: newIn(g, next), ending: next.phase !== 'compose' }
+        }
+        break
+      }
       if (g && sigil && !invalidReason(g, sigil)) {
         const next = cast(g, sigil, ui.poolKey, burnsOf(sigil) > 0 ? { burn: burnChoice(g, sigil) } : {})
         ui.game = next

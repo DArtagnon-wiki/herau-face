@@ -5,7 +5,7 @@ import { PELICAN_WARD, catalystPower, effectiveSigil } from './catalysts'
 import { makeRng, type Rng } from './rng'
 import { canJoin, openLinks, resolve, runesOf, type Resolution } from './sigil'
 import type { TableEntry } from './table'
-import type { Catalyst, Pool, Rune, Sigil } from './types'
+import type { Catalyst, JoinKind, Pool, Rune, Sigil } from './types'
 import { resolveEquation, type Equation } from './equation'
 
 export interface Settings {
@@ -33,6 +33,16 @@ export interface Settings {
   equation?: Equation | null
   /** Overrides for a boss's pressure (see MIRE_TUNING). */
   boss?: Partial<BossTuning>
+  /**
+   * Table machines: cast sigils stay on the table, up to this many, keep their
+   * runes, and fire again once a term. 0 or unset: the table is for show and
+   * cast runes go to the discard pile.
+   */
+  machines?: number
+  /** Links a machine gains for every term it has stood on the table (1 unless set). */
+  machineGrowth?: number
+  /** Where a machine's runes go when it is taken apart: the discard pile (default) or straight back to hand. */
+  machineApart?: 'discard' | 'hand'
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -226,10 +236,21 @@ export function castsLeft(state: GameState): number {
 export const resistanceMult = (state: Pick<GameState, 'commission' | 'intent' | 'settings'>): number =>
   materialResistance(state.commission, state.settings.boss) * (state.intent.resistanceMult ?? 1)
 
+/** Whether cast sigils become table machines. */
+export const machinesOn = (state: Pick<GameState, 'settings'>): boolean => (state.settings.machines ?? 0) > 0
+
+/** Open links on a machine: its anchor's, plus what it has gained standing on the table, less what it holds. */
+export const machineOpen = (state: Pick<GameState, 'settings' | 'term'>, entry: TableEntry): number =>
+  openLinks(entry.sigil) + (state.settings.machineGrowth ?? 1) * Math.max(0, state.term - entry.term)
+
+/** Room on the table for another machine (always, when machines are off). */
+export const tableRoom = (state: Pick<GameState, 'settings' | 'table'>): number => (machinesOn(state) ? state.settings.machines! - state.table.length : Infinity)
+
 /** Why a sigil can't be cast as it stands, or null when it can. */
 export function invalidReason(state: GameState, sigil: Sigil): string | null {
   if (state.phase !== 'compose') return 'The commission is over.'
   if (castsLeft(state) <= 0) return state.intent.castLimit ? 'Bound: only one sigil this term.' : 'No more sigils this term.'
+  if (tableRoom(state) <= 0) return 'The table is full: take a machine apart first.'
   const runes = runesOf(sigil)
   const ids = new Set(runes.map((r) => r.id))
   if (ids.size !== runes.length) return 'A rune can only be placed once.'
@@ -280,20 +301,29 @@ export interface CastPreview {
 /** Power every rune gains from the catalysts right now. */
 export const powerBonus = (state: Pick<GameState, 'catalysts' | 'pools' | 'burned'>): number => catalystPower(state.catalysts, state.pools, state.burned.length)
 
-/** Exactly what casting this sigil would do, and what ending the term after it would cost. */
-export function previewCast(state: GameState, sigil: Sigil, poolKey?: string): CastPreview {
+/**
+ * Exactly what casting this sigil would do, and what ending the term after it
+ * would cost. With a table id, the sigil is that machine firing (perhaps with
+ * runes just added), so the table gains nothing new.
+ */
+export function previewCast(state: GameState, sigil: Sigil, poolKey?: string, tableId?: number): CastPreview {
   const mult = resistanceMult(state)
   const eff = effectiveSigil(sigil, powerBonus(state), state.termWard + state.keptWard)
   const resolution = state.settings.equation
     ? resolveEquation(eff, state.pools, poolKey, { ...state.settings.equation, base: state.settings.equation.base * mult }, state.target)
     : resolve(eff, state.pools, poolKey, { ...state.settings, resistanceMult: mult })
-  const table = [...state.table, { id: state.nextTableId, term: state.term, sigil }]
+  const machines = machinesOn(state)
+  const table =
+    tableId !== undefined
+      ? state.table.map((e) => (e.id === tableId ? { ...e, sigil, fired: state.term } : e))
+      : [...state.table, { id: state.nextTableId, term: state.term, sigil, ...(machines ? { fired: state.term } : {}) }]
   const finished = inBand(resolution.pools, state.target)
   const cast: CastOutcome = { term: state.term, sigil, resolution, pools: resolution.pools, finished }
   // Lute: the sigil's Ward lasts. Pelican: Ward when the anchor returns to hand.
   const ward = resolution.outputs.ward
   const lasting = runesOf(sigil).some((r) => r.lute)
-  const pelican = sigil.anchor.cohobation && state.catalysts.includes('pelican') ? PELICAN_WARD : 0
+  // A machine keeps its anchor, so cohobation (and the pelican's Ward for it) does nothing on the table.
+  const pelican = !machines && sigil.anchor.cohobation && state.catalysts.includes('pelican') ? PELICAN_WARD : 0
   const termWard = state.termWard + (lasting ? 0 : ward) + pelican
   const keptWard = state.keptWard + (lasting ? ward : 0)
   const end = finished ? null : endOf({ ...state, pools: resolution.pools, table, termWard, keptWard })
@@ -322,22 +352,85 @@ export interface CastOptions {
 export function cast(state: GameState, sigil: Sigil, poolKey?: string, opts: CastOptions = {}): GameState {
   const reason = invalidReason(state, sigil)
   if (reason) throw new Error(reason)
-  const p = previewCast(state, sigil, poolKey)
+  return resolveCast(state, sigil, poolKey, opts, null)
+}
+
+/** Why this machine can't fire now, or null when it can. */
+export function fireReason(state: GameState, id: number): string | null {
+  if (state.phase !== 'compose') return 'The commission is over.'
+  const entry = state.table.find((e) => e.id === id)
+  if (!machinesOn(state) || !entry) return 'No such machine.'
+  if (entry.fired === state.term) return 'This machine has already fired this term.'
+  if (castsLeft(state) <= 0) return state.intent.castLimit ? 'Bound: only one sigil this term.' : 'No more sigils this term.'
+  return null
+}
+
+/** A table machine fires: its sigil resolves again, with no runes from hand. */
+export function fireMachine(state: GameState, id: number, poolKey?: string, opts: CastOptions = {}): GameState {
+  const reason = fireReason(state, id)
+  if (reason) throw new Error(reason)
+  return resolveCast(state, state.table.find((e) => e.id === id)!.sigil, poolKey, opts, id)
+}
+
+/** Join runes from hand to a table machine, while it has open links. It fires with them from its next firing. */
+export function extendMachine(state: GameState, id: number, joins: { kind: JoinKind; runeId: number }[]): GameState {
+  const entry = state.table.find((e) => e.id === id)
+  if (state.phase !== 'compose' || !machinesOn(state) || !entry) throw new Error('No such machine.')
+  if (joins.length > machineOpen(state, entry)) throw new Error('The machine has no open link for that.')
+  const added = joins.map((j) => {
+    const rune = state.hand.find((r) => r.id === j.runeId)
+    if (!rune) throw new Error('Every rune must come from your hand.')
+    return { kind: j.kind, rune }
+  })
+  const ids = new Set(added.map((j) => j.rune.id))
+  const sigil = { anchor: entry.sigil.anchor, joins: [...entry.sigil.joins, ...added] }
+  return { ...state, hand: state.hand.filter((r) => !ids.has(r.id)), table: state.table.map((e) => (e.id === id ? { ...e, sigil } : e)) }
+}
+
+/** Why this machine can't be taken apart now, or null when it can. */
+export function dismantleReason(state: GameState, id: number): string | null {
+  const entry = state.table.find((e) => e.id === id)
+  if (state.phase !== 'compose' || !entry) return 'No such machine.'
+  if (entry.fired === state.term) return 'It fired this term: take it apart next term.'
+  return null
+}
+
+/**
+ * Take a table machine apart, freeing its place. Its runes go to the discard
+ * pile, or back to hand when Settings.machineApart says so. Not in a term it
+ * fired, so no rune works twice in a term.
+ */
+export function dismantleMachine(state: GameState, id: number): GameState {
+  const reason = dismantleReason(state, id)
+  if (reason) throw new Error(reason)
+  const entry = state.table.find((e) => e.id === id)!
+  const runes = runesOf(entry.sigil)
+  const table = state.table.filter((e) => e.id !== id)
+  return state.settings.machineApart === 'hand' ? { ...state, hand: [...state.hand, ...runes], table } : { ...state, discard: [...state.discard, ...runes], table }
+}
+
+/** Resolve a sigil cast from hand (tableId null) or a machine firing, and apply everything that follows. */
+function resolveCast(state: GameState, sigil: Sigil, poolKey: string | undefined, opts: CastOptions, tableId: number | null): GameState {
+  const machines = machinesOn(state)
+  const p = previewCast(state, sigil, poolKey, tableId ?? undefined)
   const runes = runesOf(sigil)
   const used = new Set(runes.map((r) => r.id))
   // Multiplication: each cast rune holding one grows. Cohobation: the anchor comes back to hand.
   const grown = runes.map((r) => grow(r, state.forge))
-  const back = sigil.anchor.cohobation ? grown[0] : null
+  const back = !machines && sigil.anchor.cohobation ? grown[0] : null
+  // On the table, a machine keeps its runes, grown; otherwise they go to the discard pile.
+  const grownSigil: Sigil = { anchor: grown[0], joins: sigil.joins.map((j, i) => ({ ...j, rune: grown[i + 1] })) }
+  const entryId = tableId ?? state.nextTableId
   let next: GameState = {
     ...state,
-    hand: [...state.hand.filter((r) => !used.has(r.id)), ...(back ? [back] : [])],
-    discard: [...state.discard, ...grown.filter((r) => r !== back)],
+    hand: tableId !== null ? state.hand : [...state.hand.filter((r) => !used.has(r.id)), ...(back ? [back] : [])],
+    discard: machines ? state.discard : [...state.discard, ...grown.filter((r) => r !== back)],
     pools: p.cast.pools,
-    table: p.table,
+    table: machines ? p.table.map((e) => (e.id === entryId ? { ...e, sigil: grownSigil } : e)) : p.table,
     termWard: p.termWard,
     keptWard: p.keptWard,
     casts: [...state.casts, p.cast],
-    nextTableId: state.nextTableId + 1,
+    nextTableId: tableId !== null ? state.nextTableId : state.nextTableId + 1,
   }
   if (p.cast.finished) return { ...next, phase: 'won' }
   // Distillation draws; calcination then burns from the hand, slag first.
@@ -360,10 +453,14 @@ export function endTerm(state: GameState): GameState {
   const e = endOf(state)
   const rng = makeRng(state.seed)
   const quintessence = Math.max(0, Math.round((state.quintessence - e.paid) * 10) / 10)
+  // A machine the commission knocks off the table drops its runes into the discard pile.
+  const kept = new Set(e.table.map((t) => t.id))
+  const knocked = machinesOn(state) ? state.table.filter((t) => !kept.has(t.id)).flatMap((t) => runesOf(t.sigil)) : []
   let next: GameState = {
     ...state,
     pools: e.pools,
     table: e.table,
+    discard: [...state.discard, ...knocked],
     quintessence,
     spent: Math.round((state.spent + e.paid) * 10) / 10,
     history: [...state.history, { ...e, term: state.term, intent: state.intent, casts: state.casts }],
