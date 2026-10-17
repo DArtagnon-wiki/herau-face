@@ -264,7 +264,7 @@ function startView(): string {
   return `<main class="circuits start">
     <div class="start-head">
       <p class="eyebrow">A new direction · prototype</p>
-      <h1>Circuits</h1>
+      <h1>Alchemical Circuits</h1>
       <p class="lede">Every card is a small circuit. Catch the instability a commission feeds into the pool, purify it, and keep what it leaves behind. There are no turns: every card costs time on the moon.</p>
     </div>
     ${rulesView()}

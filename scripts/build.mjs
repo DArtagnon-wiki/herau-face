@@ -10,7 +10,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 
 const PAGES = [
   { entry: 'src/main.ts', title: 'Mud to Clay', page: 'index.html', artifact: 'artifact.html' },
-  { entry: 'src/circuits/main.ts', title: 'Circuits', page: 'circuits.html', artifact: 'circuits-artifact.html' },
+  { entry: 'src/circuits/main.ts', title: 'Alchemical Circuits', page: 'circuits.html', artifact: 'circuits-artifact.html' },
 ]
 
 await mkdir('dist', { recursive: true })
