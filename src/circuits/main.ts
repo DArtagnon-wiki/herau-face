@@ -79,7 +79,9 @@ function cardText(c: Card): string {
   const lines = [
     `Costs ${eighths(costOf(c))} of the moon: the crescents in its small circle. The arc on its link means that circle must run before the big one can.`,
     `The big circle takes ${ins} from the pool (its triangle${c.channels.length > 1 ? 's' : ''}), and purifies 1 for each${c.gain ? `, times ${1 + c.gain} through its ${c.gain === 1 ? 'gain stage' : 'gain stages'} (the circles above the square)` : ''} (the square).`,
-    `${c.threshold > 1 ? `If it takes ${c.threshold} or more (one arc each), it` : 'Whenever it takes anything (the one arc), it'} also yields ${ps}${c.distill ? `, times ${1 + c.distill} through its distilling ${c.distill === 1 ? 'stage' : 'stages'}` : ''}.`,
+    c.output === 'ward'
+      ? `${c.threshold > 1 ? `If it takes ${c.threshold} or more (one arc each), it` : 'Whenever it takes anything (the one arc), it'} also raises Ward, 1 for each it takes (the shield): Ward catches the next flare.`
+      : `${c.threshold > 1 ? `If it takes ${c.threshold} or more (one arc each), it` : 'Whenever it takes anything (the one arc), it'} also yields ${ps}${c.distill ? `, times ${1 + c.distill} through its distilling ${c.distill === 1 ? 'stage' : 'stages'}` : ''}.`,
     c.ground ? `Its ${c.ground === 1 ? 'ground drains' : 'grounds drain'} ${GROUND_DRAIN * c.ground} more of anything, purifying nothing.` : '',
   ]
   return lines.filter(Boolean).map((l) => `<p>${l}</p>`).join('')
@@ -89,7 +91,8 @@ function nowText(run: Run, c: Card): string {
   const r = resolveCard(c, run.fight.pool)
   if (!r.processed && !Object.values(r.drained).some(Boolean)) return '<p class="now">Right now there is nothing in the pool for it.</p>'
   const ps = PRINCIPLES.filter((p) => r.principles[p]).map((p) => `${r.principles[p]} ${p}`)
-  return `<p class="now">Right now it would take ${poolTotal(r.drained)} and purify ${r.purification}${ps.length ? `, yielding ${ps.join(' and ')}` : c.threshold > 1 && r.processed ? `, short of the ${c.threshold} it needs to yield its principle` : ''}.</p>`
+  const side = r.ward ? `, raising Ward ${r.ward}` : ps.length ? `, yielding ${ps.join(' and ')}` : c.threshold > 1 && r.processed ? `, short of the ${c.threshold} it needs to ${c.output === 'ward' ? 'raise Ward' : 'yield its principle'}` : ''
+  return `<p class="now">Right now it would take ${poolTotal(r.drained)} and purify ${r.purification}${side}.</p>`
 }
 
 function recipeText(r: Recipe): string {
@@ -125,7 +128,7 @@ function legendText(): string {
     ${legendRow(I(principle('salt', -6, 0, 6, { stroke: 'var(--lit)' }) + principle('mercury', 6, 0, 6, { stroke: 'var(--lit)' })), 'Salt, sulfur and mercury: the principles left behind. Earth leaves salt, fire sulfur, water and air mercury. They brew recipes.')}
     ${legendRow(I(metal(0, 0, 8, { stroke: 'var(--lit)' })), 'Metal, counted by worth: what is left after a commission smelts into silver and lead. It buys extra runes.')}
     ${legendRow(I(ground(0, -1, 8, { stroke: 'var(--lit)' })), 'A ground drains instability away, purifying nothing.')}
-    ${legendRow(I(ward(0, 0, 9, { stroke: 'var(--lit)' })), 'Ward catches the next flare.')}
+    ${legendRow(I(ward(0, 0, 9, { stroke: 'var(--lit)' })), 'Ward catches the next flare. A shield on a card raises Ward, 1 for each it takes.')}
     ${legendRow(I(homunculus(0, 0, 9, { stroke: 'var(--lit)' })), 'A homunculus purifies on its own every quarter.')}
   </ul>`
 }
@@ -253,7 +256,7 @@ function popupView(run: Run | null): string {
     body = `<div class="pop-art">${recipeSvg(r, canAfford(run.fight, r), 160)}</div>${recipeText(r)}${canAfford(run.fight, r) ? '' : '<p class="now">You need more principles first.</p>'}`
   } else if (p.kind === 'explain' && run.stage === 'reward') {
     title = 'Between commissions'
-    body = `<p>Pick a rune, then the card to add it to. The first is free; each more costs ${EXTRA_RUNE_PRICE} metal. Cards it can't go on are dimmed: each card holds at most 3 inputs, 2 gain stages, 2 distilling stages and 2 grounds.</p>`
+    body = `<p>Pick a rune, then the card to add it to. The first is free; each more costs ${EXTRA_RUNE_PRICE} metal. Cards it can't go on are dimmed: each card holds at most 3 inputs, 2 gain stages, 2 distilling stages and 2 grounds, and only cards that yield principles can distil.</p>`
   } else if (p.kind === 'offer') {
     const r = run.offer[p.i]
     title = 'A rune'

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { COMMISSIONS, DEFAULT_SETTINGS, TINCTURE_WARD, addRune, costOf, craft, emptyPool, newRun, nextFight, playCard, poolTotal, resolveCard, smelt, startingDeck, takeRune, upcoming, wait, type Card, type Run } from './engine'
+import { COMMISSIONS, DEFAULT_SETTINGS, METAL_GATE, TINCTURE_WARD, addRune, fits, costOf, craft, emptyPool, newRun, nextFight, playCard, poolTotal, resolveCard, smelt, startingDeck, takeRune, upcoming, wait, type Card, type Run } from './engine'
 
 const pool = (p: Partial<Record<'water' | 'earth' | 'air' | 'fire', number>>) => ({ ...emptyPool(), ...p })
-const wash: Card = { id: 1, name: 'Wash', channels: [{ element: 'water', capacity: 5 }], threshold: 1, gain: 0, distill: 0, ground: 0 }
+const wash: Card = { id: 1, name: 'Wash', channels: [{ element: 'water', capacity: 5 }], output: 'principle', threshold: 1, gain: 0, distill: 0, ground: 0 }
 
 describe('a circuit card', () => {
   it('takes up to its capacity of its element, purifies that much, and leaves its principle', () => {
@@ -13,13 +13,42 @@ describe('a circuit card', () => {
     expect(resolveCard(wash, pool({ water: 9 })).purification).toBe(5)
   })
 
-  it('yields its principle only once it takes its threshold: the opening Wash needs 4 water', () => {
-    const deckWash = startingDeck().find((c) => c.name === 'Wash')!
-    expect(deckWash.threshold).toBe(4)
+  it('yields its principle only once it takes its threshold: every opening metal creator needs 4', () => {
+    const deck = startingDeck()
+    for (const c of deck.filter((c) => c.output === 'principle')) expect(c.threshold).toBe(METAL_GATE)
+    expect(new Set(deck.filter((c) => c.output === 'principle').map((c) => c.name))).toEqual(new Set(['Wash', 'Calcine', 'Fan', 'Kindle']))
+    const calcine = deck.find((c) => c.name === 'Calcine')!
+    expect(resolveCard(calcine, pool({ earth: 3 })).principles.salt).toBe(0)
+    expect(resolveCard(calcine, pool({ earth: 4 })).principles.salt).toBe(1)
+    const deckWash = deck.find((c) => c.name === 'Wash')!
     expect(resolveCard(deckWash, pool({ water: 3 })).principles.mercury).toBe(0)
     expect(resolveCard(deckWash, pool({ water: 3 })).purification).toBe(3)
     expect(resolveCard(deckWash, pool({ water: 4 })).principles.mercury).toBe(1)
     expect(resolveCard(deckWash, pool({ water: 4 })).took).toEqual([4])
+  })
+
+  it('makes the opening Sieve raise Ward for what it takes instead of leaving principles', () => {
+    const sieve = startingDeck().find((c) => c.name === 'Sieve')!
+    expect(sieve.output).toBe('ward')
+    const r = resolveCard(sieve, pool({ water: 1, earth: 4 }))
+    expect(r.ward).toBe(3)
+    expect(r.purification).toBe(3)
+    expect(r.principles).toEqual({ salt: 0, sulfur: 0, mercury: 0 })
+    expect(fits({ kind: 'distill' }, sieve)).toBe(false)
+    expect(fits({ kind: 'gain' }, sieve)).toBe(true)
+  })
+
+  it('carries Ward from a Sieve into the next flare', () => {
+    let run = newRun(1)
+    const sieve = startingDeck().find((c) => c.name === 'Sieve')!
+    run = { ...run, fight: { ...run.fight, hand: [sieve, ...run.fight.hand.slice(1)] } }
+    run = playCard(run, sieve.id)
+    expect(run.fight.ward).toBe(3)
+    // 4 fed, 3 taken, 4 fed at the first quarter: 5 flare at the full moon, Ward takes 3.
+    run = wait(run)
+    expect(run.fight.flares).toEqual([5])
+    expect(run.quintessence).toBe(DEFAULT_SETTINGS.stock - 2)
+    expect(run.fight.ward).toBe(0)
   })
 
   it('takes nothing and leaves nothing from an empty channel', () => {

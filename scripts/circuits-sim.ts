@@ -1,10 +1,46 @@
-// A simple player for the circuits prototype, to check the first numbers.
-// It plays whichever card, recipe or wait leaves the best position: purified
-// so far, quintessence kept, the pool it would have to face, helpers made.
+// Simulated players for the circuits prototype, to compare ways of playing a
+// run. Each strategy decides what to do in a fight and what to take between
+// fights:
 //
-//   npx tsx scripts/circuits-sim.ts [--runs 300] [--draw refill|draw] [--hand 4] [--stock 60]
+// - greedy: plays, brews or waits for whatever looks best right now (purified
+//   so far, quintessence kept, the pool it would face, helpers, Ward, cards in
+//   hand); brews whenever that looks good, buys every rune its metal allows.
+// - random: any legal move at random; random runes on random cards.
+// - delay: in the fights before the boss, keeps the fight going to gather
+//   principles (metal later) as long as doing so doesn't lose: a move is
+//   allowed only if, after it, playing greedy would still finish the fight
+//   with at least `reserve` quintessence left. Among allowed moves that don't
+//   finish the fight it takes the most principles, else the move that purifies
+//   least (cycling a card that takes nothing before waiting). When no move is
+//   allowed it plays greedy. Between fights it buys runes like greedy.
+//
+// The engine is deterministic given the run (the seed travels in it), so the
+// greedy look-ahead is exact.
+//
+//   npx tsx scripts/circuits-sim.ts [--strategy greedy|random|delay] [--reserve 1] [--delay-in 0,1] [--runs 300]
+//   npx tsx scripts/circuits-sim.ts --compare [--runs 300]   every strategy side by side
+//   (also --draw refill|draw, --hand 4, --stock 60)
 
-import { COMMISSIONS, DEFAULT_SETTINGS, RECIPES, canAfford, craft, fits, newRun, nextFight, playCard, poolTotal, takeRune, wait, EXTRA_RUNE_PRICE, type Run, type Settings } from '../src/circuits/engine'
+import { makeRng, type Rng } from '../src/sim/rng'
+import {
+  COMMISSIONS,
+  DEFAULT_SETTINGS,
+  EXTRA_RUNE_PRICE,
+  PRINCIPLES,
+  RECIPES,
+  canAfford,
+  craft,
+  fits,
+  newRun,
+  nextFight,
+  playCard,
+  poolTotal,
+  takeRune,
+  wait,
+  type Recipe,
+  type Run,
+  type Settings,
+} from '../src/circuits/engine'
 
 const args = process.argv.slice(2)
 const arg = (n: string) => (args.includes(n) ? args[args.indexOf(n) + 1] : undefined)
@@ -16,24 +52,65 @@ const settings: Settings = {
   stock: Number(arg('--stock') ?? DEFAULT_SETTINGS.stock),
 }
 
-function value(r: Run, start: Run): number {
+// ---------------------------------------------------------------------------
+// Moves
+
+type Move = { kind: 'card'; id: number } | { kind: 'brew'; key: Recipe['key'] } | { kind: 'wait' }
+
+function moves(r: Run): Move[] {
+  const out: Move[] = r.fight.hand.map((c) => ({ kind: 'card', id: c.id }))
+  for (const rec of RECIPES) if (canAfford(r.fight, rec)) out.push({ kind: 'brew', key: rec.key })
+  out.push({ kind: 'wait' })
+  return out
+}
+
+const apply = (r: Run, m: Move): Run => (m.kind === 'card' ? playCard(r, m.id) : m.kind === 'brew' ? craft(r, m.key) : wait(r))
+const principleCount = (r: Run) => PRINCIPLES.reduce((n, p) => n + r.fight.principles[p], 0)
+/** The fight that `before` was in has ended in `after`. */
+const ended = (before: Run, after: Run) => after.stage !== 'fight' || after.fightIndex !== before.fightIndex
+const won = (r: Run) => r.stage === 'reward' || r.stage === 'won'
+const parts = (r: Run) => r.deck.reduce((n, c) => n + c.channels.length + c.gain + c.distill + c.ground, 0)
+
+// ---------------------------------------------------------------------------
+// Strategies
+
+interface Strategy {
+  name: string
+  move(r: Run, rng: Rng): Move
+  reward(r: Run, rng: Rng): Run
+}
+
+function greedyValue(r: Run, start: Run): number {
   if (r.stage === 'lost') return -1e6
   if (r.stage !== 'fight') return 1e6 + r.quintessence
   const f = r.fight
   return f.purified - 3 * (start.quintessence - r.quintessence) - 0.6 * poolTotal(f.pool) + 10 * f.homunculi + 0.5 * f.ward + 0.8 * f.hand.length
 }
 
-function choose(r: Run): { run: Run; kind: 'card' | 'brew' | 'wait' } {
-  const options: { run: Run; kind: 'card' | 'brew' | 'wait' }[] = []
-  for (const c of r.fight.hand) options.push({ run: playCard(r, c.id), kind: 'card' })
-  for (const rec of RECIPES) if (canAfford(r.fight, rec)) options.push({ run: craft(r, rec.key), kind: 'brew' })
-  options.push({ run: wait(r), kind: 'wait' })
-  return options.reduce((a, b) => (value(b.run, r) > value(a.run, r) ? b : a))
+function greedyMove(r: Run): Move {
+  let best: Move = { kind: 'wait' }
+  let bestValue = -Infinity
+  for (const m of moves(r)) {
+    const v = greedyValue(apply(r, m), r)
+    if (v > bestValue) {
+      best = m
+      bestValue = v
+    }
+  }
+  return best
 }
 
-/** Between fights: put each rune where it helps most, the free one and as many more as metal buys. */
-function reward(r: Run): Run {
+/** Play greedy until this fight ends. */
+function rollout(r: Run): Run {
+  let x = r
+  for (let guard = 0; guard < 400 && x.stage === 'fight' && x.fightIndex === r.fightIndex; guard++) x = apply(x, greedyMove(x))
+  return x
+}
+
+/** Between fights: the free rune and as many more as metal buys, each where it helps most. */
+function greedyReward(r: Run): Run {
   let run = r
+  const rank = (o: Run['offer'][number]) => ({ gain: 0, channel: 1, distill: 2, ground: 3 })[o.kind]
   for (let guard = 0; guard < 5 && run.offer.length; guard++) {
     if (run.tookFree && run.metals < EXTRA_RUNE_PRICE) break
     const order = run.offer.map((o, i) => ({ o, i })).sort((a, b) => rank(a.o) - rank(b.o))
@@ -41,11 +118,11 @@ function reward(r: Run): Run {
     for (const { o, i } of order) {
       const cards = run.deck.filter((c) => fits(o, c))
       if (!cards.length) continue
-      // Gains and distillers go on the water cards (mud feeds water most), channels on a card of another element.
+      // Gains and distillers go on the water cards (the first commissions feed water most), channels on a card of another element.
       const pick =
         o.kind === 'channel'
-          ? cards.find((c) => !c.channels.some((ch) => ch.element === o.element)) ?? cards[0]
-          : cards.find((c) => c.channels[0].element === 'water') ?? cards[0]
+          ? (cards.find((c) => !c.channels.some((ch) => ch.element === o.element)) ?? cards[0])
+          : (cards.find((c) => c.channels[0].element === 'water') ?? cards[0])
       run = takeRune(run, i, pick.id)
       done = true
       break
@@ -54,53 +131,154 @@ function reward(r: Run): Run {
   }
   return nextFight(run)
 }
-const rank = (o: Run['offer'][number]) => ({ gain: 0, channel: 1, distill: 2, ground: 3 })[o.kind]
 
-type FightStat = { won: boolean; paid: number; moons: number; plays: number; brewed: number; principles: number; waits: number }
-const stats: FightStat[][] = COMMISSIONS.map(() => [])
-let runsWon = 0
-const endQuint: number[] = []
-for (let i = 0; i < runs; i++) {
-  let r = newRun(7000 + i, settings)
-  let plays = 0
-  let brewed = 0
-  let gathered = 0
-  let waits = 0
-  for (let guard = 0; guard < 2000; guard++) {
-    if (r.stage === 'fight') {
-      const before = r
-      const { run: next, kind } = choose(r)
-      if (kind === 'card') plays++
-      if (kind === 'brew') brewed++
-      if (kind === 'wait') waits++
-      const got = (x: Run) => x.fight.principles.salt + x.fight.principles.sulfur + x.fight.principles.mercury
-      if (next.fightIndex === before.fightIndex && next.stage === 'fight') gathered += Math.max(0, got(next) - got(before) + (kind === 'brew' ? 0 : 0))
-      if (next.stage !== 'fight' || next.fightIndex !== before.fightIndex) {
-        const f = next.fightIndex === before.fightIndex ? next.fight : before.fight
-        stats[before.fightIndex].push({ won: next.stage !== 'lost', paid: f.paid, moons: f.dial / 8, plays, brewed, principles: gathered, waits })
-        plays = 0
-        brewed = 0
-        gathered = 0
-        waits = 0
+const greedy: Strategy = { name: 'greedy', move: greedyMove, reward: greedyReward }
+
+const random: Strategy = {
+  name: 'random',
+  move: (r, rng) => {
+    const ms = moves(r)
+    return ms[rng.int(0, ms.length - 1)]
+  },
+  reward: (r, rng) => {
+    let run = r
+    for (let guard = 0; guard < 5 && run.offer.length; guard++) {
+      if (run.tookFree && (run.metals < EXTRA_RUNE_PRICE || rng.float() < 0.5)) break
+      const pairs = run.offer.flatMap((o, i) => run.deck.filter((c) => fits(o, c)).map((c) => ({ i, id: c.id })))
+      if (!pairs.length) break
+      const p = pairs[rng.int(0, pairs.length - 1)]
+      run = takeRune(run, p.i, p.id)
+    }
+    return nextFight(run)
+  },
+}
+
+function delay(reserve: number, delayIn: number[]): Strategy {
+  return {
+    name: `delay, keep ${reserve}`,
+    reward: greedyReward,
+    move: (r) => {
+      if (!delayIn.includes(r.fightIndex)) return greedyMove(r)
+      const have = principleCount(r)
+      let best: Move | null = null
+      let bestScore = -Infinity
+      for (const m of moves(r)) {
+        if (m.kind === 'brew') continue // brewing spends the principles it is gathering
+        const after = apply(r, m)
+        if (ended(r, after)) continue // finishing is not delaying
+        const end = rollout(after)
+        if (!won(end) || end.quintessence < reserve) continue
+        const gained = principleCount(after) - have
+        const purified = after.fight.purified - r.fight.purified
+        const score = 100 * gained - purified + (m.kind === 'card' ? 0.5 : 0)
+        if (score > bestScore) {
+          best = m
+          bestScore = score
+        }
       }
-      r = next
-    } else if (r.stage === 'reward') r = reward(r)
-    else break
+      return best ?? greedyMove(r)
+    },
   }
-  if (r.stage === 'won') {
-    runsWon++
-    endQuint.push(r.quintessence)
+}
+
+// ---------------------------------------------------------------------------
+// Playing runs
+
+type FightStat = { reached: boolean; won: boolean; paid: number; metal: number; runes: number; quintIn: number; moons: number; plays: number; waits: number; brews: number }
+
+interface Result {
+  name: string
+  runsWon: number
+  quintLeft: number[]
+  fights: FightStat[][]
+}
+
+function play(strategy: Strategy): Result {
+  const fights: FightStat[][] = COMMISSIONS.map(() => [])
+  const quintLeft: number[] = []
+  let runsWon = 0
+  for (let i = 0; i < runs; i++) {
+    const rng = makeRng(90000 + i)
+    let r = newRun(7000 + i, settings)
+    let stat: FightStat = { reached: true, won: false, paid: 0, metal: 0, runes: 0, quintIn: r.quintessence, moons: 0, plays: 0, waits: 0, brews: 0 }
+    for (let guard = 0; guard < 3000; guard++) {
+      if (r.stage === 'fight') {
+        const m = strategy.move(r, rng)
+        const next = apply(r, m)
+        if (m.kind === 'card') stat.plays++
+        if (m.kind === 'wait') stat.waits++
+        if (m.kind === 'brew') stat.brews++
+        if (ended(r, next)) {
+          stat.won = won(next)
+          stat.paid = next.fight.paid
+          stat.moons = next.fight.dial / 8
+          stat.metal = next.smelted?.value ?? 0
+          fights[r.fightIndex].push(stat)
+        }
+        r = next
+      } else if (r.stage === 'reward') {
+        const before = r
+        r = strategy.reward(r, rng)
+        fights[before.fightIndex][fights[before.fightIndex].length - 1].runes = parts(r) - parts(before)
+        stat = { reached: true, won: false, paid: 0, metal: 0, runes: 0, quintIn: r.quintessence, moons: 0, plays: 0, waits: 0, brews: 0 }
+      } else break
+    }
+    if (r.stage === 'won') {
+      runsWon++
+      quintLeft.push(r.quintessence)
+    }
   }
+  return { name: strategy.name, runsWon, quintLeft, fights }
 }
 
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length)
 const med = (xs: number[]) => (xs.length ? xs.slice().sort((a, b) => a - b)[Math.floor(xs.length / 2)] : NaN)
+const pct = (n: number, d: number) => `${d ? Math.round((100 * n) / d) : 0}%`
+
+function report(res: Result) {
+  console.log(`\n${res.name}: runs won ${pct(res.runsWon, runs)} · quintessence left median ${med(res.quintLeft)}`)
+  COMMISSIONS.forEach((c, i) => {
+    const s = res.fights[i]
+    if (!s.length) return console.log(`  ${c.name}: never reached`)
+    console.log(
+      `  ${c.name}: reached ${pct(s.length, runs)}, won ${pct(s.filter((x) => x.won).length, s.length)} · came in with ${mean(s.map((x) => x.quintIn)).toFixed(0)} · paid ${mean(s.map((x) => x.paid)).toFixed(1)} · metal ${mean(s.map((x) => x.metal)).toFixed(1)} · runes after ${mean(s.map((x) => x.runes)).toFixed(1)} · moons ${mean(s.map((x) => x.moons)).toFixed(1)} · cards ${mean(s.map((x) => x.plays)).toFixed(1)} · waits ${mean(s.map((x) => x.waits)).toFixed(1)} · brews ${mean(s.map((x) => x.brews)).toFixed(1)}`,
+    )
+  })
+}
+
+function row(res: Result): string {
+  const f = res.fights
+  const cell = (i: number, fn: (s: FightStat[]) => string) => (f[i].length ? fn(f[i]) : '–')
+  return [
+    res.name,
+    pct(res.runsWon, runs),
+    cell(0, (s) => mean(s.map((x) => x.paid)).toFixed(1)),
+    cell(0, (s) => mean(s.map((x) => x.metal)).toFixed(1)),
+    cell(1, (s) => mean(s.map((x) => x.paid)).toFixed(1)),
+    cell(1, (s) => mean(s.map((x) => x.metal)).toFixed(1)),
+    cell(2, (s) => mean(s.map((x) => x.quintIn)).toFixed(0)),
+    cell(2, (s) => pct(s.filter((x) => x.won).length, s.length)),
+    String(med(res.quintLeft)),
+  ].join(' | ')
+}
+
+const delayIn = (arg('--delay-in') ?? COMMISSIONS.slice(0, -1).map((_, i) => i).join(',')).split(',').map(Number)
+const reserve = Number(arg('--reserve') ?? 1)
+
 console.log(`${runs} runs · draw ${settings.draw} ${settings.hand} at new and full moons · stock ${settings.stock}`)
-COMMISSIONS.forEach((c, i) => {
-  const s = stats[i]
-  if (!s.length) return console.log(`${c.name}: never reached`)
-  console.log(
-    `${c.name} (needs ${c.require}): reached ${s.length}, won ${Math.round((100 * s.filter((x) => x.won).length) / s.length)}% · paid median ${med(s.map((x) => x.paid))} · moons ${mean(s.map((x) => x.moons)).toFixed(1)} · cards ${mean(s.map((x) => x.plays)).toFixed(1)} · principles ${mean(s.map((x) => x.principles)).toFixed(1)} · brews ${mean(s.map((x) => x.brewed)).toFixed(1)} · waits ${mean(s.map((x) => x.waits)).toFixed(1)}`,
-  )
-})
-console.log(`runs won ${Math.round((100 * runsWon) / runs)}% · quintessence left median ${med(endQuint)}`)
+if (args.includes('--compare')) {
+  const list: Strategy[] = [
+    random,
+    greedy,
+    ...[1, 20, 35, 45, 50, 55].map((k) => ({ ...delay(k, [0, 1]), name: `delay in Mud and Peat, keep ${k}` })),
+    ...[35, 45, 50, 55].map((k) => ({ ...delay(k, [0]), name: `delay in Mud only, keep ${k}` })),
+    ...[35, 45].map((k) => ({ ...delay(k, [1]), name: `delay in Peat only, keep ${k}` })),
+  ]
+  console.log('\nStrategy | Runs won | Mud paid | Mud metal | Peat paid | Peat metal | Into Mire | Mire won | Left (median)')
+  console.log('--- | --- | --- | --- | --- | --- | --- | --- | ---')
+  for (const s of list) console.log(row(play(s)))
+} else {
+  const name = arg('--strategy') ?? 'greedy'
+  const s = name === 'random' ? random : name === 'delay' ? delay(reserve, delayIn) : greedy
+  report(play(s))
+}

@@ -75,7 +75,7 @@ A card is drawn as an alchemical circuit, from the designer's sketch of Wash. Re
 - **Stages are circles.** Sigils inside a stage are its inputs. Sigils outside are its outputs, and lines to other stages are links.
 - **Arcs are requirements.** One arc across a link means the stage before must run. N arcs across an output mean the stage must collect at least N.
 - **Shapes name mechanics.** A crescent is time on the moon (one per quarter, a small one for an eighth). A triangle is an element, drawn as the alchemical element triangles: fire and air point up, water and earth down, air and earth are barred, and the hexagram of all four takes any. A square is purification. The principles and metals keep their alchemical signs. A ground drains instability away. Later sigils will stand for quintessence, cards in hand, Ward and so on.
-- **A card** is a small time stage (its crescents), linked by one arc to a collecting stage holding its element triangles, each with the most it takes. The collector outputs a square (purification) below and its principle to the right, behind its threshold arcs. Gain stages chain below the square (a circle holding a square), distilling stages after the principle (a circle holding the principle), grounds hang down-left.
+- **A card** is a small time stage (its crescents), linked by one arc to a collecting stage holding its element triangles, each with the most it takes. The collector outputs a square (purification) below and its side output to the right, behind its threshold arcs: its principle, or a shield for Ward. Gain stages chain below the square (a circle holding a square), distilling stages after the principle (a circle holding the principle), grounds hang down-left.
 - **The drawing shows the live state.** Triangles fill with what they would take from the pool now, threshold arcs light one by one as the pool fills, outputs that would fire glow, and a card with nothing to take dims.
 
 ![The designer's sketch of Wash beside the prototype's drawing, and Wash lit by different pools](docs/circuit-schema.png)
@@ -96,16 +96,32 @@ Wash, as sketched: a moon is its input and its circle must run before the collec
 A separate page beside Mud to Clay (`circuits.html`), on one screen: the moon dial with the pool in its middle, materials and recipes always in view, the hand of circuit cards drawn with the runic schema, and every explanation in a popup. It plays a run of three commissions with single-number purification, the three principles, three recipes (a tincture for Ward, a spirit to draw 2, the homunculus), metal smelted after each fight, and a rune added to a card between fights.
 
 - **Commissions.** Mud feeds 3 water and 1 earth a quarter, flares at every full moon, and needs 30 purification. The peat bog feeds 2 water, 2 earth and 1 fire, flares at every full moon, and needs 45. The Mire feeds 3 water, 2 earth and 1 fire, grows by an earth at each quarter moon, flares at every new and full moon, and needs 50.
-- **The opening deck** is ten one-input circuits: four Wash (5 water, mercury only from 4 or more), three Calcine (5 earth), a Fan (5 air), a Kindle (5 fire) and a Sieve (3 of any element). A card holds at most 3 inputs, 2 gain stages, 2 distilling stages and 2 grounds.
+- **The opening deck** is ten one-input circuits. The metal creators, four Wash (5 water), three Calcine (5 earth), a Fan (5 air) and a Kindle (5 fire), yield their principle only when they take 4 or more. The Sieve (3 of any element) yields no principle; it raises Ward, 1 for each it takes. A card holds at most 3 inputs, 2 gain stages, 2 distilling stages (only on cards that yield principles) and 2 grounds.
 - **Recipes.** Tincture of salt: 2 salt, an eighth, Ward 6. Spirit of mercury: 3 mercury, an eighth, draw 2. Homunculus: 3 mercury, 2 salt and 1 sulfur, a quarter, then it drains 2 of the most plentiful instability and purifies 2 at every quarter.
 - **Metal.** Silver from 2 mercury and a salt (worth 3), lead from any two principles (worth 1). The first rune between fights is free; more cost 3 metal.
 
-Simulated with a simple player, 300 runs, refilling to 4, 60 quintessence:
+### Simulated strategies
 
-| Commission | Won | Quintessence paid (median) | Moons | Cards played |
-| --- | --- | --- | --- | --- |
-| Mud | 100% | 6 | 2.6 | 11 |
-| Peat bog | 100% | 10 | 3.2 | 12 |
-| The Mire | 90% | 29 | 2.4 | 9 |
+`scripts/circuits-sim.ts` plays the run three ways, 1,000 runs each (refill to 4, 60 quintessence):
 
-The run is won 90% of the time with a median of 17 quintessence left. (Before Wash needed 4 water for its mercury, and while cores could be expanded, it was 80%.) The draw rule matters most: drawing 4 at each new and full moon without a cap wins every run with 38 left, and drawing 2 wins about half.
+- **Greedy** plays, brews or waits for whatever looks best right now: purification, quintessence kept, the pool it would face, helpers, Ward, cards in hand. It ignores the gates.
+- **Random** makes any legal move, and puts random runes on random cards.
+- **Delay** keeps the fights before the boss going to gather principles, as long as doing so doesn't lose: a move is allowed only if playing greedy after it would still finish the fight with a chosen reserve of quintessence. It takes the move that gathers most, else the one that purifies least, and plays greedy when nothing is allowed. The engine is deterministic, so this look-ahead is exact.
+
+| Strategy | Runs won | Paid in Mud | Metal from Mud | Paid in Peat | Metal from Peat | Into the Mire |
+| --- | --- | --- | --- | --- | --- | --- |
+| Random | 0% | 24.6 | 1.3 | 34.1 | 1.1 | 11 |
+| Greedy | 83% | 6.6 | 0.7 | 10.3 | 3.4 | 43 |
+| Delay, keep 1 | 0% | 45.3 | 5.8 | 13.2 | 5.9 | 2 |
+| Delay, keep 20 | 41% | 29.3 | 5.8 | 10.5 | 5.7 | 20 |
+| Delay, keep 35 | 88% | 14.2 | 5.8 | 10.8 | 5.7 | 35 |
+| Delay, keep 50 | 93% | 8.0 | 5.3 | 7.5 | 4.2 | 45 |
+| Delay, keep 55 | 92% | 4.8 | 3.0 | 8.9 | 3.6 | 46 |
+| Delay in Mud only, keep 50 | 93% | 8.0 | 5.3 | 8.1 | 3.6 | 44 |
+| Delay in Peat only, keep 35 | 75% | 6.6 | 0.7 | 17.3 | 5.9 | 36 |
+
+- **Patience pays.** Keeping 50, the delay player spends 1.4 more quintessence in Mud than greedy, mostly waiting a quarter or two for the pool to reach the gates, and leaves with 5.3 metal instead of 0.7: nearly two more runes. Those make the peat bog and the Mire cheaper, so it reaches the Mire with more quintessence than greedy and wins 93%.
+- **Sacrifice doesn't.** Mud yields about 6 metal at most however long you stall, because every principle comes with at least 4 purification and 30 ends the fight. Spending down to 35 buys half a metal more for 6 more quintessence; spending down to 1 loses every run. As the rules stand, the answer to "save health or spend it for power" is: save it, but wait for the gates. A real trade would need power that doesn't bring the fight closer to its end.
+- **The draw rule** still matters most: drawing 4 at each new and full moon without a cap wins every run (greedy) with 38 left; drawing 2 wins 9%.
+
+Before every metal creator was gated and the Sieve raised Ward, greedy won 89%.

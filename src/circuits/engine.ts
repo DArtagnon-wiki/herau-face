@@ -43,14 +43,18 @@ export interface Card {
   name: string
   channels: Channel[]
   /**
-   * What the collecting stage must take before it yields its principles: 1
-   * yields them whenever it takes anything; Wash needs 4. Drawn as that many
-   * arcs on the principle's output.
+   * The collecting stage's side output, beside purification: the principles of
+   * what it took (the metal creators), or Ward, 1 for each it took (Sieve).
+   */
+  output: 'principle' | 'ward'
+  /**
+   * What the collecting stage must take before it gives its side output: the
+   * metal creators need 4, Sieve 1. Drawn as that many arcs on the output.
    */
   threshold: number
   /** Gain stages: each multiplies purification by one more (×2, ×3, …) and costs an eighth more. */
   gain: number
-  /** Distilling stages: each yields the card's principles once more. */
+  /** Distilling stages: each yields the card's principles once more. Only on cards that yield principles. */
   distill: number
   /** Grounds: each drains up to GROUND_DRAIN more of any instability, purifying nothing. */
   ground: number
@@ -70,6 +74,8 @@ export interface CardResult {
   processed: number
   purification: number
   principles: Record<Principle, number>
+  /** Ward it raises against the next flare. */
+  ward: number
   /** What each channel took, in the card's order. */
   took: number[]
 }
@@ -78,9 +84,10 @@ export interface CardResult {
  * What playing a card does to this pool. Channels for one element take first,
  * up to their capacity; any-element channels then take from whatever is most
  * plentiful; grounds last. Purification is what the channels took, times
- * (1 + gain). When the channels took at least the card's threshold, each
- * channel that took something yields its element's principle, times
- * (1 + distill).
+ * (1 + gain). When the channels took at least the card's threshold, the side
+ * output fires: for a principle card, each channel that took something yields
+ * its element's principle, times (1 + distill); for a Ward card, Ward 1 for
+ * each it took.
  */
 export function resolveCard(card: Card, pool: Pool): CardResult {
   const left = { ...pool }
@@ -117,14 +124,16 @@ export function resolveCard(card: Card, pool: Pool): CardResult {
     took_[i] = took
     mains[i] = main
   }
-  if (processed >= card.threshold) card.channels.forEach((_, i) => {
+  const fires = processed > 0 && processed >= card.threshold
+  if (fires && card.output === 'principle') card.channels.forEach((_, i) => {
     if (took_[i] > 0 && mains[i]) principles[PRINCIPLE_OF[mains[i]!]] += 1 + card.distill
   })
+  const ward = fires && card.output === 'ward' ? processed : 0
   for (let g = 0; g < card.ground; g++) {
     let need = GROUND_DRAIN
     while (need > 0 && poolTotal(left) > 0) need -= takeFrom(most(), need)
   }
-  return { drained, processed, purification: processed * (1 + card.gain), principles, took: took_ }
+  return { drained, processed, purification: processed * (1 + card.gain), principles, ward, took: took_ }
 }
 
 // ---------------------------------------------------------------------------
@@ -222,9 +231,15 @@ export const REWARD_POOL: RewardRune[] = [
 
 export const EXTRA_RUNE_PRICE = 3
 
-/** Whether this rune fits on this card: each kind of part has a cap. */
+/** Whether this rune fits on this card: each kind of part has a cap, and distilling needs principles to distil. */
 export const fits = (r: RewardRune, c: Card) =>
-  r.kind === 'channel' ? c.channels.length < CAPS.channels : r.kind === 'gain' ? c.gain < CAPS.gain : r.kind === 'distill' ? c.distill < CAPS.distill : c.ground < CAPS.ground
+  r.kind === 'channel'
+    ? c.channels.length < CAPS.channels
+    : r.kind === 'gain'
+      ? c.gain < CAPS.gain
+      : r.kind === 'distill'
+        ? c.output === 'principle' && c.distill < CAPS.distill
+        : c.ground < CAPS.ground
 
 export function addRune(c: Card, r: RewardRune): Card {
   if (!fits(r, c)) return c
@@ -289,17 +304,28 @@ export interface Run {
 }
 
 const channel = (element: Elemental | 'any', capacity: number): Channel => ({ element, capacity })
-const card = (id: number, name: string, ch: Channel, threshold = 1): Card => ({ id, name, channels: [ch], threshold, gain: 0, distill: 0, ground: 0 })
+/** What a metal creator must collect before it yields its principle. */
+export const METAL_GATE = 4
+const card = (id: number, name: string, ch: Channel, output: Card['output'] = 'principle', threshold = output === 'principle' ? METAL_GATE : 1): Card => ({
+  id,
+  name,
+  channels: [ch],
+  output,
+  threshold,
+  gain: 0,
+  distill: 0,
+  ground: 0,
+})
 
-/** The opening deck: one-input circuits, mostly water and earth. Wash yields mercury only from 4 water or more. */
+/** The opening deck: one-input circuits, mostly water and earth. The metal creators yield their principle only from 4 or more; Sieve raises Ward instead. */
 export function startingDeck(): Card[] {
   let id = 1
   return [
-    ...Array.from({ length: 4 }, () => card(id++, 'Wash', channel('water', 5), 4)),
+    ...Array.from({ length: 4 }, () => card(id++, 'Wash', channel('water', 5))),
     ...Array.from({ length: 3 }, () => card(id++, 'Calcine', channel('earth', 5))),
     card(id++, 'Fan', channel('air', 5)),
     card(id++, 'Kindle', channel('fire', 5)),
-    card(id++, 'Sieve', channel('any', 3)),
+    card(id++, 'Sieve', channel('any', 3), 'ward'),
   ]
 }
 
@@ -450,10 +476,11 @@ export function playCard(run: Run, id: number): Run {
     ...run.fight,
     pool,
     principles,
+    ward: run.fight.ward + r.ward,
     purified: run.fight.purified + r.purification,
     hand: run.fight.hand.filter((x) => x.id !== id),
     discard: [...run.fight.discard, c],
-    log: [`${c.name}: takes ${poolTotal(r.drained)}, purifies ${r.purification}${got.length ? `, leaves ${got.join(' and ')}` : ''}.`, ...run.fight.log],
+    log: [`${c.name}: takes ${poolTotal(r.drained)}, purifies ${r.purification}${got.length ? `, leaves ${got.join(' and ')}` : ''}${r.ward ? `, raises Ward ${r.ward}` : ''}.`, ...run.fight.log],
   }
   const played = after({ ...run, fight })
   return played.stage === 'fight' ? advance(played, costOf(c)) : played
@@ -537,7 +564,7 @@ export function runeWords(r: RewardRune): string {
 export function cardWords(c: Card): string {
   const ins = c.channels.map((ch) => `${ch.capacity} ${ch.element === 'any' ? 'any' : ch.element}`).join(' + ')
   const g = c.gain ? ` ×${1 + c.gain}` : ''
-  const d = c.distill ? `, principles ×${1 + c.distill}` : ''
+  const d = c.output === 'ward' ? ', Ward 1 for each' : c.distill ? `, principles ×${1 + c.distill}` : ''
   const gr = c.ground ? `, ground ${c.ground * GROUND_DRAIN}` : ''
   return `Takes up to ${ins}${g}${d}${gr}`
 }

@@ -4,17 +4,18 @@ A roguelike deckbuilder of runes and alchemy, built from Circumgician's world. T
 
 ## Prototype: Circuits (new direction)
 
-A short run of three commissions (mud, a peat bog, the Mire) on a moon dial. Each card is a circuit: its input channels take instability of their element from the pool, up to their capacity, and it purifies that much times its gain, leaving a principle behind (earth salt, fire sulfur, water and air mercury). There are no turns: a card costs a quarter moon, an eighth more for each gain stage. At each new and full moon you refill your hand to 4; when the commission attacks, whatever is left in the pool flares and costs quintessence. Principles brew a tincture (Ward), a spirit (draw 2) or a homunculus (a helper that purifies every quarter). Between commissions what is left smelts into metal, and you add a rune to a card: an input, a gain stage, a distilling stage or a ground.
+A short run of three commissions (mud, a peat bog, the Mire) on a moon dial. Each card is a circuit: its input channels take instability of their element from the pool, up to their capacity, and it purifies that much times its gain. The metal creators also leave a principle behind (earth salt, fire sulfur, water and air mercury), but only when they take 4 or more; the Sieve raises Ward instead, 1 for each it takes. There are no turns: a card costs a quarter moon, an eighth more for each gain stage. At each new and full moon you refill your hand to 4; when the commission attacks, whatever is left in the pool flares and costs quintessence. Principles brew a tincture (Ward), a spirit (draw 2) or a homunculus (a helper that purifies every quarter). Between commissions what is left smelts into metal, and you add a rune to a card: an input, a gain stage, a distilling stage or a ground.
 
 It is all on one screen: the moon dial with the pool in its middle, materials and recipes, the hand, and the actions. Pictures carry the state and words live in popups (the ? button, a long press on a card, the dial, the materials, the menu). Cards are drawn as alchemical circuits on the runic schema in [CIRCUITS.md](CIRCUITS.md): stages are circles, inputs inside, outputs outside, arcs for requirements; a crescent is time, a triangle an element, a square purification. Each card lights up with what it would do on the pool as it stands.
 
 ```sh
 npm run dev                          # then open /circuits.html
-npx tsx scripts/circuits-sim.ts      # a simulated player through 300 runs (--draw refill|draw, --hand N, --stock N)
+npx tsx scripts/circuits-sim.ts --compare              # every strategy side by side
+npx tsx scripts/circuits-sim.ts --strategy delay --reserve 50   # one strategy in detail (greedy, random, delay; --delay-in 0,1; --draw, --hand, --stock)
 npm run build                        # also dist/circuits.html
 ```
 
-Simulated (300 runs, refill to 4, 60 quintessence): mud is won every time for a median of 6 quintessence in 2.6 moons (about 11 cards); the peat bog every time for 10 in 3.2 moons; the Mire 90% of the time. The run ends with a median of 17 quintessence left. Drawing 4 without a cap wins every run with 38 left; drawing 2 wins half. The rules are in `src/circuits/engine.ts`; the drawings in `src/circuits/sigils.ts` (the sigil alphabet), `circuit.ts` (cards) and `dial.ts`; the page in `src/circuits/main.ts`.
+The simulator has three players: greedy (whatever looks best right now), random, and delay (in the fights before the boss, keep the fight going for principles as long as a greedy finish would still leave a chosen reserve of quintessence). Over 1,000 runs (refill to 4, 60 quintessence) random never wins and greedy wins 83%. Delay keeping 50 wins 93%: it spends only 1.4 more quintessence in mud, waiting for the gates, and leaves with 5.3 metal instead of 0.7. Spending more buys almost nothing, because every principle comes with at least 4 purification and the requirement ends the fight; keeping 20 wins 41%, keeping 1 none. Drawing 4 without a cap wins every run with 38 left; drawing 2 wins 9%. The rules are in `src/circuits/engine.ts`; the drawings in `src/circuits/sigils.ts` (the sigil alphabet), `circuit.ts` (cards) and `dial.ts`; the page in `src/circuits/main.ts`.
 
 ## Prototype: mud to clay
 

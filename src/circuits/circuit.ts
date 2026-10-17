@@ -12,9 +12,10 @@
 //
 // A card is a time stage (its crescents, the moon it costs) linked to a
 // collecting stage (its element triangles, each with its capacity). The
-// collector outputs a square (purification) below and its principle to the
-// right behind its threshold arcs. Gain stages chain below the square,
-// distilling stages after the principle, grounds hang down-left.
+// collector outputs a square (purification) below and its side output to the
+// right behind its threshold arcs: its principle, or a shield for Ward. Gain
+// stages chain below the square, distilling stages after the principle,
+// grounds hang down-left.
 //
 // Given a live result, the drawing lights up: triangles fill with what they
 // would take, threshold arcs light one by one, and outputs that would fire
@@ -117,8 +118,8 @@ export function circuitSvg(c: Card, opts: CircuitOptions = {}): string {
   if (c.gain) parts.push(numeral(`×${1 + c.gain}`, 0, sy + 0.5, 8, purifying ? 'var(--ink)' : 'var(--ink-faint)'))
   box.add(0, sy, 8)
 
-  // The principle to the right, behind its threshold arcs, then any distilling stages.
-  const yields = !live || Object.values(live.principles).some((n) => n > 0)
+  // The side output to the right, behind its threshold arcs: the principle, then any distilling stages, or Ward.
+  const yields = !live || (c.output === 'ward' ? live.ward > 0 : Object.values(live.principles).some((n) => n > 0))
   const pDeg = -14
   const arcs = Math.min(c.threshold, 6)
   const processed = live?.processed ?? 0
@@ -131,7 +132,12 @@ export function circuitSvg(c: Card, opts: CircuitOptions = {}): string {
   const [lx0, ly0] = polar(C.x, C.y, C.r, pDeg)
   const [lx1, ly1] = polar(C.x, C.y, px, pDeg)
   parts.push(line(lx0, ly0, lx1, ly1, on(yields)))
-  const ps = principlesOf(c)
+  if (c.output === 'ward') {
+    const [wx, wy] = polar(C.x, C.y, px + 8, pDeg)
+    parts.push(ward(wx, wy, 8, { stroke: on(yields), fill: live && yields ? 'var(--lit-fill)' : 'none', width: 1.6 }))
+    box.add(wx, wy, 9)
+  }
+  const ps = c.output === 'principle' ? principlesOf(c) : []
   const signAt = (x: number, yy: number, size: number, color: string) =>
     ps.map((p, i) => principle(p, x, yy + (i - (ps.length - 1) / 2) * (size * 1.9), size, { stroke: color })).join('')
   let [ex, ey] = polar(C.x, C.y, px + 8, pDeg)
@@ -142,10 +148,12 @@ export function circuitSvg(c: Card, opts: CircuitOptions = {}): string {
     parts.push(line(ex + 15, ey, ex + 22, ey, on(yields)))
     ex += 30
   }
-  parts.push(signAt(ex, ey, ps.length > 1 ? 4.2 : 7.5, on(yields)))
-  if (c.distill) parts.push(numeral(`×${1 + c.distill}`, ex + 10, ey + 9, 7.5, yields ? 'var(--ink)' : 'var(--ink-faint)'))
-  if (c.distill) box.add(ex + 10, ey + 9, 7)
-  box.add(ex, ey, ps.length > 1 ? 12 : 9)
+  if (ps.length) {
+    parts.push(signAt(ex, ey, ps.length > 1 ? 4.2 : 7.5, on(yields)))
+    if (c.distill) parts.push(numeral(`×${1 + c.distill}`, ex + 10, ey + 9, 7.5, yields ? 'var(--ink)' : 'var(--ink-faint)'))
+    if (c.distill) box.add(ex + 10, ey + 9, 7)
+    box.add(ex, ey, ps.length > 1 ? 12 : 9)
+  }
 
   // Grounds hang down-left.
   const grounded = live ? Object.values(live.drained).reduce((a, b) => a + b, 0) - live.processed : 0
