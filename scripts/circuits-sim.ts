@@ -45,9 +45,7 @@ function reward(r: Run): Run {
       const pick =
         o.kind === 'channel'
           ? cards.find((c) => !c.channels.some((ch) => ch.element === o.element)) ?? cards[0]
-          : o.kind === 'expand'
-            ? cards.find((c) => c.gain > 0) ?? cards[0]
-            : cards.find((c) => c.channels[0].element === 'water') ?? cards[0]
+          : cards.find((c) => c.channels[0].element === 'water') ?? cards[0]
       run = takeRune(run, i, pick.id)
       done = true
       break
@@ -56,7 +54,7 @@ function reward(r: Run): Run {
   }
   return nextFight(run)
 }
-const rank = (o: Run['offer'][number]) => ({ gain: 0, channel: 1, distill: 2, ground: 3, expand: 4 })[o.kind]
+const rank = (o: Run['offer'][number]) => ({ gain: 0, channel: 1, distill: 2, ground: 3 })[o.kind]
 
 type FightStat = { won: boolean; paid: number; moons: number; plays: number; brewed: number; principles: number; waits: number }
 const stats: FightStat[][] = COMMISSIONS.map(() => [])

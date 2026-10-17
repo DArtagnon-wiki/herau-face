@@ -7,7 +7,7 @@
 // See CIRCUITS.md.
 
 import { makeRng } from '../sim/rng'
-import type { Body, Elemental } from '../sim/types'
+import type { Elemental } from '../sim/types'
 
 export const ELEMENTS: Elemental[] = ['water', 'earth', 'air', 'fire']
 export type Principle = 'salt' | 'sulfur' | 'mercury'
@@ -41,9 +41,13 @@ export interface Channel {
 export interface Card {
   id: number
   name: string
-  /** The core rune's body: an N-gon holds N parts (channels and stages). */
-  body: Body
   channels: Channel[]
+  /**
+   * What the collecting stage must take before it yields its principles: 1
+   * yields them whenever it takes anything; Wash needs 4. Drawn as that many
+   * arcs on the principle's output.
+   */
+  threshold: number
   /** Gain stages: each multiplies purification by one more (×2, ×3, …) and costs an eighth more. */
   gain: number
   /** Distilling stages: each yields the card's principles once more. */
@@ -52,14 +56,10 @@ export interface Card {
   ground: number
 }
 
-export const SIDES: Record<Body, number> = { circle: 1, crescent: 2, triangle: 3, square: 4, pentagon: 5, hexagon: 6, heptagon: 7 }
-const BODY_ORDER: Body[] = ['circle', 'crescent', 'triangle', 'square', 'pentagon', 'hexagon', 'heptagon']
 export const GROUND_DRAIN = 3
 export const BASE_COST = 2
-
-/** Parts a card holds, against the sides of its core. */
-export const partsOf = (c: Card) => c.channels.length + c.gain + c.distill + c.ground
-export const roomOf = (c: Card) => SIDES[c.body] - partsOf(c)
+/** Most of each part a card can hold. */
+export const CAPS = { channels: 3, gain: 2, distill: 2, ground: 2 }
 /** Time a card takes on the dial, in eighths: a quarter, and an eighth more for each gain stage. */
 export const costOf = (c: Card) => BASE_COST + c.gain
 
@@ -70,14 +70,17 @@ export interface CardResult {
   processed: number
   purification: number
   principles: Record<Principle, number>
+  /** What each channel took, in the card's order. */
+  took: number[]
 }
 
 /**
  * What playing a card does to this pool. Channels for one element take first,
  * up to their capacity; any-element channels then take from whatever is most
  * plentiful; grounds last. Purification is what the channels took, times
- * (1 + gain). Each channel that took something yields its element's principle,
- * times (1 + distill).
+ * (1 + gain). When the channels took at least the card's threshold, each
+ * channel that took something yields its element's principle, times
+ * (1 + distill).
  */
 export function resolveCard(card: Card, pool: Pool): CardResult {
   const left = { ...pool }
@@ -91,8 +94,10 @@ export function resolveCard(card: Card, pool: Pool): CardResult {
     return k
   }
   const most = () => ELEMENTS.reduce((a, b) => (left[b] > left[a] ? b : a))
-  const ordered = [...card.channels.filter((c) => c.element !== 'any'), ...card.channels.filter((c) => c.element === 'any')]
-  for (const ch of ordered) {
+  const took_: number[] = card.channels.map(() => 0)
+  const mains: (Elemental | null)[] = card.channels.map(() => null)
+  const ordered = card.channels.map((ch, i) => ({ ch, i })).sort((a, b) => Number(a.ch.element === 'any') - Number(b.ch.element === 'any'))
+  for (const { ch, i } of ordered) {
     let took = 0
     let main: Elemental | null = null
     if (ch.element !== 'any') {
@@ -109,13 +114,17 @@ export function resolveCard(card: Card, pool: Pool): CardResult {
       }
     }
     processed += took
-    if (took > 0 && main) principles[PRINCIPLE_OF[main]] += 1 + card.distill
+    took_[i] = took
+    mains[i] = main
   }
+  if (processed >= card.threshold) card.channels.forEach((_, i) => {
+    if (took_[i] > 0 && mains[i]) principles[PRINCIPLE_OF[mains[i]!]] += 1 + card.distill
+  })
   for (let g = 0; g < card.ground; g++) {
     let need = GROUND_DRAIN
     while (need > 0 && poolTotal(left) > 0) need -= takeFrom(most(), need)
   }
-  return { drained, processed, purification: processed * (1 + card.gain), principles }
+  return { drained, processed, purification: processed * (1 + card.gain), principles, took: took_ }
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +207,6 @@ export type RewardRune =
   | { kind: 'gain' }
   | { kind: 'distill' }
   | { kind: 'ground' }
-  | { kind: 'expand' }
 
 export const REWARD_POOL: RewardRune[] = [
   { kind: 'channel', element: 'water', capacity: 5 },
@@ -210,13 +218,13 @@ export const REWARD_POOL: RewardRune[] = [
   { kind: 'gain' },
   { kind: 'distill' },
   { kind: 'ground' },
-  { kind: 'expand' },
 ]
 
 export const EXTRA_RUNE_PRICE = 3
 
-/** Whether this rune fits on this card. */
-export const fits = (r: RewardRune, c: Card) => (r.kind === 'expand' ? BODY_ORDER.indexOf(c.body) < BODY_ORDER.length - 1 : roomOf(c) > 0)
+/** Whether this rune fits on this card: each kind of part has a cap. */
+export const fits = (r: RewardRune, c: Card) =>
+  r.kind === 'channel' ? c.channels.length < CAPS.channels : r.kind === 'gain' ? c.gain < CAPS.gain : r.kind === 'distill' ? c.distill < CAPS.distill : c.ground < CAPS.ground
 
 export function addRune(c: Card, r: RewardRune): Card {
   if (!fits(r, c)) return c
@@ -229,8 +237,6 @@ export function addRune(c: Card, r: RewardRune): Card {
       return { ...c, distill: c.distill + 1 }
     case 'ground':
       return { ...c, ground: c.ground + 1 }
-    case 'expand':
-      return { ...c, body: BODY_ORDER[BODY_ORDER.indexOf(c.body) + 1] }
   }
 }
 
@@ -283,13 +289,13 @@ export interface Run {
 }
 
 const channel = (element: Elemental | 'any', capacity: number): Channel => ({ element, capacity })
-const card = (id: number, name: string, ch: Channel): Card => ({ id, name, body: 'triangle', channels: [ch], gain: 0, distill: 0, ground: 0 })
+const card = (id: number, name: string, ch: Channel, threshold = 1): Card => ({ id, name, channels: [ch], threshold, gain: 0, distill: 0, ground: 0 })
 
-/** The opening deck: one-input circuits, mostly water and earth. */
+/** The opening deck: one-input circuits, mostly water and earth. Wash yields mercury only from 4 water or more. */
 export function startingDeck(): Card[] {
   let id = 1
   return [
-    ...Array.from({ length: 4 }, () => card(id++, 'Wash', channel('water', 5))),
+    ...Array.from({ length: 4 }, () => card(id++, 'Wash', channel('water', 5), 4)),
     ...Array.from({ length: 3 }, () => card(id++, 'Calcine', channel('earth', 5))),
     card(id++, 'Fan', channel('air', 5)),
     card(id++, 'Kindle', channel('fire', 5)),
@@ -524,8 +530,6 @@ export function runeWords(r: RewardRune): string {
       return 'Distilling stage: principles once more'
     case 'ground':
       return `Ground: drains ${GROUND_DRAIN} more of anything, purifying nothing`
-    case 'expand':
-      return 'Expand: one more side on the core, room for another part'
   }
 }
 
