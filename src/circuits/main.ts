@@ -1,5 +1,7 @@
 // Alchemical Circuits: one screen. The dial, the materials and the hand are
-// always in view and carry the state in pictures; words live in popups.
+// always in view and carry the state in pictures. A note beside them always
+// explains what you are looking at, following what you pick, without covering
+// anything; only the menu and the reading guide open over the game.
 
 import '../ui/style.css'
 import './circuits.css'
@@ -13,13 +15,15 @@ import {
   ELEMENTS,
   EXTRA_RUNE_PRICE,
   GROUND_DRAIN,
+  METAL_GATE,
   PHASE_NAMES,
   PRINCIPLES,
-  PRINCIPLE_OF,
   RECIPES,
+  addRune,
   canAfford,
   costOf,
   craft,
+  drawPhases,
   feedOf,
   fits,
   newRun,
@@ -27,12 +31,14 @@ import {
   playCard,
   poolTotal,
   resolveCard,
-  runeWords,
   takeRune,
   upcoming,
   wait,
   type Card,
+  type Output,
+  type Principle,
   type Recipe,
+  type RewardRune,
   type Run,
   type Settings,
 } from './engine'
@@ -42,15 +48,20 @@ import { ELEMENT_COLOR, element, ground, homunculus, icon, lead as leadSig, meta
 // State
 
 type Pick = { kind: 'card'; id: number } | { kind: 'recipe'; key: Recipe['key'] } | null
-type Popup = { kind: 'explain' } | { kind: 'card'; id: number } | { kind: 'dial' } | { kind: 'materials' } | { kind: 'legend' } | { kind: 'menu' } | { kind: 'offer'; i: number } | null
+type Popup = { kind: 'legend' } | { kind: 'menu' } | null
 
 const ui = {
   settings: { ...DEFAULT_SETTINGS } as Settings,
   run: null as Run | null,
+  /** In a fight: the card or recipe picked to play. */
   pick: null as Pick,
+  /** What the note explains when it is not the pick: the dial or the materials. */
+  focus: null as 'dial' | 'materials' | null,
   popup: null as Popup,
-  /** Between fights: the rune picked from the offer. */
+  /** Between fights: the rune picked from the offer, the card it would go on, a card being read. */
   offer: null as number | null,
+  target: null as number | null,
+  look: null as number | null,
   flash: '',
   /** What the last action did, played once by the next render. */
   fx: null as { paid: number; flared: boolean } | null,
@@ -58,59 +69,146 @@ const ui = {
 
 const root = document.getElementById('app')!
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
-const eighths = (n: number) => (n === 1 ? 'an eighth' : n === 2 ? 'a quarter' : n === 3 ? 'three eighths' : n === 4 ? 'a half' : `${n} eighths`)
-const pluralP = (n: number, p: string) => `${n} ${p}`
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+/** Time on the dial in words: a tick is a sixteenth of the moon. */
+const EIGHTHS_WORDS = ['', 'an eighth', 'a quarter', 'three eighths', 'a half', 'five eighths', 'three quarters', 'seven eighths', 'a whole moon']
+const ticks = (n: number) => (n % 2 === 0 && n <= 16 ? EIGHTHS_WORDS[n / 2] : n === 1 ? 'a sixteenth' : n === 3 ? 'three sixteenths' : `${n} sixteenths`)
 
 function start() {
   ui.run = newRun(Date.now(), ui.settings)
   ui.pick = null
+  ui.focus = null
   ui.popup = null
-  ui.offer = null
+  ui.offer = ui.target = ui.look = null
   ui.flash = ''
   sound.deal(ui.run.fight.hand.length)
 }
 
 // ---------------------------------------------------------------------------
-// Words, for popups only
+// Words, for the note
 
-function cardText(c: Card): string {
+const PRINCIPLE_USE: Record<Principle, string> = {
+  salt: 'Salt brews tinctures (Ward) and homunculi, and smelts with mercury into silver.',
+  sulfur: 'Sulfur brews homunculi, and smelts into lead.',
+  mercury: 'Mercury brews spirits (draw 2) and homunculi, and smelts with salt into silver.',
+}
+const sumCap = (c: Card) => c.channels.reduce((n, ch) => n + ch.capacity, 0)
+const maxPurify = (c: Card) => sumCap(c) * (1 + c.gain)
+
+function outputWords(o: Output): string {
+  return o.kind === 'ward' ? 'Ward 1 for each it takes (the shield)' : `1 ${o.principle} once it takes ${o.gate} or more (${o.gate} arcs)`
+}
+
+function cardLines(c: Card): string[] {
   const ins = c.channels.map((ch) => (ch.element === 'any' ? `up to ${ch.capacity} of whatever is most plentiful` : `up to ${ch.capacity} ${ch.element}`)).join(' and ')
-  const ps = [...new Set(c.channels.flatMap((ch) => (ch.element === 'any' ? ['salt, sulfur or mercury'] : [PRINCIPLE_OF[ch.element]])))].join(' and ')
-  const lines = [
-    `Costs ${eighths(costOf(c))} of the moon: the crescents in its small circle. The arc on its link means that circle must run before the big one can.`,
-    `The big circle takes ${ins} from the pool (its triangle${c.channels.length > 1 ? 's' : ''}), and purifies 1 for each${c.gain ? `, times ${1 + c.gain} through its ${c.gain === 1 ? 'gain stage' : 'gain stages'} (the circles above the square)` : ''} (the square).`,
-    c.output === 'ward'
-      ? `${c.threshold > 1 ? `If it takes ${c.threshold} or more (one arc each), it` : 'Whenever it takes anything (the one arc), it'} also raises Ward, 1 for each it takes (the shield): Ward catches the next flare.`
-      : `${c.threshold > 1 ? `If it takes ${c.threshold} or more (one arc each), it` : 'Whenever it takes anything (the one arc), it'} also yields ${ps}${c.distill ? `, times ${1 + c.distill} through its distilling ${c.distill === 1 ? 'stage' : 'stages'}` : ''}.`,
-    c.ground ? `Its ${c.ground === 1 ? 'ground drains' : 'grounds drain'} ${GROUND_DRAIN * c.ground} more of anything, purifying nothing.` : '',
-  ]
-  return lines.filter(Boolean).map((l) => `<p>${l}</p>`).join('')
+  return [
+    `Takes ${ins} and purifies 1 for each${c.gain ? `, ×${1 + c.gain} through the ${c.gain === 1 ? 'square' : 'squares'} drawn around its square` : ''}.`,
+    `${cap(c.outputs.map(outputWords).join('; '))}.`,
+    c.ground ? `${c.ground === 1 ? 'Its ground drains' : 'Its grounds drain'} ${GROUND_DRAIN * c.ground} more, purifying nothing.` : '',
+  ].filter(Boolean)
 }
 
-function nowText(run: Run, c: Card): string {
+function nowLine(run: Run, c: Card): string {
   const r = resolveCard(c, run.fight.pool)
-  if (!r.processed && !Object.values(r.drained).some(Boolean)) return '<p class="now">Right now there is nothing in the pool for it.</p>'
-  const ps = PRINCIPLES.filter((p) => r.principles[p]).map((p) => `${r.principles[p]} ${p}`)
-  const side = r.ward ? `, raising Ward ${r.ward}` : ps.length ? `, yielding ${ps.join(' and ')}` : c.threshold > 1 && r.processed ? `, short of the ${c.threshold} it needs to ${c.output === 'ward' ? 'raise Ward' : 'yield its principle'}` : ''
-  return `<p class="now">Right now it would take ${poolTotal(r.drained)} and purify ${r.purification}${side}.</p>`
+  if (!r.processed && !Object.values(r.drained).some(Boolean)) return 'Now: nothing in the pool for it.'
+  const got = PRINCIPLES.filter((p) => r.principles[p]).map((p) => `${r.principles[p]} ${p}`)
+  const short = c.outputs.filter((o) => o.kind === 'principle' && r.processed > 0 && r.processed < o.gate).map((o) => `${o.gate - r.processed} short of ${(o as { principle: Principle }).principle}`)
+  return `Now: takes ${poolTotal(r.drained)}, purifies ${r.purification}${got.length ? `, yields ${got.join(' and ')}` : ''}${r.ward ? `, Ward ${r.ward}` : ''}${short.length ? `; ${short.join(', ')}` : ''}.`
 }
 
-function recipeText(r: Recipe): string {
-  const cost = PRINCIPLES.filter((p) => r.cost[p]).map((p) => pluralP(r.cost[p]!, p)).join(', ')
-  return `<p>${esc(r.effect)}.</p><p>Brewing takes ${cost}, and ${eighths(r.time)} of the moon (the crescent inside).</p>`
+function runeTitle(r: RewardRune): string {
+  switch (r.kind) {
+    case 'channel':
+      return r.element === 'any' ? `Input: ${r.capacity} of any` : `Input: ${r.capacity} ${r.element}`
+    case 'gain':
+      return 'Gain'
+    case 'distill':
+      return `Distil ${r.principle}`
+    case 'ground':
+      return 'Ground'
+  }
 }
 
-function dialText(run: Run): string {
+function runeText(r: RewardRune): string {
+  switch (r.kind) {
+    case 'channel':
+      return `A new triangle in the card's collecting stage: it also takes up to ${r.capacity} ${r.element === 'any' ? 'of whatever is most plentiful' : r.element}, and purifies 1 for each. More drained before the flare, and more toward its outputs' arcs.`
+    case 'gain':
+      return "A square drawn around the card's square: its purification is multiplied once more (×2, then ×3). It also takes a tick longer, a small crescent more of the moon."
+    case 'distill':
+      return `A new output on the right of the card, behind ${METAL_GATE} arcs: whenever it takes ${METAL_GATE} or more, it also yields 1 ${r.principle}. ${PRINCIPLE_USE[r.principle]}`
+    case 'ground':
+      return `A ground hanging from the card's collecting stage: it also drains ${GROUND_DRAIN} of whatever is most plentiful, purifying nothing. Less is left to flare.`
+  }
+}
+
+/** What adding this rune to this card changes, in a sentence. */
+function changeText(r: RewardRune, before: Card): string {
+  const after = addRune(before, r)
+  switch (r.kind) {
+    case 'channel':
+      return `${before.name} would take up to ${sumCap(after)} instead of ${sumCap(before)}, for up to ${maxPurify(after)} purification.`
+    case 'gain':
+      return `${before.name} would purify up to ${maxPurify(after)} instead of ${maxPurify(before)}, in ${ticks(costOf(after))} of the moon instead of ${ticks(costOf(before))}.`
+    case 'distill':
+      return `${before.name} would also yield 1 ${r.principle} whenever it takes ${METAL_GATE} or more${sumCap(before) < METAL_GATE ? `, but it can take only ${sumCap(before)} until it gets another input` : ''}.`
+    case 'ground':
+      return `${before.name} would also drain ${GROUND_DRAIN} more of anything each time you play it.`
+  }
+}
+
+function situationNote(run: Run): [string, string] {
   const f = run.fight
-  const items = upcoming(f, 4)
-    .map((x) => {
-      const what = [x.attack ? `${f.commission.name} flares whatever is in the pool` : '', x.buff ? 'it grows' : '', x.draw ? (run.settings.draw === 'refill' ? `you refill your hand to ${run.settings.hand}` : `you draw ${run.settings.hand}`) : '', `it feeds ${ELEMENTS.filter((e) => feedOf(f.commission, f.buffs + (x.buff ? 1 : 0))[e]).map((e) => `${feedOf(f.commission, f.buffs + (x.buff ? 1 : 0))[e]} ${e}`).join(', ')}`]
-        .filter(Boolean)
-        .join('; ')
-      return `<li><b>${PHASE_NAMES[x.phase]}</b>, in ${eighths(x.pos - f.dial)}: ${what}.</li>`
-    })
-    .join('')
-  return `<p>Every card costs time. The needle moves around the moon as you play; each quarter, ${esc(f.commission.name.toLowerCase())} feeds instability into the pool (the four triangles in the middle). A red star marks where it flares: whatever is left in the pool then costs quintessence, less any Ward. The red badge is what would flare now. The inner ring fills with purification; at ${f.commission.require} the commission is done.</p><ol class="pop-list">${items}</ol>`
+  const drawAt = drawPhases(run.settings)
+  const up = upcoming(f, 8, drawAt)
+  const atk = up.find((x) => x.attack)
+  const drw = up.find((x) => x.draw)
+  const threat = Math.max(0, poolTotal(f.pool) - f.ward)
+  const title = atk ? `${PHASE_NAMES[atk.phase]} in ${ticks(atk.pos - f.dial)}` : 'The moon'
+  const lines = [
+    atk ? `${f.commission.name} flares there: whatever is in the pool, less Ward (${threat} now, the red badge).` : '',
+    drw ? `You ${run.settings.draw === 'cycle' ? 'discard and draw' : 'draw'} at the ${PHASE_NAMES[drw.phase].toLowerCase()}${drw === atk ? ', after the flare' : ''}.` : '',
+    'Pick a card to see what it would do.',
+  ]
+  return [title, lines.filter(Boolean).join(' ')]
+}
+
+function dialNote(run: Run): [string, string] {
+  const f = run.fight
+  const drawAt = drawPhases(run.settings)
+  const items = upcoming(f, 3, drawAt).map((x) => {
+    const fd = feedOf(f.commission, f.buffs + (x.buff ? 1 : 0))
+    const what = [x.attack ? 'flare' : '', x.buff ? 'it grows' : '', x.draw ? (run.settings.draw === 'cycle' ? 'discard, draw' : 'draw') : '', `+${ELEMENTS.filter((e) => fd[e]).map((e) => `${fd[e]} ${e}`).join(', ')}`].filter(Boolean)
+    return `<b>${PHASE_NAMES[x.phase]}</b> (${ticks(x.pos - f.dial)}): ${what.join(', ')}`
+  })
+  return ['The moon', `${items.join('. ')}. Purified ${f.purified} of ${f.commission.require} (the inner ring).`]
+}
+
+function materialsNote(run: Run): [string, string] {
+  const f = run.fight
+  return [
+    'Materials',
+    `Cards yield principles from their outputs. ${PRINCIPLE_USE.salt} ${PRINCIPLE_USE.mercury} After a commission what is left smelts into metal: silver from 2 mercury and a salt (worth 3), lead from any two (worth 1). Metal buys extra runes.${f.ward ? ` Ward ${f.ward} catches the next flare first.` : ''}${f.homunculi ? ` Your homunculus purifies ${2 * f.homunculi} at every phase.` : ''}`,
+  ]
+}
+
+function recipeNote(run: Run, r: Recipe): [string, string] {
+  const cost = PRINCIPLES.filter((p) => r.cost[p]).map((p) => `${r.cost[p]} ${p}`).join(', ')
+  return [r.name, `${r.effect}. Takes ${cost} and ${ticks(r.time)} of the moon.${canAfford(run.fight, r) ? '' : ' <span class="now">You need more principles first.</span>'}`]
+}
+
+function noteView(title: string, body: string, art = ''): string {
+  return `<section class="note" aria-live="polite">${art ? `<div class="note-art">${art}</div>` : ''}<p><b class="note-title">${esc(title)}</b> ${body}</p></section>`
+}
+
+function fightNote(run: Run): string {
+  const p = ui.pick
+  if (ui.focus === 'dial') return noteView(...dialNote(run))
+  if (ui.focus === 'materials') return noteView(...materialsNote(run))
+  if (p?.kind === 'recipe') return noteView(...recipeNote(run, RECIPES.find((x) => x.key === p.key)!))
+  const c = p?.kind === 'card' ? run.fight.hand.find((x) => x.id === p.id) : null
+  if (c) return noteView(`${c.name}, ${ticks(costOf(c))}`, `${cardLines(c).join(' ')} <span class="now">${esc(nowLine(run, c))}</span>`)
+  return noteView(...situationNote(run))
 }
 
 function legendRow(svg: string, text: string): string {
@@ -120,16 +218,16 @@ function legendRow(svg: string, text: string): string {
 function legendText(): string {
   const I = (m: string) => icon(m, 26)
   return `<ul class="legend">
-    ${legendRow(I(`<circle r="9" fill="none" stroke="var(--line)" stroke-width="1.5"/>`), 'A circle is a stage. Inside are its inputs; outside, its outputs and links to other stages.')}
-    ${legendRow(I(moon(0, 0, 8, { stroke: 'var(--moon)' })), 'A crescent is time: a quarter of the moon each, a small one for an eighth.')}
+    ${legendRow(I(`<circle r="9" fill="none" stroke="var(--line)" stroke-width="1.5"/>`), 'A circle is a stage. Inside are its inputs, each with a lead to the rim; outside, its outputs and links to other stages.')}
+    ${legendRow(I(moon(0, 0, 8, { stroke: 'var(--moon)' })), 'A crescent is time: an eighth of the moon each, a small one for a sixteenth.')}
     ${legendRow(I(element('water', -4, 0, 6.5, { stroke: ELEMENT_COLOR.water }) + element('fire', 5, 1, 6.5, { stroke: ELEMENT_COLOR.fire })), 'A triangle is an element taken from the pool, with the most it takes. Fire and air point up, water and earth down; air and earth are barred; the six-pointed star takes any.')}
-    ${legendRow(I(square(0, 0, 7, { stroke: 'var(--lit)' })), 'A square is purification: progress against the commission.')}
-    ${legendRow(I(`<path d="M-5 -9A11 11 0 0 1 -5 9M-1 -10A13 13 0 0 1 -1 10M3 -11A15 15 0 0 1 3 11" fill="none" stroke="var(--lit)" stroke-width="1.4" stroke-linecap="round"/>`), 'Arcs across an output are what it needs. One arc on a link: the stage before must run. Several before a principle: it must take at least that many. They light up as the pool fills.')}
-    ${legendRow(I(principle('salt', -6, 0, 6, { stroke: 'var(--lit)' }) + principle('mercury', 6, 0, 6, { stroke: 'var(--lit)' })), 'Salt, sulfur and mercury: the principles left behind. Earth leaves salt, fire sulfur, water and air mercury. They brew recipes.')}
+    ${legendRow(I(square(0, 0, 9, { stroke: 'var(--lit)' }) + square(0, 0, 5, { stroke: 'var(--lit)' })), 'A square is purification: progress against the commission. Each square drawn around it multiplies it once more.')}
+    ${legendRow(I(`<path d="M-5 -9A11 11 0 0 1 -5 9M-1 -10A13 13 0 0 1 -1 10M3 -11A15 15 0 0 1 3 11" fill="none" stroke="var(--lit)" stroke-width="1.4" stroke-linecap="round"/>`), 'Arcs across a line are what it needs. One arc on a link: the stage before must run. Several on an output: the stage must take at least that many. They light up as the pool fills.')}
+    ${legendRow(I(principle('salt', -6, 0, 6, { stroke: 'var(--lit)' }) + principle('mercury', 6, 0, 6, { stroke: 'var(--lit)' })), 'Salt, sulfur and mercury: the principles a card yields from its outputs. They brew recipes and smelt into metal.')}
+    ${legendRow(I(ward(0, 0, 9, { stroke: 'var(--lit)' })), 'A shield is Ward: it catches the next flare. A shield on a card raises Ward, 1 for each it takes.')}
+    ${legendRow(I(ground(0, -1, 8, { stroke: 'var(--lit)' })), `A ground drains ${GROUND_DRAIN} more instability away, purifying nothing.`)}
     ${legendRow(I(metal(0, 0, 8, { stroke: 'var(--lit)' })), 'Metal, counted by worth: what is left after a commission smelts into silver and lead. It buys extra runes.')}
-    ${legendRow(I(ground(0, -1, 8, { stroke: 'var(--lit)' })), 'A ground drains instability away, purifying nothing.')}
-    ${legendRow(I(ward(0, 0, 9, { stroke: 'var(--lit)' })), 'Ward catches the next flare. A shield on a card raises Ward, 1 for each it takes.')}
-    ${legendRow(I(homunculus(0, 0, 9, { stroke: 'var(--lit)' })), 'A homunculus purifies on its own every quarter.')}
+    ${legendRow(I(homunculus(0, 0, 9, { stroke: 'var(--lit)' })), 'A homunculus purifies on its own at every phase.')}
   </ul>`
 }
 
@@ -149,7 +247,7 @@ function materials(run: Run): string {
   const f = run.fight
   const chip = (svg: string, n: number, label: string, hide = false) => (hide ? '' : `<span class="chip" aria-label="${label} ${n}">${svg}<b class="num">${n}</b></span>`)
   const color: Record<string, string> = { salt: 'var(--salt)', sulfur: 'var(--sulfur)', mercury: 'var(--mercury)' }
-  return `<button class="mats" data-act="materials" aria-label="Materials">
+  return `<button class="mats ${ui.focus === 'materials' ? 'is-on' : ''}" data-act="materials" aria-label="Materials">
     ${PRINCIPLES.map((p) => chip(icon(principle(p, 0, 0, 9, { stroke: color[p], width: 1.6 }), 20), f.principles[p], p)).join('')}
     ${chip(icon(metal(0, 0, 8, { stroke: 'var(--gilt)', width: 1.6 }), 20), run.metals, 'metal')}
     ${chip(icon(ward(0, 0, 9, { stroke: 'var(--glass)', width: 1.6 }), 20), f.ward, 'Ward', !f.ward)}
@@ -167,7 +265,7 @@ function recipes(run: Run): string {
 
 function hand(run: Run): string {
   const f = run.fight
-  if (!f.hand.length) return `<section class="hand-row empty"><p>No cards in hand. Wait for the next new or full moon.</p></section>`
+  if (!f.hand.length) return `<section class="hand-row empty"><p>No cards in hand until the next draw.</p></section>`
   return `<section class="hand-row" aria-label="Hand">${f.hand
     .map((c) => {
       const live = resolveCard(c, f.pool)
@@ -211,8 +309,7 @@ function actions(run: Run, after: Run | null): string {
   const flares = after && after.fightIndex === run.fightIndex ? after.fight.flares.length - run.fight.flares.length : 0
   const cost = after && after.fightIndex === run.fightIndex ? run.quintessence - after.quintessence : 0
   return `<div class="cx-actions">
-    <button class="explain" data-act="explain" aria-label="Explain">?</button>
-    <button class="wait" data-act="wait" aria-label="Wait a quarter">${waitIcon()}<span>Wait</span></button>
+    <button class="wait" data-act="wait" aria-label="Wait an eighth of the moon">${waitIcon()}<span>Wait</span></button>
     <button class="primary go" data-act="go" ${after ? '' : 'disabled'}>${label}${finishes ? ' · done' : flares ? ` · <span class="warn-on-gold">flare −${cost}</span>` : ''}</button>
   </div>`
 }
@@ -222,7 +319,6 @@ function popupView(run: Run | null): string {
   if (!p) return ''
   let title = ''
   let body = ''
-  let act = ''
   if (p.kind === 'legend') {
     title = 'Reading a circuit'
     body = legendText()
@@ -234,42 +330,14 @@ function popupView(run: Run | null): string {
     body = `<div class="pop-actions"><button data-act="legend">Reading a circuit</button><button data-act="restart">Start again</button></div>
       ${run ? `<p class="label">What happened</p><ol class="pop-list log">${run.fight.log.slice(0, 10).map((l) => `<li>${esc(l)}</li>`).join('')}</ol>` : ''}
       <p class="label">Tuning, on restart</p>
-      <div class="tune"><label>At new and full moons <select id="c-draw">${opt('refill-4', drawKey, 'Refill to 4')}${opt('draw-4', drawKey, 'Draw 4')}${opt('draw-2', drawKey, 'Draw 2')}${opt('refill-5', drawKey, 'Refill to 5')}</select></label>
-      <label>Quintessence <select id="c-stock">${[40, 60, 80].map((v) => opt(String(v), String(s.stock), String(v))).join('')}</select></label></div>`
-  } else if (!run) return ''
-  else if (p.kind === 'dial') {
-    title = 'The moon'
-    body = dialText(run)
-  } else if (p.kind === 'materials') {
-    title = 'Materials'
-    body = `<p>Cards leave principles behind: earth salt, fire sulfur, water and air mercury. Tap a recipe to see what it brews. When a commission is done, what is left smelts into metal: silver from 2 mercury and a salt (worth 3), lead from any two (worth 1). Metal buys extra runes between commissions.</p>${run.fight.ward ? `<p>Ward ${run.fight.ward} will catch the first of the next flare.</p>` : ''}${run.fight.homunculi ? `<p>Your homunculus purifies ${2 * run.fight.homunculi} every quarter.</p>` : ''}`
-  } else if (p.kind === 'card' || (p.kind === 'explain' && ui.pick?.kind === 'card')) {
-    const id = p.kind === 'card' ? p.id : (ui.pick as { id: number }).id
-    const c = run.fight.hand.find((x) => x.id === id) ?? run.deck.find((x) => x.id === id)
-    if (c) {
-      title = c.name
-      body = `<div class="pop-art">${circuitSvg(c, { size: 170 })}</div>${cardText(c)}${run.stage === 'fight' && run.fight.hand.includes(c) ? nowText(run, c) : ''}`
-    }
-  } else if (p.kind === 'explain' && ui.pick?.kind === 'recipe') {
-    const r = RECIPES.find((x) => x.key === (ui.pick as { key: Recipe['key'] }).key)!
-    title = r.name
-    body = `<div class="pop-art">${recipeSvg(r, canAfford(run.fight, r), 160)}</div>${recipeText(r)}${canAfford(run.fight, r) ? '' : '<p class="now">You need more principles first.</p>'}`
-  } else if (p.kind === 'explain' && run.stage === 'reward') {
-    title = 'Between commissions'
-    body = `<p>Pick a rune, then the card to add it to. The first is free; each more costs ${EXTRA_RUNE_PRICE} metal. Cards it can't go on are dimmed: each card holds at most 3 inputs, 2 gain stages, 2 distilling stages and 2 grounds, and only cards that yield principles can distil.</p>`
-  } else if (p.kind === 'offer') {
-    const r = run.offer[p.i]
-    title = 'A rune'
-    body = `<p>${esc(runeWords(r))}.</p>`
-  } else if (p.kind === 'explain') {
-    title = 'Your move'
-    body = `<p>Pick a card to see on the dial what it would do: where the needle would land, how far purification would reach, what the pool would lose. Then play it. Tap the dial for what the moon brings next, the materials for what principles do, and the menu for how to read a circuit.</p>`
+      <div class="tune"><label>Drawing <select id="c-draw">${opt('refill-4', drawKey, 'Refill to 4 at every quarter')}${opt('cycle-4', drawKey, 'Discard and draw 4 at full and new moons')}${opt('draw-4', drawKey, 'Draw 4 at every quarter')}${opt('draw-2', drawKey, 'Draw 2 at every quarter')}${opt('refill-5', drawKey, 'Refill to 5 at every quarter')}</select></label>
+      <label>Quintessence <select id="c-stock">${[60, 80, 100].map((v) => opt(String(v), String(s.stock), String(v))).join('')}</select></label></div>`
   }
   if (!title) return ''
   return `<div class="pop-veil" data-act="close"></div>
   <section class="pop" role="dialog" aria-label="${esc(title)}">
     <div class="pop-head"><h2>${esc(title)}</h2><button class="close" data-act="close" aria-label="Close">×</button></div>
-    <div class="pop-body">${body}</div>${act}
+    <div class="pop-body">${body}</div>
   </section>`
 }
 
@@ -278,12 +346,30 @@ function fightView(run: Run): string {
   const preview = previewOf(run, after)
   return `<div class="cx fight">
     ${header(run, run.fight.commission.name)}
-    <button class="dial-box" data-act="dial" aria-label="The moon: what comes next">${dialSvg(run.fight, feedOf(run.fight.commission, run.fight.buffs), preview, !!ui.fx?.flared)}</button>
+    <button class="dial-box ${ui.focus === 'dial' ? 'is-on' : ''}" data-act="dial" aria-label="The moon: what comes next">${dialSvg(run.fight, feedOf(run.fight.commission, run.fight.buffs), drawPhases(run.settings), preview, !!ui.fx?.flared)}</button>
+    ${fightNote(run)}
     <div class="bench">${materials(run)}${recipes(run)}</div>
     ${ui.flash ? `<p class="flash">${esc(ui.flash)}</p>` : ''}
     ${hand(run)}
     ${actions(run, after)}
   </div>${popupView(run)}`
+}
+
+function rewardNote(run: Run): string {
+  const r = ui.offer !== null ? run.offer[ui.offer] : null
+  const target = ui.target !== null ? run.deck.find((c) => c.id === ui.target) : null
+  if (r && target) {
+    const art = `${circuitSvg(target, { size: 84 })}<span class="arrow" aria-hidden="true">→</span>${circuitSvg(addRune(target, r), { size: 84 })}`
+    return noteView(`${runeTitle(r)} on ${target.name}`, `${esc(changeText(r, target))}`, art)
+  }
+  if (r) return noteView(runeTitle(r), `${esc(runeText(r))} The cards it fits are lit; tap one to see it before and after.`)
+  const look = ui.look !== null ? run.deck.find((c) => c.id === ui.look) : null
+  if (look) return noteView(`${look.name}, ${ticks(costOf(look))}`, cardLines(look).join(' '))
+  const s = run.smelted
+  return noteView(
+    'Between commissions',
+    `${s?.value ? `What was left smelted into ${[s.silver ? `${s.silver} silver` : '', s.lead ? `${s.lead} lead` : ''].filter(Boolean).join(' and ')}, worth ${s.value}. ` : ''}Pick a rune on offer to read what it does, then a card to put it on. The first is free; each more costs ${EXTRA_RUNE_PRICE} metal. Tap a card in your deck to read it.`,
+  )
 }
 
 function rewardView(run: Run): string {
@@ -293,9 +379,9 @@ function rewardView(run: Run): string {
   const canTake = price <= run.metals
   const offerTile = (i: number) => {
     const r = run.offer[i]
-    const svg = r.kind === 'channel' ? offerSvg('channel', r.element, r.capacity, 48) : offerSvg(r.kind, null, null, 48)
-    return `<button class="offer ${ui.offer === i ? 'is-on' : ''}" data-act="offer" data-i="${i}" ${canTake ? '' : 'disabled'} aria-pressed="${ui.offer === i}" aria-label="${esc(runeWords(r))}">${svg}<span class="price">${price ? `${icon(metal(0, 0, 7, { stroke: 'var(--gilt)' }), 14)}${price}` : 'free'}</span></button>`
+    return `<button class="offer ${ui.offer === i ? 'is-on' : ''}" data-act="offer" data-i="${i}" ${canTake ? '' : 'disabled'} aria-pressed="${ui.offer === i}" aria-label="${esc(runeTitle(r))}">${offerSvg(r, 48)}<span class="price">${price ? `${icon(metal(0, 0, 7, { stroke: 'var(--gilt)' }), 14)}${price}` : 'free'}</span></button>`
   }
+  const target = ui.target !== null ? run.deck.find((c) => c.id === ui.target) : null
   return `<div class="cx reward">
     ${header(run, `${run.fight.commission.name}, purified`)}
     <section class="smelt" aria-label="Smelted">
@@ -304,12 +390,17 @@ function rewardView(run: Run): string {
       <span class="chip total">${icon(metal(0, 0, 8, { stroke: 'var(--gilt)', width: 1.6 }), 22)}<b class="num">${run.metals}</b>${s?.value ? `<span class="gain num">+${s.value}</span>` : ''}</span>
     </section>
     <section class="offers" aria-label="Runes on offer">${run.offer.map((_, i) => offerTile(i)).join('') || '<p class="fine">Nothing left on offer.</p>'}</section>
+    ${rewardNote(run)}
     <section class="deck" aria-label="Your deck">${run.deck
-      .map((c) => `<button class="ccard ${sel && fits(sel, c) ? 'fits' : ''}" data-act="${sel ? 'add' : 'look'}" data-id="${c.id}" ${sel && !fits(sel, c) ? 'disabled' : ''} aria-label="${esc(c.name)}">${circuitSvg(c, { size: 110 })}<span class="cname">${esc(c.name)}</span></button>`)
+      .map((c) => {
+        const ok = sel ? fits(sel, c) : true
+        const on = sel ? ui.target === c.id : ui.look === c.id
+        return `<button class="ccard ${sel && ok ? 'fits' : ''} ${on ? 'is-on' : ''}" data-act="deck-card" data-id="${c.id}" ${ok ? '' : 'disabled'} aria-pressed="${on}" aria-label="${esc(c.name)}">${circuitSvg(c, { size: 110 })}<span class="cname">${esc(c.name)}</span></button>`
+      })
       .join('')}</section>
-    <div class="cx-actions two">
-      <button class="explain" data-act="explain" aria-label="Explain">?</button>
-      <button class="primary go" data-act="next">On to ${esc(COMMISSIONS[run.fightIndex + 1].name)}</button>
+    <div class="cx-actions">
+      <button data-act="next">On to ${esc(COMMISSIONS[run.fightIndex + 1].name)}</button>
+      <button class="primary go" data-act="add" ${sel && target && canTake ? '' : 'disabled'}>${sel && target ? `Add to ${esc(target.name)} · ${price ? `${price} metal` : 'free'}` : sel ? 'Pick a card' : 'Pick a rune'}</button>
     </div>
   </div>${popupView(run)}`
 }
@@ -321,7 +412,7 @@ function endView(run: Run): string {
   return `<div class="cx end">
     ${header(run, won ? 'The work is done' : 'Spent')}
     <section class="end-art">${icon(won ? metal(0, 0, 9, { stroke: 'var(--gilt)', width: 1.4 }) : quintessence(0, 0, 9, { stroke: 'var(--warn)', width: 1.2 }), 120)}
-      <p>${won ? `All three commissions purified, with ${run.quintessence} quintessence and ${run.metals} metal left.` : `${esc(run.fight.commission.name)} wore you down at ${run.fight.purified} of ${run.fight.commission.require} purified.`}</p>
+      <p>${won ? `All ${COMMISSIONS.length} commissions purified, with ${run.quintessence} quintessence and ${run.metals} metal left.` : `${esc(run.fight.commission.name)} wore you down at ${run.fight.purified} of ${run.fight.commission.require} purified.`}</p>
     </section>
     <div class="cx-actions one"><button class="primary go" data-act="restart">Start again</button></div>
   </div>${popupView(run)}`
@@ -336,7 +427,7 @@ function startView(): string {
       <h1>Alchemical Circuits</h1>
       <p class="lede">Every card is a small circuit. Catch the instability a commission feeds into the pool, purify it, keep what it leaves behind. Every card costs time on the moon.</p>
     </div>
-    <div class="cx-actions two">
+    <div class="cx-actions">
       <button data-act="legend">Reading a circuit</button>
       <button class="primary go" data-act="restart">Begin</button>
     </div>
@@ -368,6 +459,7 @@ function apply(next: Run) {
   const flaresBefore = before.fight.flares.length
   ui.run = next
   ui.pick = null
+  ui.focus = null
   const same = next.fightIndex === before.fightIndex
   const paid = same ? before.quintessence - next.quintessence : 0
   const flared = same && next.fight.flares.length > flaresBefore
@@ -382,34 +474,7 @@ function apply(next: Run) {
   if (next.stage === 'lost') sound.lose()
 }
 
-let pressTimer = 0
-root.addEventListener('contextmenu', (ev) => {
-  const el = (ev.target as HTMLElement).closest<HTMLElement>('[data-act="pick-card"], [data-act="look"], [data-act="add"]')
-  if (!el) return
-  ev.preventDefault()
-  ui.popup = { kind: 'card', id: Number(el.dataset.id) }
-  render()
-})
-root.addEventListener('pointerdown', (ev) => {
-  const el = (ev.target as HTMLElement).closest<HTMLElement>('[data-act="pick-card"]')
-  if (!el) return
-  clearTimeout(pressTimer)
-  pressTimer = window.setTimeout(() => {
-    ui.popup = { kind: 'card', id: Number(el.dataset.id) }
-    pressTimer = -1
-    render()
-  }, 550)
-})
-const cancelPress = () => clearTimeout(pressTimer)
-root.addEventListener('pointerup', cancelPress)
-root.addEventListener('pointercancel', cancelPress)
-root.addEventListener('pointerleave', cancelPress)
-
 root.addEventListener('click', (ev) => {
-  if (pressTimer === -1) {
-    pressTimer = 0
-    return
-  }
   const el = (ev.target as HTMLElement).closest<HTMLElement>('[data-act]')
   if (!el || (el as HTMLButtonElement).disabled) return
   sound.unlock()
@@ -431,17 +496,15 @@ root.addEventListener('click', (ev) => {
         if (ui.popup?.kind === 'menu') readTuning()
         ui.popup = null
         break
-      case 'explain':
-        ui.popup = { kind: 'explain' }
-        break
       case 'dial':
-        ui.popup = { kind: 'dial' }
+        ui.focus = ui.focus === 'dial' ? null : 'dial'
         break
       case 'materials':
-        ui.popup = { kind: 'materials' }
+        ui.focus = ui.focus === 'materials' ? null : 'materials'
         break
       case 'pick-card': {
         const id = Number(el.dataset.id)
+        ui.focus = null
         ui.pick = ui.pick?.kind === 'card' && ui.pick.id === id ? null : { kind: 'card', id }
         const c = run?.fight.hand.find((x) => x.id === id)
         if (c && ui.pick) sound.tap(makeRune(4_000_000 + id, { body: 'triangle', motes: c.channels[0].element === 'any' ? [] : [elementMote(c.channels[0].element)] }))
@@ -449,6 +512,7 @@ root.addEventListener('click', (ev) => {
       }
       case 'pick-recipe': {
         const key = el.dataset.key as Recipe['key']
+        ui.focus = null
         ui.pick = ui.pick?.kind === 'recipe' && ui.pick.key === key ? null : { kind: 'recipe', key }
         break
       }
@@ -458,24 +522,35 @@ root.addEventListener('click', (ev) => {
       case 'wait':
         if (run) apply(wait(run))
         break
-      case 'offer':
-        ui.offer = ui.offer === Number(el.dataset.i) ? null : Number(el.dataset.i)
+      case 'offer': {
+        const i = Number(el.dataset.i)
+        ui.offer = ui.offer === i ? null : i
+        ui.look = null
+        const r = ui.offer !== null && run ? run.offer[ui.offer] : null
+        const t = ui.target !== null && run ? run.deck.find((c) => c.id === ui.target) : null
+        if (!r || !t || !fits(r, t)) ui.target = null
         break
-      case 'look':
-        ui.popup = { kind: 'card', id: Number(el.dataset.id) }
+      }
+      case 'deck-card': {
+        const id = Number(el.dataset.id)
+        if (ui.offer !== null) ui.target = ui.target === id ? null : id
+        else ui.look = ui.look === id ? null : id
         break
+      }
       case 'add':
-        if (run && ui.offer !== null) {
-          ui.run = takeRune(run, ui.offer, Number(el.dataset.id))
-          ui.offer = null
+        if (run && ui.offer !== null && ui.target !== null) {
+          ui.run = takeRune(run, ui.offer, ui.target)
+          ui.look = ui.target
+          ui.offer = ui.target = null
           sound.tap(makeRune(3_000_000, { body: 'circle', motes: [elementMote('earth')] }))
         }
         break
       case 'next':
         if (run) {
           ui.run = nextFight(run)
-          ui.offer = null
+          ui.offer = ui.target = ui.look = null
           ui.pick = null
+          ui.focus = null
           sound.deal(ui.run.fight.hand.length)
         }
         break

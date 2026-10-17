@@ -17,17 +17,20 @@
 // The engine is deterministic given the run (the seed travels in it), so the
 // greedy look-ahead is exact.
 //
-//   npx tsx scripts/circuits-sim.ts [--strategy greedy|random|delay] [--reserve 1] [--delay-in 0,1] [--runs 300]
+//   npx tsx scripts/circuits-sim.ts [--strategy greedy|random|delay] [--reserve 1] [--delay-in 0,1,2] [--runs 300]
 //   npx tsx scripts/circuits-sim.ts --compare [--runs 300]   every strategy side by side
-//   (also --draw refill|draw, --hand 4, --stock 60)
+//   (also --picks need|wet: inputs for what the coming commissions feed, or only water and earth;
+//    --draw refill|draw, --hand 4, --stock 80)
 
 import { makeRng, type Rng } from '../src/sim/rng'
+import type { Elemental } from '../src/sim/types'
 import {
   COMMISSIONS,
   DEFAULT_SETTINGS,
   EXTRA_RUNE_PRICE,
   PRINCIPLES,
   RECIPES,
+  TICKS,
   canAfford,
   craft,
   fits,
@@ -45,6 +48,8 @@ import {
 const args = process.argv.slice(2)
 const arg = (n: string) => (args.includes(n) ? args[args.indexOf(n) + 1] : undefined)
 const runs = Number(arg('--runs') ?? 300)
+/** Which inputs the rune picks favour: what the coming commissions feed, or only water and earth. */
+const picks = (arg('--picks') ?? 'need') as 'need' | 'wet'
 const settings: Settings = {
   ...DEFAULT_SETTINGS,
   draw: (arg('--draw') as Settings['draw']) ?? DEFAULT_SETTINGS.draw,
@@ -69,7 +74,7 @@ const principleCount = (r: Run) => PRINCIPLES.reduce((n, p) => n + r.fight.princ
 /** The fight that `before` was in has ended in `after`. */
 const ended = (before: Run, after: Run) => after.stage !== 'fight' || after.fightIndex !== before.fightIndex
 const won = (r: Run) => r.stage === 'reward' || r.stage === 'won'
-const parts = (r: Run) => r.deck.reduce((n, c) => n + c.channels.length + c.gain + c.distill + c.ground, 0)
+const parts = (r: Run) => r.deck.reduce((n, c) => n + c.channels.length + c.gain + c.outputs.length + c.ground, 0)
 
 // ---------------------------------------------------------------------------
 // Strategies
@@ -107,10 +112,22 @@ function rollout(r: Run): Run {
   return x
 }
 
-/** Between fights: the free rune and as many more as metal buys, each where it helps most. */
+/**
+ * Between fights: the free rune and as many more as metal buys. Gains first;
+ * then inputs, the element the coming commissions feed most for what the deck
+ * can already take first; then distilling, then grounds.
+ */
 function greedyReward(r: Run): Run {
   let run = r
-  const rank = (o: Run['offer'][number]) => ({ gain: 0, channel: 1, distill: 2, ground: 3 })[o.kind]
+  const ahead = COMMISSIONS.slice(r.fightIndex + 1)
+  const need = (e: Elemental | 'any') => {
+    if (picks === 'wet') return e === 'water' || e === 'earth' ? 4 : 0
+    if (e === 'any') return 0.5
+    const fed = ahead.reduce((n, c) => n + (c.feed[e] ?? 0) + (c.buffFeed?.[e] ?? 0), 0)
+    const cap = run.deck.reduce((n, c) => n + c.channels.filter((ch) => ch.element === e).reduce((k, ch) => k + ch.capacity, 0), 0)
+    return fed / (1 + cap / 5)
+  }
+  const rank = (o: Run['offer'][number]) => (o.kind === 'gain' ? 0 : o.kind === 'channel' ? 2 - Math.min(1, need(o.element) / 4) : o.kind === 'distill' ? 2 : 3)
   for (let guard = 0; guard < 5 && run.offer.length; guard++) {
     if (run.tookFree && run.metals < EXTRA_RUNE_PRICE) break
     const order = run.offer.map((o, i) => ({ o, i })).sort((a, b) => rank(a.o) - rank(b.o))
@@ -211,7 +228,7 @@ function play(strategy: Strategy): Result {
         if (ended(r, next)) {
           stat.won = won(next)
           stat.paid = next.fight.paid
-          stat.moons = next.fight.dial / 8
+          stat.moons = next.fight.dial / TICKS
           stat.metal = next.smelted?.value ?? 0
           fights[r.fightIndex].push(stat)
         }
@@ -248,34 +265,37 @@ function report(res: Result) {
 
 function row(res: Result): string {
   const f = res.fights
+  const last = COMMISSIONS.length - 1
   const cell = (i: number, fn: (s: FightStat[]) => string) => (f[i].length ? fn(f[i]) : '–')
   return [
     res.name,
     pct(res.runsWon, runs),
-    cell(0, (s) => mean(s.map((x) => x.paid)).toFixed(1)),
-    cell(0, (s) => mean(s.map((x) => x.metal)).toFixed(1)),
-    cell(1, (s) => mean(s.map((x) => x.paid)).toFixed(1)),
-    cell(1, (s) => mean(s.map((x) => x.metal)).toFixed(1)),
-    cell(2, (s) => mean(s.map((x) => x.quintIn)).toFixed(0)),
-    cell(2, (s) => pct(s.filter((x) => x.won).length, s.length)),
+    ...COMMISSIONS.slice(0, last).flatMap((_, i) => [cell(i, (s) => mean(s.map((x) => x.paid)).toFixed(1)), cell(i, (s) => mean(s.map((x) => x.metal)).toFixed(1))]),
+    cell(last, (s) => `${pct(s.length, runs)} with ${mean(s.map((x) => x.quintIn)).toFixed(0)}`),
+    cell(last, (s) => pct(s.filter((x) => x.won).length, s.length)),
     String(med(res.quintLeft)),
   ].join(' | ')
+}
+
+function header(): string {
+  const last = COMMISSIONS.length - 1
+  const cols = ['Strategy', 'Runs won', ...COMMISSIONS.slice(0, last).flatMap((c) => [`${c.name}: paid`, 'metal']), `Reached ${COMMISSIONS[last].name}, with`, 'won', 'Left (median)']
+  return `${cols.join(' | ')}\n${cols.map(() => '---').join(' | ')}`
 }
 
 const delayIn = (arg('--delay-in') ?? COMMISSIONS.slice(0, -1).map((_, i) => i).join(',')).split(',').map(Number)
 const reserve = Number(arg('--reserve') ?? 1)
 
-console.log(`${runs} runs · draw ${settings.draw} ${settings.hand} at new and full moons · stock ${settings.stock}`)
+console.log(`${runs} runs · ${settings.draw === 'cycle' ? `discard and draw ${settings.hand} at full and new moons` : `${settings.draw} ${settings.hand} at the quarters`} · stock ${settings.stock}`)
 if (args.includes('--compare')) {
+  const early = COMMISSIONS.slice(0, -1).map((_, i) => i)
   const list: Strategy[] = [
     random,
     greedy,
-    ...[1, 20, 35, 45, 50, 55].map((k) => ({ ...delay(k, [0, 1]), name: `delay in Mud and Peat, keep ${k}` })),
-    ...[35, 45, 50, 55].map((k) => ({ ...delay(k, [0]), name: `delay in Mud only, keep ${k}` })),
-    ...[35, 45].map((k) => ({ ...delay(k, [1]), name: `delay in Peat only, keep ${k}` })),
+    ...[1, 30, 50, 60, 65, 70, 75].map((k) => ({ ...delay(k, early), name: `delay before the boss, keep ${k}` })),
+    ...[65, 70, 75].map((k) => ({ ...delay(k, [0]), name: `delay in ${COMMISSIONS[0].name} only, keep ${k}` })),
   ]
-  console.log('\nStrategy | Runs won | Mud paid | Mud metal | Peat paid | Peat metal | Into Mire | Mire won | Left (median)')
-  console.log('--- | --- | --- | --- | --- | --- | --- | --- | ---')
+  console.log(`\n${header()}`)
   for (const s of list) console.log(row(play(s)))
 } else {
   const name = arg('--strategy') ?? 'greedy'

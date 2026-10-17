@@ -12,8 +12,6 @@ import type { Elemental } from '../sim/types'
 export const ELEMENTS: Elemental[] = ['water', 'earth', 'air', 'fire']
 export type Principle = 'salt' | 'sulfur' | 'mercury'
 export const PRINCIPLES: Principle[] = ['salt', 'sulfur', 'mercury']
-/** What processing each element leaves behind: earth salt, fire sulfur, the volatile water and air mercury. */
-export const PRINCIPLE_OF: Record<Elemental, Principle> = { earth: 'salt', fire: 'sulfur', water: 'mercury', air: 'mercury' }
 
 export type Pool = Record<Elemental, number>
 export const emptyPool = (): Pool => ({ water: 0, earth: 0, air: 0, fire: 0 })
@@ -22,13 +20,31 @@ export const poolTotal = (p: Pool) => ELEMENTS.reduce((n, e) => n + p[e], 0)
 // ---------------------------------------------------------------------------
 // The dial
 
-/** The dial counts eighths of a moon. Phases fall on every second eighth. */
-export const EIGHTHS = 8
-export type Phase = 'new' | 'first' | 'full' | 'last'
-export const PHASES: Phase[] = ['new', 'first', 'full', 'last']
-export const PHASE_NAMES: Record<Phase, string> = { new: 'New moon', first: 'First quarter', full: 'Full moon', last: 'Last quarter' }
+/**
+ * The dial counts sixteenths of a moon (ticks). A phase falls on every second
+ * tick: the eight phases of the moon. A fight opens at the first quarter, so
+ * position 0 is the first quarter and the full moon falls 4 ticks later.
+ */
+export const TICKS = 16
+export type Phase = 'first' | 'waxing-gibbous' | 'full' | 'waning-gibbous' | 'last' | 'waning-crescent' | 'new' | 'waxing-crescent'
+/** In the order the dial meets them from the opening. */
+export const PHASES: Phase[] = ['first', 'waxing-gibbous', 'full', 'waning-gibbous', 'last', 'waning-crescent', 'new', 'waxing-crescent']
+export const PHASE_NAMES: Record<Phase, string> = {
+  new: 'New moon',
+  'waxing-crescent': 'Waxing crescent',
+  first: 'First quarter',
+  'waxing-gibbous': 'Waxing gibbous',
+  full: 'Full moon',
+  'waning-gibbous': 'Waning gibbous',
+  last: 'Last quarter',
+  'waning-crescent': 'Waning crescent',
+}
+/** How lit each phase is, as a fraction of the cycle from the new moon (0) through full (0.5). */
+export const PHASE_CYCLE: Record<Phase, number> = { new: 0, 'waxing-crescent': 0.125, first: 0.25, 'waxing-gibbous': 0.375, full: 0.5, 'waning-gibbous': 0.625, last: 0.75, 'waning-crescent': 0.875 }
+/** The quarter phases, when you draw. */
+export const DRAW_PHASES: Phase[] = ['new', 'first', 'full', 'last']
 /** The phase at a dial position that falls on one, else null. */
-export const phaseAt = (pos: number): Phase | null => (pos % 2 === 0 ? PHASES[(pos / 2) % 4] : null)
+export const phaseAt = (pos: number): Phase | null => (pos % 2 === 0 ? PHASES[(pos / 2) % PHASES.length] : null)
 
 // ---------------------------------------------------------------------------
 // Cards
@@ -43,28 +59,28 @@ export interface Card {
   name: string
   channels: Channel[]
   /**
-   * The collecting stage's side output, beside purification: the principles of
-   * what it took (the metal creators), or Ward, 1 for each it took (Sieve).
+   * The collecting stage's side outputs, beside purification. Each fires when
+   * the stage took at least its gate (drawn as that many arcs on the output):
+   * a principle output yields 1 of its principle, a Ward output Ward 1 for
+   * each taken. Which principle a card yields is its own design, not its
+   * element's; distilling runes add more outputs to any card.
    */
-  output: 'principle' | 'ward'
-  /**
-   * What the collecting stage must take before it gives its side output: the
-   * metal creators need 4, Sieve 1. Drawn as that many arcs on the output.
-   */
-  threshold: number
-  /** Gain stages: each multiplies purification by one more (×2, ×3, …) and costs an eighth more. */
+  outputs: Output[]
+  /** Gain stages: each multiplies purification by one more (×2, ×3, …) and costs a tick (a sixteenth of the moon) more. */
   gain: number
-  /** Distilling stages: each yields the card's principles once more. Only on cards that yield principles. */
-  distill: number
   /** Grounds: each drains up to GROUND_DRAIN more of any instability, purifying nothing. */
   ground: number
 }
 
+export type Output = { kind: 'principle'; principle: Principle; gate: number } | { kind: 'ward'; gate: number }
+
 export const GROUND_DRAIN = 3
+/** What a principle output needs its stage to collect. */
+export const METAL_GATE = 4
 export const BASE_COST = 2
 /** Most of each part a card can hold. */
-export const CAPS = { channels: 3, gain: 2, distill: 2, ground: 2 }
-/** Time a card takes on the dial, in eighths: a quarter, and an eighth more for each gain stage. */
+export const CAPS = { channels: 3, gain: 2, outputs: 3, ground: 2 }
+/** Time a card takes on the dial, in ticks: an eighth of the moon (2 ticks), and a tick more for each gain stage. */
 export const costOf = (c: Card) => BASE_COST + c.gain
 
 export interface CardResult {
@@ -84,10 +100,9 @@ export interface CardResult {
  * What playing a card does to this pool. Channels for one element take first,
  * up to their capacity; any-element channels then take from whatever is most
  * plentiful; grounds last. Purification is what the channels took, times
- * (1 + gain). When the channels took at least the card's threshold, the side
- * output fires: for a principle card, each channel that took something yields
- * its element's principle, times (1 + distill); for a Ward card, Ward 1 for
- * each it took.
+ * (1 + gain). Each side output whose gate the channels reached fires: a
+ * principle output yields 1 of its principle, a Ward output Ward 1 for each
+ * taken.
  */
 export function resolveCard(card: Card, pool: Pool): CardResult {
   const left = { ...pool }
@@ -102,33 +117,27 @@ export function resolveCard(card: Card, pool: Pool): CardResult {
   }
   const most = () => ELEMENTS.reduce((a, b) => (left[b] > left[a] ? b : a))
   const took_: number[] = card.channels.map(() => 0)
-  const mains: (Elemental | null)[] = card.channels.map(() => null)
   const ordered = card.channels.map((ch, i) => ({ ch, i })).sort((a, b) => Number(a.ch.element === 'any') - Number(b.ch.element === 'any'))
   for (const { ch, i } of ordered) {
     let took = 0
-    let main: Elemental | null = null
-    if (ch.element !== 'any') {
-      took = takeFrom(ch.element, ch.capacity)
-      main = ch.element
-    } else {
+    if (ch.element !== 'any') took = takeFrom(ch.element, ch.capacity)
+    else {
       let need = ch.capacity
       while (need > 0 && poolTotal(left) > 0) {
-        const e = most()
-        const k = takeFrom(e, need)
-        if (k > 0 && !main) main = e
+        const k = takeFrom(most(), need)
         took += k
         need -= k
       }
     }
     processed += took
     took_[i] = took
-    mains[i] = main
   }
-  const fires = processed > 0 && processed >= card.threshold
-  if (fires && card.output === 'principle') card.channels.forEach((_, i) => {
-    if (took_[i] > 0 && mains[i]) principles[PRINCIPLE_OF[mains[i]!]] += 1 + card.distill
-  })
-  const ward = fires && card.output === 'ward' ? processed : 0
+  let ward = 0
+  for (const o of card.outputs) {
+    if (processed <= 0 || processed < o.gate) continue
+    if (o.kind === 'principle') principles[o.principle] += 1
+    else ward += processed
+  }
   for (let g = 0; g < card.ground; g++) {
     let need = GROUND_DRAIN
     while (need > 0 && poolTotal(left) > 0) need -= takeFrom(most(), need)
@@ -145,7 +154,7 @@ export interface Commission {
   blurb: string
   /** Purification that finishes it. */
   require: number
-  /** Instability fed into the pool at every quarter, by element. */
+  /** Instability fed into the pool at every phase, by element. */
   feed: Partial<Pool>
   /** Phases at which whatever is left in the pool flares. */
   attacks: Phase[]
@@ -155,16 +164,24 @@ export interface Commission {
 }
 
 export const COMMISSIONS: Commission[] = [
-  { key: 'mud', name: 'Mud', blurb: 'Feeds mostly water and a little earth. Flares at every full moon.', require: 30, feed: { water: 3, earth: 1 }, attacks: ['full'] },
-  { key: 'peat', name: 'Peat bog', blurb: 'Water, earth and a smoulder of fire. Flares at every full moon.', require: 45, feed: { water: 2, earth: 2, fire: 1 }, attacks: ['full'] },
+  { key: 'mud', name: 'Mud', blurb: 'Feeds mostly water and a little earth. Flares at every full and new moon.', require: 30, feed: { water: 3, earth: 1 }, attacks: ['full', 'new'] },
+  { key: 'peat', name: 'Peat bog', blurb: 'Water, earth and a smoulder of fire. Flares at every full and new moon.', require: 45, feed: { water: 2, earth: 2, fire: 1 }, attacks: ['full', 'new'] },
+  {
+    key: 'fumarole',
+    name: 'Fumarole',
+    blurb: 'A vent of hot breath: air and fire, a little water. Flares at every full and new moon.',
+    require: 40,
+    feed: { air: 2, fire: 2, water: 1 },
+    attacks: ['full', 'new'],
+  },
   {
     key: 'mire',
     name: 'The Mire',
-    blurb: 'A boss. Grows at every quarter moon, adding earth to its feed, and flares at every new and full moon.',
+    blurb: 'A boss. Grows at every crescent and gibbous moon, adding earth to its feed, and flares at every quarter.',
     require: 50,
     feed: { water: 3, earth: 2, fire: 1 },
-    attacks: ['new', 'full'],
-    buffs: ['first', 'last'],
+    attacks: ['first', 'full', 'last', 'new'],
+    buffs: ['waxing-gibbous', 'waning-gibbous', 'waning-crescent', 'waxing-crescent'],
     buffFeed: { earth: 1 },
   },
 ]
@@ -183,7 +200,7 @@ export interface Recipe {
   key: 'tincture' | 'spirit' | 'homunculus'
   name: string
   cost: Partial<Record<Principle, number>>
-  /** Time on the dial, in eighths. */
+  /** Time on the dial, in ticks. */
   time: number
   effect: string
 }
@@ -191,7 +208,7 @@ export interface Recipe {
 export const RECIPES: Recipe[] = [
   { key: 'tincture', name: 'Tincture of salt', cost: { salt: 2 }, time: 1, effect: 'Ward 6 against the next flare' },
   { key: 'spirit', name: 'Spirit of mercury', cost: { mercury: 3 }, time: 1, effect: 'Draw 2' },
-  { key: 'homunculus', name: 'Homunculus', cost: { mercury: 3, salt: 2, sulfur: 1 }, time: 2, effect: 'A helper: every quarter it drains 2 of the most plentiful instability and purifies 2' },
+  { key: 'homunculus', name: 'Homunculus', cost: { mercury: 3, salt: 2, sulfur: 1 }, time: 2, effect: 'A helper: at every phase it drains 2 of the most plentiful instability and purifies 2' },
 ]
 export const TINCTURE_WARD = 6
 export const HOMUNCULUS_DRAIN = 2
@@ -214,7 +231,7 @@ export function smelt(p: Record<Principle, number>): { silver: number; lead: num
 export type RewardRune =
   | { kind: 'channel'; element: Elemental | 'any'; capacity: number }
   | { kind: 'gain' }
-  | { kind: 'distill' }
+  | { kind: 'distill'; principle: Principle }
   | { kind: 'ground' }
 
 export const REWARD_POOL: RewardRune[] = [
@@ -225,21 +242,17 @@ export const REWARD_POOL: RewardRune[] = [
   { kind: 'channel', element: 'any', capacity: 3 },
   { kind: 'gain' },
   { kind: 'gain' },
-  { kind: 'distill' },
+  { kind: 'distill', principle: 'salt' },
+  { kind: 'distill', principle: 'sulfur' },
+  { kind: 'distill', principle: 'mercury' },
   { kind: 'ground' },
 ]
 
 export const EXTRA_RUNE_PRICE = 3
 
-/** Whether this rune fits on this card: each kind of part has a cap, and distilling needs principles to distil. */
+/** Whether this rune fits on this card: each kind of part has a cap. */
 export const fits = (r: RewardRune, c: Card) =>
-  r.kind === 'channel'
-    ? c.channels.length < CAPS.channels
-    : r.kind === 'gain'
-      ? c.gain < CAPS.gain
-      : r.kind === 'distill'
-        ? c.output === 'principle' && c.distill < CAPS.distill
-        : c.ground < CAPS.ground
+  r.kind === 'channel' ? c.channels.length < CAPS.channels : r.kind === 'gain' ? c.gain < CAPS.gain : r.kind === 'distill' ? c.outputs.length < CAPS.outputs : c.ground < CAPS.ground
 
 export function addRune(c: Card, r: RewardRune): Card {
   if (!fits(r, c)) return c
@@ -249,7 +262,7 @@ export function addRune(c: Card, r: RewardRune): Card {
     case 'gain':
       return { ...c, gain: c.gain + 1 }
     case 'distill':
-      return { ...c, distill: c.distill + 1 }
+      return { ...c, outputs: [...c.outputs, { kind: 'principle', principle: r.principle, gate: METAL_GATE }] }
     case 'ground':
       return { ...c, ground: c.ground + 1 }
   }
@@ -261,10 +274,17 @@ export function addRune(c: Card, r: RewardRune): Card {
 export interface Settings {
   stock: number
   hand: number
-  /** At each new and full moon: refill the hand to `hand`, or draw that many. */
-  draw: 'refill' | 'draw'
+  /**
+   * When and how you draw. refill: at every quarter, refill the hand to
+   * `hand`; draw: at every quarter, draw `hand` more; cycle: each half moon is
+   * a turn, so at every full and new moon, discard what is left and draw `hand`.
+   */
+  draw: 'refill' | 'draw' | 'cycle'
 }
-export const DEFAULT_SETTINGS: Settings = { stock: 60, hand: 4, draw: 'refill' }
+
+/** The phases at which you draw under these settings (the opening always draws). */
+export const drawPhases = (s: Settings): Phase[] => (s.draw === 'cycle' ? ['full', 'new'] : DRAW_PHASES)
+export const DEFAULT_SETTINGS: Settings = { stock: 80, hand: 4, draw: 'refill' }
 
 export interface Fight {
   commission: Commission
@@ -304,28 +324,18 @@ export interface Run {
 }
 
 const channel = (element: Elemental | 'any', capacity: number): Channel => ({ element, capacity })
-/** What a metal creator must collect before it yields its principle. */
-export const METAL_GATE = 4
-const card = (id: number, name: string, ch: Channel, output: Card['output'] = 'principle', threshold = output === 'principle' ? METAL_GATE : 1): Card => ({
-  id,
-  name,
-  channels: [ch],
-  output,
-  threshold,
-  gain: 0,
-  distill: 0,
-  ground: 0,
-})
+const yields = (principle: Principle): Output => ({ kind: 'principle', principle, gate: METAL_GATE })
+const card = (id: number, name: string, ch: Channel, out: Output): Card => ({ id, name, channels: [ch], outputs: [out], gain: 0, ground: 0 })
 
-/** The opening deck: one-input circuits, mostly water and earth. The metal creators yield their principle only from 4 or more; Sieve raises Ward instead. */
+/** The opening deck: one-input circuits, mostly water and earth. The metal creators yield their principle only from 4 or more; the Sieve raises Ward instead. */
 export function startingDeck(): Card[] {
   let id = 1
   return [
-    ...Array.from({ length: 4 }, () => card(id++, 'Wash', channel('water', 5))),
-    ...Array.from({ length: 3 }, () => card(id++, 'Calcine', channel('earth', 5))),
-    card(id++, 'Fan', channel('air', 5)),
-    card(id++, 'Kindle', channel('fire', 5)),
-    card(id++, 'Sieve', channel('any', 3), 'ward'),
+    ...Array.from({ length: 4 }, () => card(id++, 'Wash', channel('water', 5), yields('mercury'))),
+    ...Array.from({ length: 3 }, () => card(id++, 'Calcine', channel('earth', 5), yields('salt'))),
+    card(id++, 'Fan', channel('air', 5), yields('mercury')),
+    card(id++, 'Kindle', channel('fire', 5), yields('sulfur')),
+    card(id++, 'Sieve', channel('any', 3), { kind: 'ward', gate: 1 }),
   ]
 }
 
@@ -367,7 +377,7 @@ function startFight(run: Run, index: number): Run {
     paid: 0,
     flares: [],
   }
-  // The new moon that opens the fight: the first feed and the first hand.
+  // The first quarter that opens the fight: the first feed and the first hand.
   return phaseEvents({ ...run, stage: 'fight', fightIndex: index, seed: rng.state(), fight }, 0, true)
 }
 
@@ -387,7 +397,7 @@ function drawCards(run: Run, n: number): Run {
   return { ...run, seed: rng.state(), fight: { ...run.fight, hand, draw, discard } }
 }
 
-/** What happens at a phase: helpers work, the commission attacks and grows, it feeds the pool, and at new and full moons you draw. */
+/** What happens at a phase: helpers work, the commission attacks and grows, it feeds the pool, and at the quarters you draw. */
 function phaseEvents(run: Run, pos: number, opening = false): Run {
   const phase = phaseAt(pos)!
   let f = { ...run.fight, pool: { ...run.fight.pool }, log: run.fight.log.slice() }
@@ -427,9 +437,15 @@ function phaseEvents(run: Run, pos: number, opening = false): Run {
   }
   const feed = feedOf(c, f.buffs)
   for (const e of ELEMENTS) f.pool[e] += feed[e]
+  const draws = opening || drawPhases(run.settings).includes(phase)
+  if (draws && run.settings.draw === 'cycle' && f.hand.length) {
+    notes.push(`discards ${f.hand.length}`)
+    f.discard = [...f.discard, ...f.hand]
+    f.hand = []
+  }
   f.log.unshift(`${PHASE_NAMES[phase]}: ${[...notes, `feeds ${ELEMENTS.filter((e) => feed[e]).map((e) => `${feed[e]} ${e}`).join(', ')}`].join('; ')}.`)
   let next: Run = { ...run, quintessence: Math.max(0, run.quintessence - paid), fight: f }
-  if (phase === 'new' || phase === 'full') {
+  if (draws) {
     const n = run.settings.draw === 'refill' ? Math.max(0, run.settings.hand - f.hand.length) : run.settings.hand
     next = drawCards(next, n)
   }
@@ -437,10 +453,10 @@ function phaseEvents(run: Run, pos: number, opening = false): Run {
 }
 
 /** Move the dial on, running every phase it reaches. */
-function advance(run: Run, eighths: number): Run {
+function advance(run: Run, ticks: number): Run {
   let next = run
   const from = run.fight.dial
-  for (let pos = from + 1; pos <= from + eighths; pos++) {
+  for (let pos = from + 1; pos <= from + ticks; pos++) {
     next = { ...next, fight: { ...next.fight, dial: pos } }
     if (phaseAt(pos)) next = phaseEvents(next, pos)
     if (next.quintessence <= 0) return { ...next, stage: 'lost' }
@@ -460,6 +476,16 @@ function finish(run: Run): Run {
 }
 
 const after = (run: Run): Run => (run.fight.purified >= run.fight.commission.require ? finish(run) : run)
+
+/** With nothing to play (no cards, no recipe to brew), the moon moves on by itself to the next draw. */
+function settle(run: Run): Run {
+  let next = run
+  const stuck = (r: Run) => r.stage === 'fight' && !r.fight.hand.length && !RECIPES.some((x) => canAfford(r.fight, x))
+  if (!stuck(next)) return next
+  next = { ...next, fight: { ...next.fight, log: ['Nothing to play: the moon moves on.', ...next.fight.log] } }
+  for (let guard = 0; guard < TICKS * 2 && stuck(next); guard++) next = advance(next, 1)
+  return next
+}
 
 /** Play a card from hand: it resolves at once, then the dial moves on by its cost. */
 export function playCard(run: Run, id: number): Run {
@@ -483,7 +509,7 @@ export function playCard(run: Run, id: number): Run {
     log: [`${c.name}: takes ${poolTotal(r.drained)}, purifies ${r.purification}${got.length ? `, leaves ${got.join(' and ')}` : ''}${r.ward ? `, raises Ward ${r.ward}` : ''}.`, ...run.fight.log],
   }
   const played = after({ ...run, fight })
-  return played.stage === 'fight' ? advance(played, costOf(c)) : played
+  return played.stage === 'fight' ? settle(advance(played, costOf(c))) : played
 }
 
 export const canAfford = (f: Fight, r: Recipe) => PRINCIPLES.every((p) => f.principles[p] >= (r.cost[p] ?? 0))
@@ -499,22 +525,22 @@ export function craft(run: Run, key: Recipe['key']): Run {
   if (key === 'tincture') next = { ...next, fight: { ...next.fight, ward: next.fight.ward + TINCTURE_WARD } }
   if (key === 'spirit') next = drawCards(next, 2)
   if (key === 'homunculus') next = { ...next, fight: { ...next.fight, homunculi: next.fight.homunculi + 1 } }
-  return advance(next, r.time)
+  return settle(advance(next, r.time))
 }
 
-/** Let a quarter pass without playing. */
+/** Let an eighth of the moon pass without playing. */
 export function wait(run: Run): Run {
   if (run.stage !== 'fight') return run
-  return advance({ ...run, fight: { ...run.fight, log: ['Waits a quarter.', ...run.fight.log] } }, 2)
+  return settle(advance({ ...run, fight: { ...run.fight, log: ['Waits an eighth.', ...run.fight.log] } }, 2))
 }
 
 /** The next phases and what they bring, for the dial. */
-export function upcoming(f: Fight, count = 4): { pos: number; phase: Phase; attack: boolean; buff: boolean; draw: boolean }[] {
+export function upcoming(f: Fight, count = 4, drawAt: Phase[] = DRAW_PHASES): { pos: number; phase: Phase; attack: boolean; buff: boolean; draw: boolean }[] {
   const out = []
   let pos = f.dial + 1
   while (out.length < count) {
     const phase = phaseAt(pos)
-    if (phase) out.push({ pos, phase, attack: f.commission.attacks.includes(phase), buff: !!f.commission.buffs?.includes(phase), draw: phase === 'new' || phase === 'full' })
+    if (phase) out.push({ pos, phase, attack: f.commission.attacks.includes(phase), buff: !!f.commission.buffs?.includes(phase), draw: drawAt.includes(phase) })
     pos++
   }
   return out
@@ -552,9 +578,9 @@ export function runeWords(r: RewardRune): string {
     case 'channel':
       return r.element === 'any' ? `Input: up to ${r.capacity} of any element` : `Input: up to ${r.capacity} ${r.element}`
     case 'gain':
-      return 'Gain stage: purification ×1 more, an eighth slower'
+      return 'Gain: purification ×1 more, a tick slower'
     case 'distill':
-      return 'Distilling stage: principles once more'
+      return `Distil ${r.principle}: 1 ${r.principle} whenever the card takes ${METAL_GATE} or more`
     case 'ground':
       return `Ground: drains ${GROUND_DRAIN} more of anything, purifying nothing`
   }
@@ -564,7 +590,7 @@ export function runeWords(r: RewardRune): string {
 export function cardWords(c: Card): string {
   const ins = c.channels.map((ch) => `${ch.capacity} ${ch.element === 'any' ? 'any' : ch.element}`).join(' + ')
   const g = c.gain ? ` ×${1 + c.gain}` : ''
-  const d = c.output === 'ward' ? ', Ward 1 for each' : c.distill ? `, principles ×${1 + c.distill}` : ''
+  const d = c.outputs.map((o) => (o.kind === 'ward' ? ', Ward 1 for each' : `, ${o.principle} from ${o.gate}`)).join('')
   const gr = c.ground ? `, ground ${c.ground * GROUND_DRAIN}` : ''
   return `Takes up to ${ins}${g}${d}${gr}`
 }

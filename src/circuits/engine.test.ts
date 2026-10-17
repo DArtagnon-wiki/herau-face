@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { COMMISSIONS, DEFAULT_SETTINGS, METAL_GATE, TINCTURE_WARD, addRune, fits, costOf, craft, emptyPool, newRun, nextFight, playCard, poolTotal, resolveCard, smelt, startingDeck, takeRune, upcoming, wait, type Card, type Run } from './engine'
 
 const pool = (p: Partial<Record<'water' | 'earth' | 'air' | 'fire', number>>) => ({ ...emptyPool(), ...p })
-const wash: Card = { id: 1, name: 'Wash', channels: [{ element: 'water', capacity: 5 }], output: 'principle', threshold: 1, gain: 0, distill: 0, ground: 0 }
+const wash: Card = { id: 1, name: 'Wash', channels: [{ element: 'water', capacity: 5 }], outputs: [{ kind: 'principle', principle: 'mercury', gate: 1 }], gain: 0, ground: 0 }
 
 describe('a circuit card', () => {
   it('takes up to its capacity of its element, purifies that much, and leaves its principle', () => {
@@ -15,8 +15,9 @@ describe('a circuit card', () => {
 
   it('yields its principle only once it takes its threshold: every opening metal creator needs 4', () => {
     const deck = startingDeck()
-    for (const c of deck.filter((c) => c.output === 'principle')) expect(c.threshold).toBe(METAL_GATE)
-    expect(new Set(deck.filter((c) => c.output === 'principle').map((c) => c.name))).toEqual(new Set(['Wash', 'Calcine', 'Fan', 'Kindle']))
+    const creators = deck.filter((c) => c.outputs.some((o) => o.kind === 'principle'))
+    for (const c of creators) for (const o of c.outputs) expect(o.gate).toBe(METAL_GATE)
+    expect(new Set(creators.map((c) => c.name))).toEqual(new Set(['Wash', 'Calcine', 'Fan', 'Kindle']))
     const calcine = deck.find((c) => c.name === 'Calcine')!
     expect(resolveCard(calcine, pool({ earth: 3 })).principles.salt).toBe(0)
     expect(resolveCard(calcine, pool({ earth: 4 })).principles.salt).toBe(1)
@@ -29,13 +30,26 @@ describe('a circuit card', () => {
 
   it('makes the opening Sieve raise Ward for what it takes instead of leaving principles', () => {
     const sieve = startingDeck().find((c) => c.name === 'Sieve')!
-    expect(sieve.output).toBe('ward')
+    expect(sieve.outputs).toEqual([{ kind: 'ward', gate: 1 }])
     const r = resolveCard(sieve, pool({ water: 1, earth: 4 }))
     expect(r.ward).toBe(3)
     expect(r.purification).toBe(3)
     expect(r.principles).toEqual({ salt: 0, sulfur: 0, mercury: 0 })
-    expect(fits({ kind: 'distill' }, sieve)).toBe(false)
-    expect(fits({ kind: 'gain' }, sieve)).toBe(true)
+  })
+
+  it('takes distilling runes on any card: each adds a principle output gated at 4', () => {
+    const sieve = startingDeck().find((c) => c.name === 'Sieve')!
+    const salty = addRune(sieve, { kind: 'distill', principle: 'salt' })
+    expect(fits({ kind: 'distill', principle: 'salt' }, sieve)).toBe(true)
+    expect(salty.outputs).toHaveLength(2)
+    const more: Card = { ...salty, channels: [{ element: 'any', capacity: 5 }] }
+    expect(resolveCard(more, pool({ earth: 3 })).principles.salt).toBe(0)
+    const r = resolveCard(more, pool({ earth: 4 }))
+    expect(r.principles.salt).toBe(1)
+    expect(r.ward).toBe(4)
+    const twice = addRune(addRune(startingDeck()[0], { kind: 'distill', principle: 'mercury' }), { kind: 'distill', principle: 'salt' })
+    expect(resolveCard(twice, pool({ water: 5 })).principles).toEqual({ salt: 1, sulfur: 0, mercury: 2 })
+    expect(fits({ kind: 'distill', principle: 'sulfur' }, twice)).toBe(false)
   })
 
   it('carries Ward from a Sieve into the next flare', () => {
@@ -57,18 +71,18 @@ describe('a circuit card', () => {
     expect(r.principles.mercury).toBe(0)
   })
 
-  it('lets an any-element channel take whatever is most plentiful', () => {
+  it('lets an any-element channel take whatever is most plentiful, yielding its own principle whatever it took', () => {
     const sieve: Card = { ...wash, channels: [{ element: 'any', capacity: 3 }] }
     const r = resolveCard(sieve, pool({ water: 1, earth: 4 }))
     expect(r.drained).toEqual(pool({ earth: 3 }))
-    expect(r.principles.salt).toBe(1)
+    expect(r.principles).toEqual({ salt: 0, sulfur: 0, mercury: 1 })
   })
 
-  it('multiplies purification by its gain stages and principles by its distilling stages, and grounds drain without purifying', () => {
-    const big: Card = { ...wash, gain: 2, distill: 1, ground: 1 }
+  it('multiplies purification by its gain stages, each a tick slower, and grounds drain without purifying', () => {
+    const big: Card = { ...wash, gain: 2, ground: 1 }
     const r = resolveCard(big, pool({ water: 5, earth: 4 }))
     expect(r.purification).toBe(15)
-    expect(r.principles.mercury).toBe(2)
+    expect(r.principles.mercury).toBe(1)
     expect(r.drained).toEqual(pool({ water: 5, earth: 3 }))
     expect(costOf(big)).toBe(4)
   })
@@ -86,14 +100,14 @@ describe('a circuit card', () => {
 })
 
 describe('the moon dial', () => {
-  it('opens at the new moon with the first feed and a hand of four', () => {
+  it('opens at the first quarter with the first feed and a hand of four', () => {
     const run = newRun(1)
     expect(run.fight.dial).toBe(0)
     expect(run.fight.hand).toHaveLength(4)
     expect(run.fight.pool).toEqual(pool({ water: 3, earth: 1 }))
   })
 
-  it('moves a quarter for a plain card, feeding again at the quarter', () => {
+  it('moves an eighth of the moon for a plain card, feeding again at the next phase', () => {
     let run = newRun(1)
     const card = run.fight.hand[0]
     const before = poolTotal(run.fight.pool)
@@ -104,7 +118,7 @@ describe('the moon dial', () => {
     expect(run.fight.hand).toHaveLength(3)
   })
 
-  it('flares what is left at the full moon, Ward first, and refills the hand', () => {
+  it('flares what is left at the full moon, Ward first, and refills the hand there', () => {
     let run: Run = newRun(1)
     run = { ...run, fight: { ...run.fight, ward: TINCTURE_WARD } }
     run = wait(run)
@@ -117,9 +131,28 @@ describe('the moon dial', () => {
     expect(run.fight.hand).toHaveLength(4)
   })
 
+  it('in half-moon turns, discards what is left at the full moon and draws 4', () => {
+    let run = newRun(1, { ...DEFAULT_SETTINGS, draw: 'cycle' })
+    expect(run.fight.hand).toHaveLength(4)
+    const kept = run.fight.hand.slice(1).map((c) => c.id)
+    run = playCard(run, run.fight.hand[0].id)
+    run = wait(run)
+    expect(run.fight.dial).toBe(4)
+    expect(run.fight.hand).toHaveLength(4)
+    expect(run.fight.discard.map((c) => c.id)).toEqual(expect.arrayContaining(kept))
+  })
+
+  it('moves the moon on by itself when nothing can be played', () => {
+    let run = newRun(1, { ...DEFAULT_SETTINGS, draw: 'cycle' })
+    run = { ...run, fight: { ...run.fight, hand: run.fight.hand.slice(0, 1) } }
+    run = playCard(run, run.fight.hand[0].id)
+    expect(run.fight.dial).toBe(4)
+    expect(run.fight.hand).toHaveLength(4)
+  })
+
   it('lists what the coming phases bring', () => {
     const next = upcoming(newRun(1).fight, 4)
-    expect(next.map((x) => x.phase)).toEqual(['first', 'full', 'last', 'new'])
+    expect(next.map((x) => x.phase)).toEqual(['waxing-gibbous', 'full', 'waning-gibbous', 'last'])
     expect(next.find((x) => x.phase === 'full')!.attack).toBe(true)
   })
 })
