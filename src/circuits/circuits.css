@@ -1,0 +1,79 @@
+/* Circuits prototype: the moon dial beside the pool, a workbench of
+   principles and recipes, and a hand of circuit cards drawn as sigils. */
+
+.circuits .title { font-size: clamp(26px, 7vw, 34px); letter-spacing: 0.04em; color: var(--gilt-bright); }
+
+.dial-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; justify-items: center; }
+@media (min-width: 560px) { .dial-panel { grid-template-columns: auto minmax(0, 1fr); align-items: start; justify-items: stretch; } }
+.dial-wrap { display: grid; place-items: center; }
+.dial { max-width: 100%; height: auto; }
+.dial .needle { transition: none; }
+.dial-num { font-family: var(--font-display); font-size: 34px; font-weight: 600; fill: var(--ink); }
+.dial-of { font-family: var(--font-text); font-size: 15px; fill: var(--ink-faint); }
+.dial-side { display: grid; gap: 8px; width: 100%; }
+
+.pool { display: grid; gap: 6px; }
+.pbar { display: grid; grid-template-columns: 4.2em minmax(0, 1fr) 2em 2em; align-items: center; gap: 8px; }
+.pname { font-family: var(--font-display); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--c); }
+.ptrack { height: 9px; border-radius: 5px; background: rgba(239, 232, 255, 0.08); overflow: hidden; }
+.ptrack span { display: block; height: 100%; background: var(--c); border-radius: 5px; }
+.pval { font-family: var(--font-display); font-size: 16px; text-align: right; }
+.pfeed { font-size: 14px; color: var(--ink-faint); }
+.threat { font-size: 17px; }
+.warn { color: var(--warn); }
+.coming { margin: 0; padding-left: 1.2em; display: grid; gap: 3px; font-size: 16px; color: var(--ink-soft); }
+.coming .when { color: var(--gilt); }
+.coming .phase-name { font-weight: 700; }
+
+.bench { display: grid; gap: 10px; }
+.bench-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.principles { display: flex; gap: 14px; }
+.pr { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-display); font-size: 15px; }
+.pr-salt { color: var(--glass); }
+.pr-sulfur { color: var(--fire); }
+.pr-mercury { color: #b9c7ff; }
+.helpers { font-size: 16px; color: var(--good); }
+.recipes { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.recipe { display: grid; gap: 4px; text-align: left; padding: 10px 11px; }
+.r-name { font-size: 12px; letter-spacing: 0.08em; color: var(--gilt-bright); }
+.r-cost { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-family: var(--font-text); }
+.r-time { font-size: 14px; color: var(--ink-faint); letter-spacing: 0; }
+.r-effect { font-family: var(--font-text); font-size: 14.5px; font-weight: 600; letter-spacing: 0; color: var(--ink-soft); line-height: 1.25; }
+
+.chand { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 560px) { .chand { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.ccard {
+  position: relative;
+  display: grid; justify-items: center; gap: 3px;
+  padding: 10px 6px 9px;
+  border-color: color-mix(in srgb, var(--c) 45%, transparent);
+  background: color-mix(in srgb, var(--c) 7%, rgba(20, 12, 40, 0.7));
+}
+.ccard .rune-svg { width: 84px; height: 84px; }
+.ccard.is-on { border-color: var(--gilt-bright); background: rgba(217, 184, 114, 0.18); }
+.ccard.idle:not(.is-on) { opacity: 0.6; }
+.ccost { position: absolute; top: 6px; right: 8px; font-family: var(--font-text); font-size: 12.5px; letter-spacing: 0; color: var(--ink-faint); }
+.cname { font-size: 12px; letter-spacing: 0.1em; color: var(--ink); }
+.cwords { font-family: var(--font-text); font-size: 14px; font-weight: 600; letter-spacing: 0; color: var(--ink-soft); line-height: 1.2; text-align: center; text-wrap: balance; }
+.cnow { display: inline-flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; font-family: var(--font-text); font-size: 14px; letter-spacing: 0; color: var(--gilt-bright); }
+.cnow.idle { color: var(--ink-faint); }
+.ccard .pr { font-size: 13px; }
+
+.preview { display: grid; gap: 4px; font-size: 17px; }
+.preview .after.win { color: var(--good); }
+.flash { color: var(--warn); }
+.cactions { grid-template-columns: 1fr 1.6fr; }
+.cactions.one { grid-template-columns: 1fr; }
+
+.clog ol { margin: 10px 0 0; padding-left: 1.3em; display: grid; gap: 4px; font-size: 16px; color: var(--ink-soft); }
+.crules p { margin-top: 8px; font-size: 17px; color: var(--ink-soft); }
+.crules p.fine { font-size: 15px; color: var(--ink-faint); }
+
+.offers { display: grid; gap: 8px; margin-top: 8px; }
+.offer { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 10px; text-align: left; font-family: var(--font-text); font-size: 16px; letter-spacing: 0; }
+.offer.is-on { border-color: var(--gilt-bright); background: rgba(217, 184, 114, 0.18); }
+.deck .ccard:disabled { opacity: 0.4; }
+.hint { margin-top: 8px; color: var(--gilt-bright); }
+.tune-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 10px; }
+.tune-grid label { display: grid; gap: 4px; font-size: 15px; color: var(--ink-soft); }
+.tune-grid select { font: inherit; color: var(--ink); background: rgba(9, 5, 20, 0.6); border: 1px solid var(--panel-edge); border-radius: 6px; padding: 6px; }

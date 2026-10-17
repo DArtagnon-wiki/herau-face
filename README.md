@@ -1,6 +1,18 @@
 # herau-face
 
-A roguelike deckbuilder of runes and alchemy, built from Circumgician's world. The design lives in [DESIGN.md](DESIGN.md).
+A roguelike deckbuilder of runes and alchemy, built from Circumgician's world. The design lives in [DESIGN.md](DESIGN.md); a new direction, cards as small circuits, in [CIRCUITS.md](CIRCUITS.md).
+
+## Prototype: Circuits (new direction)
+
+A short run of three commissions (mud, a peat bog, the Mire) on a moon dial. Each card is a circuit: its input channels take instability of their element from the pool, up to their capacity, and it purifies that much times its gain, leaving a principle behind (earth salt, fire sulfur, water and air mercury). There are no turns: a card costs a quarter moon, an eighth more for each gain stage. At each new and full moon you refill your hand to 4; when the commission attacks, whatever is left in the pool flares and costs quintessence. Principles brew a tincture (Ward), a spirit (draw 2) or a homunculus (a helper that purifies every quarter). Between commissions what is left smelts into metal, and you add a rune to a card: an input, a gain stage, a distilling stage, a ground, or a bigger core. Cards are drawn as sigils on a provisional schema: further inputs hang outside, gain stages ring the core, distilling stages sit inside, grounds are entwined.
+
+```sh
+npm run dev                          # then open /circuits.html
+npx tsx scripts/circuits-sim.ts      # a simulated player through 300 runs (--draw refill|draw, --hand N, --stock N)
+npm run build                        # also dist/circuits.html
+```
+
+Simulated (300 runs, refill to 4, 60 quintessence): mud is won every time for a median of 5 quintessence in 2.6 moons (about 10 cards); the peat bog every time for 12 in 3.2 moons; the Mire 80% of the time. The run ends with a median of 14 quintessence left. Drawing 4 without a cap wins every run with 38 left; drawing 2 wins half. The rules are in `src/circuits/engine.ts`, the page in `src/circuits/main.ts`.
 
 ## Prototype: mud to clay
 

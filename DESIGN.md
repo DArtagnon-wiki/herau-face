@@ -2,6 +2,8 @@
 
 Last updated Oct 11, 2026. Started Oct 7, 2026.
 
+**New direction, proposed:** cards as small circuits on a celestial clock, with materials and recipes for transmutation. See [CIRCUITS.md](CIRCUITS.md).
+
 ## Overview
 
 A roguelike deckbuilder in the spirit of Balatro: each term you compose sigils from the runes in your hand until it is spent, and each encounter is an alchemical transmutation. Every term makes the work more unstable, and the run ends when you can no longer pay quintessence to hold it together.
