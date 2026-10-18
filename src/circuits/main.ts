@@ -21,6 +21,7 @@ import {
   RECIPES,
   addRune,
   canAfford,
+  catalystCard,
   costOf,
   craft,
   drawPhases,
@@ -42,7 +43,7 @@ import {
   type Run,
   type Settings,
 } from './engine'
-import { ELEMENT_COLOR, element, ground, homunculus, icon, lead as leadSig, metal, moon, principle, quintessence, silver as silverSig, square, ward } from './sigils'
+import { ELEMENT_COLOR, card as cardSig, element, ground, homunculus, icon, lead as leadSig, metal, moon, principle, quintessence, silver as silverSig, square, ward } from './sigils'
 
 // ---------------------------------------------------------------------------
 // State
@@ -96,24 +97,30 @@ const sumCap = (c: Card) => c.channels.reduce((n, ch) => n + ch.capacity, 0)
 const maxPurify = (c: Card) => sumCap(c) * (1 + c.gain)
 
 function outputWords(o: Output): string {
-  return o.kind === 'ward' ? 'Ward 1 for each it takes (the shield)' : `1 ${o.principle} once it takes ${o.gate} or more (${o.gate} arcs)`
+  if (o.kind === 'ward') return 'Ward 1 for each it takes (the shield)'
+  if (o.kind === 'catalyst') return `the next card you play purifies ×${o.factor} (the card sign)`
+  return `1 ${o.principle} once it takes ${o.gate} or more (${o.gate} arcs)`
 }
 
 function cardLines(c: Card): string[] {
   const ins = c.channels.map((ch) => (ch.element === 'any' ? `up to ${ch.capacity} of whatever is most plentiful` : `up to ${ch.capacity} ${ch.element}`)).join(' and ')
   return [
-    `Takes ${ins} and purifies 1 for each${c.gain ? `, ×${1 + c.gain} through the ${c.gain === 1 ? 'square' : 'squares'} drawn around its square` : ''}.`,
-    `${cap(c.outputs.map(outputWords).join('; '))}.`,
+    c.purifies
+      ? `Takes ${ins} and purifies 1 for each${c.gain ? `, ×${1 + c.gain} through the ${c.gain === 1 ? 'square' : 'squares'} drawn around its square` : ''}.`
+      : `Takes ${ins} and grounds it (the ground sign below), purifying nothing.`,
+    c.outputs.length ? `${cap(c.outputs.map(outputWords).join('; '))}.` : '',
     c.ground ? `${c.ground === 1 ? 'Its ground stage takes' : `Each of its ${c.ground} ground stages takes`} up to ${GROUND_DRAIN} of whatever is most plentiful (the star in the small circle below) and grounds it (the ground sign), purifying nothing.` : '',
   ].filter(Boolean)
 }
 
 function nowLine(run: Run, c: Card): string {
-  const r = resolveCard(c, run.fight.pool)
-  if (!r.processed && !Object.values(r.drained).some(Boolean)) return 'Now: nothing in the pool for it.'
+  const boost = run.fight.catalyst
+  const r = resolveCard(c, run.fight.pool, boost)
+  if (!r.processed && !Object.values(r.drained).some(Boolean)) return `Now: nothing in the pool for it${r.catalyst > 1 ? `, but the next card would purify ×${r.catalyst}` : ''}.`
   const got = PRINCIPLES.filter((p) => r.principles[p]).map((p) => `${r.principles[p]} ${p}`)
   const short = c.outputs.filter((o) => o.kind === 'principle' && r.processed > 0 && r.processed < o.gate).map((o) => `${o.gate - r.processed} short of ${(o as { principle: Principle }).principle}`)
-  return `Now: takes ${poolTotal(r.drained)}, purifies ${r.purification}${got.length ? `, yields ${got.join(' and ')}` : ''}${r.ward ? `, Ward ${r.ward}` : ''}${short.length ? `; ${short.join(', ')}` : ''}.`
+  const what = c.purifies ? `purifies ${r.purification}${boost > 1 ? ` (×${boost} from the catalyst)` : ''}` : 'grounds it'
+  return `Now: takes ${poolTotal(r.drained)}, ${what}${r.catalyst > 1 ? `, the next card ×${r.catalyst}` : ''}${got.length ? `, yields ${got.join(' and ')}` : ''}${r.ward ? `, Ward ${r.ward}` : ''}${short.length ? `; ${short.join(', ')}` : ''}.`
 }
 
 function runeTitle(r: RewardRune): string {
@@ -126,6 +133,8 @@ function runeTitle(r: RewardRune): string {
       return `Distil ${r.principle}`
     case 'ground':
       return 'Ground'
+    case 'card':
+      return 'Catalyst, a new card'
   }
 }
 
@@ -139,6 +148,8 @@ function runeText(r: RewardRune): string {
       return `A new output on the right of the card, behind ${METAL_GATE} arcs: whenever it takes ${METAL_GATE} or more, it also yields 1 ${r.principle}. ${PRINCIPLE_USE[r.principle]}`
     case 'ground':
       return `A new stage on the card, a small circle hanging from it: it takes up to ${GROUND_DRAIN} of whatever is most plentiful (the six-pointed star with its ${GROUND_DRAIN}) and grounds it (the ground sign outside), purifying nothing. Less is left to flare.`
+    case 'card':
+      return 'A whole new card for your deck. It takes up to 2 of whatever is most plentiful and purifies 1 for each; whenever you play it, the next card you play purifies ×2 (the card sign). Little on its own, big before your strongest card.'
   }
 }
 
@@ -154,6 +165,8 @@ function changeText(r: RewardRune, before: Card): string {
       return `${before.name} would also yield 1 ${r.principle} whenever it takes ${METAL_GATE} or more${sumCap(before) < METAL_GATE ? `, but it can take only ${sumCap(before)} until it gets another input` : ''}.`
     case 'ground':
       return `${before.name} would get a ground stage${before.ground ? ', its second' : ''}: ${GROUND_DRAIN} more of anything drained each time you play it, purifying nothing.`
+    case 'card':
+      return 'The Catalyst joins your deck.'
   }
 }
 
@@ -168,6 +181,7 @@ function situationNote(run: Run): [string, string] {
   const lines = [
     atk ? `${f.commission.name} flares there: whatever is in the pool, less Ward (${threat} now, the red badge). The pool stays.` : '',
     drw ? `You ${run.settings.draw === 'cycle' ? 'discard and draw' : 'draw'} at the ${PHASE_NAMES[drw.phase].toLowerCase()}${drw === atk ? ', after the flare' : ''}.` : '',
+    f.catalyst > 1 ? `The next card you play purifies ×${f.catalyst}.` : '',
     'Pick a card to see what it would do.',
   ]
   return [title, lines.filter(Boolean).join(' ')]
@@ -228,6 +242,7 @@ function legendText(): string {
     ${legendRow(I(ground(0, -1, 8, { stroke: 'var(--lit)' })), `A ground sign is an output that grounds what its stage took, purifying nothing. A ground stage takes ${GROUND_DRAIN} of whatever is most plentiful.`)}
     ${legendRow(I(metal(0, 0, 8, { stroke: 'var(--lit)' })), 'Metal, counted by worth: what is left after a commission smelts into silver and lead. It buys extra runes.')}
     ${legendRow(I(homunculus(0, 0, 9, { stroke: 'var(--lit)' })), 'A homunculus purifies on its own at every phase.')}
+    ${legendRow(I(cardSig(-3, 0, 7, { stroke: 'var(--lit)' }) + '<text x="6" y="5" font-size="9" fill="var(--ink)" class="sig-num">×2</text>'), 'A card sign with ×2 is a catalyst: when this card is played, the next card you play purifies twice over.')}
   </ul>`
 }
 
@@ -252,6 +267,7 @@ function materials(run: Run): string {
     ${chip(icon(metal(0, 0, 8, { stroke: 'var(--gilt)', width: 1.6 }), 20), run.metals, 'metal')}
     ${chip(icon(ward(0, 0, 9, { stroke: 'var(--glass)', width: 1.6 }), 20), f.ward, 'Ward', !f.ward)}
     ${chip(icon(homunculus(0, 0, 10, { stroke: 'var(--good)', width: 1.5 }), 20), f.homunculi, 'homunculi', !f.homunculi)}
+    ${f.catalyst > 1 ? `<span class="chip" aria-label="Next card purifies times ${f.catalyst}">${icon(cardSig(0, 0, 8, { stroke: 'var(--lit)', width: 1.5 }), 20)}<b class="num">×${f.catalyst}</b></span>` : ''}
   </button>`
 }
 
@@ -268,7 +284,7 @@ function hand(run: Run): string {
   if (!f.hand.length) return `<section class="hand-row empty"><p>No cards in hand until the next draw.</p></section>`
   return `<section class="hand-row" aria-label="Hand">${f.hand
     .map((c) => {
-      const live = resolveCard(c, f.pool)
+      const live = resolveCard(c, f.pool, f.catalyst)
       const on = ui.pick?.kind === 'card' && ui.pick.id === c.id
       const idle = !live.processed && !Object.values(live.drained).some(Boolean)
       return `<button class="ccard ${on ? 'is-on' : ''} ${idle ? 'idle' : ''}" data-act="pick-card" data-id="${c.id}" aria-pressed="${on}" aria-label="${esc(c.name)}: would purify ${live.purification}">${circuitSvg(c, { live, size: 120 })}<span class="cname">${esc(c.name)}</span></button>`
@@ -358,6 +374,7 @@ function fightView(run: Run): string {
 function rewardNote(run: Run): string {
   const r = ui.offer !== null ? run.offer[ui.offer] : null
   const target = ui.target !== null ? run.deck.find((c) => c.id === ui.target) : null
+  if (r?.kind === 'card') return noteView(runeTitle(r), esc(runeText(r)), circuitSvg(catalystCard(0), { size: 84 }))
   if (r && target) {
     const art = `${circuitSvg(target, { size: 84 })}<span class="arrow" aria-hidden="true">→</span>${circuitSvg(addRune(target, r), { size: 84 })}`
     return noteView(`${runeTitle(r)} on ${target.name}`, `${esc(changeText(r, target))}`, art)
@@ -379,7 +396,8 @@ function rewardView(run: Run): string {
   const canTake = price <= run.metals
   const offerTile = (i: number) => {
     const r = run.offer[i]
-    return `<button class="offer ${ui.offer === i ? 'is-on' : ''}" data-act="offer" data-i="${i}" ${canTake ? '' : 'disabled'} aria-pressed="${ui.offer === i}" aria-label="${esc(runeTitle(r))}">${offerSvg(r, 48)}<span class="price">${price ? `${icon(metal(0, 0, 7, { stroke: 'var(--gilt)' }), 14)}${price}` : 'free'}</span></button>`
+    const art = r.kind === 'card' ? circuitSvg(catalystCard(0), { size: 54 }) : offerSvg(r, 48)
+    return `<button class="offer ${ui.offer === i ? 'is-on' : ''}" data-act="offer" data-i="${i}" ${canTake ? '' : 'disabled'} aria-pressed="${ui.offer === i}" aria-label="${esc(runeTitle(r))}">${art}<span class="price">${price ? `${icon(metal(0, 0, 7, { stroke: 'var(--gilt)' }), 14)}${price}` : 'free'}</span></button>`
   }
   const target = ui.target !== null ? run.deck.find((c) => c.id === ui.target) : null
   return `<div class="cx reward">
@@ -393,14 +411,14 @@ function rewardView(run: Run): string {
     ${rewardNote(run)}
     <section class="deck" aria-label="Your deck">${run.deck
       .map((c) => {
-        const ok = sel ? fits(sel, c) : true
+        const ok = sel && sel.kind !== 'card' ? fits(sel, c) : true
         const on = sel ? ui.target === c.id : ui.look === c.id
         return `<button class="ccard ${sel && ok ? 'fits' : ''} ${on ? 'is-on' : ''}" data-act="deck-card" data-id="${c.id}" ${ok ? '' : 'disabled'} aria-pressed="${on}" aria-label="${esc(c.name)}">${circuitSvg(c, { size: 110 })}<span class="cname">${esc(c.name)}</span></button>`
       })
       .join('')}</section>
     <div class="cx-actions">
       <button data-act="next">On to ${esc(COMMISSIONS[run.fightIndex + 1].name)}</button>
-      <button class="primary go" data-act="add" ${sel && target && canTake ? '' : 'disabled'}>${sel && target ? `Add to ${esc(target.name)} · ${price ? `${price} metal` : 'free'}` : sel ? 'Pick a card' : 'Pick a rune'}</button>
+      <button class="primary go" data-act="add" ${sel && (target || sel.kind === 'card') && canTake ? '' : 'disabled'}>${sel?.kind === 'card' ? `Add to deck · ${price ? `${price} metal` : 'free'}` : sel && target ? `Add to ${esc(target.name)} · ${price ? `${price} metal` : 'free'}` : sel ? 'Pick a card' : 'Pick a rune'}</button>
     </div>
   </div>${popupView(run)}`
 }
@@ -533,12 +551,20 @@ root.addEventListener('click', (ev) => {
       }
       case 'deck-card': {
         const id = Number(el.dataset.id)
-        if (ui.offer !== null) ui.target = ui.target === id ? null : id
-        else ui.look = ui.look === id ? null : id
+        if (ui.offer !== null && run?.offer[ui.offer]?.kind !== 'card') ui.target = ui.target === id ? null : id
+        else {
+          ui.offer = null
+          ui.look = ui.look === id ? null : id
+        }
         break
       }
       case 'add':
-        if (run && ui.offer !== null && ui.target !== null) {
+        if (run && ui.offer !== null && run.offer[ui.offer]?.kind === 'card') {
+          ui.run = takeRune(run, ui.offer)
+          ui.look = ui.run.deck[ui.run.deck.length - 1].id
+          ui.offer = ui.target = null
+          sound.tap(makeRune(3_000_000, { body: 'circle', motes: [elementMote('earth')] }))
+        } else if (run && ui.offer !== null && ui.target !== null) {
           ui.run = takeRune(run, ui.offer, ui.target)
           ui.look = ui.target
           ui.offer = ui.target = null

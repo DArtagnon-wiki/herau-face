@@ -85,6 +85,8 @@ const outputAngles = (k: number): number[] => (k <= 1 ? [-6] : k === 2 ? [-15, 2
 
 function outputSigil(o: Output, x: number, y: number, size: number, color: string, lit: boolean): string {
   if (o.kind === 'ward') return ward(x, y, size, { stroke: color, fill: lit ? 'var(--lit-fill)' : 'none', width: 1.6 })
+  // A catalyst: the next card, times its factor.
+  if (o.kind === 'catalyst') return `${cardSig(x - 1, y, size, { stroke: color, fill: lit ? 'var(--lit-fill)' : 'none', width: 1.5 })}${numeral(`×${o.factor}`, x + size * 1.55, y + size * 0.35, size * 1.35)}`
   return principle(o.principle, x, y, size, { stroke: color, width: 1.4 })
 }
 
@@ -128,23 +130,30 @@ export function circuitSvg(c: Card, opts: CircuitOptions = {}): string {
   box.add(...polar(T.x, T.y, reqR, linkDeg - 30), 1)
   box.add(...polar(T.x, T.y, reqR, linkDeg + 30), 1)
 
-  // Purification below: the square, with a square drawn around it for each gain.
-  const purifying = !live || live.purification > 0
-  const h0 = 6
-  const hOut = h0 + c.gain * 3.4
-  const sy = C.y + C.r + 8 + hOut
-  parts.push(line(0, C.y + C.r, 0, sy - hOut, on(purifying)))
-  for (let g = c.gain; g >= 0; g--) {
-    const h = h0 + g * 3.4
-    parts.push(square(0, sy, h, { stroke: on(purifying), fill: g === 0 ? (live && purifying ? 'var(--lit-fill)' : 'var(--stage)') : 'var(--stage)', width: g === 0 ? 1.6 : 1.3 }))
+  // The main output below: purification, the square with a square drawn around it for each gain; or a ground.
+  if (c.purifies) {
+    const purifying = !live || live.purification > 0
+    const h0 = 6
+    const hOut = h0 + c.gain * 3.4
+    const sy = C.y + C.r + 8 + hOut
+    parts.push(line(0, C.y + C.r, 0, sy - hOut, on(purifying)))
+    for (let g = c.gain; g >= 0; g--) {
+      const h = h0 + g * 3.4
+      parts.push(square(0, sy, h, { stroke: on(purifying), fill: g === 0 ? (live && purifying ? 'var(--lit-fill)' : 'var(--stage)') : 'var(--stage)', width: g === 0 ? 1.6 : 1.3 }))
+    }
+    box.add(0, sy, hOut + 1)
+  } else {
+    const grounding = !live || live.processed > 0
+    parts.push(line(0, C.y + C.r, 0, C.y + C.r + 6, on(grounding)))
+    parts.push(ground(0, C.y + C.r + 13, 7, { stroke: on(grounding), width: 1.6 }))
+    box.add(0, C.y + C.r + 14, 8)
   }
-  box.add(0, sy, hOut + 1)
 
   // The side outputs to the right, each behind its own arcs.
   const angles = outputAngles(c.outputs.length)
   c.outputs.forEach((o, j) => {
     const a = angles[j]
-    const fires = !live || (processed > 0 && processed >= o.gate)
+    const fires = !live || (o.gate === 0 ? true : processed > 0 && processed >= o.gate)
     const arcs = Math.min(o.gate, 6)
     const span = c.outputs.length > 1 ? 8.5 : 14
     for (let i = 1; i <= arcs; i++) parts.push(arc(C.x, C.y, C.r + 2.5 + i * 3.4, a - span, a + span, live ? (processed >= i ? LIT : DIM) : LINE, 1.25))
@@ -155,6 +164,7 @@ export function circuitSvg(c: Card, opts: CircuitOptions = {}): string {
     const [ox, oy] = polar(C.x, C.y, px + size + 1.5, a)
     parts.push(outputSigil(o, ox, oy, size, on(fires), !!live && fires))
     box.add(ox, oy, size + 2)
+    if (o.kind === 'catalyst') box.add(ox + size * 1.55 + 7, oy + size * 0.35, 5)
   })
 
   // Ground stages hang down to the left: the first linked to the collector, a second from the first.

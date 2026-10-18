@@ -74,7 +74,8 @@ const principleCount = (r: Run) => PRINCIPLES.reduce((n, p) => n + r.fight.princ
 /** The fight that `before` was in has ended in `after`. */
 const ended = (before: Run, after: Run) => after.stage !== 'fight' || after.fightIndex !== before.fightIndex
 const won = (r: Run) => r.stage === 'reward' || r.stage === 'won'
-const parts = (r: Run) => r.deck.reduce((n, c) => n + c.channels.length + c.gain + c.outputs.length + c.ground, 0)
+/** Runes added so far: one for each part beyond a card's first two, one for each card. */
+const parts = (r: Run) => r.deck.reduce((n, c) => n + c.channels.length + c.gain + c.outputs.length + c.ground - 1, 0)
 
 // ---------------------------------------------------------------------------
 // Strategies
@@ -89,7 +90,7 @@ function greedyValue(r: Run, start: Run): number {
   if (r.stage === 'lost') return -1e6
   if (r.stage !== 'fight') return 1e6 + r.quintessence
   const f = r.fight
-  return f.purified - 3 * (start.quintessence - r.quintessence) - 0.6 * poolTotal(f.pool) + 10 * f.homunculi + 0.5 * f.ward + 0.8 * f.hand.length
+  return f.purified - 3 * (start.quintessence - r.quintessence) - 0.6 * poolTotal(f.pool) + 10 * f.homunculi + 0.5 * f.ward + 0.8 * f.hand.length + 4 * (f.catalyst - 1)
 }
 
 function greedyMove(r: Run): Move {
@@ -127,12 +128,17 @@ function greedyReward(r: Run): Run {
     const cap = run.deck.reduce((n, c) => n + c.channels.filter((ch) => ch.element === e).reduce((k, ch) => k + ch.capacity, 0), 0)
     return fed / (1 + cap / 5)
   }
-  const rank = (o: Run['offer'][number]) => (o.kind === 'gain' ? 0 : o.kind === 'channel' ? 2 - Math.min(1, need(o.element) / 4) : o.kind === 'distill' ? 2 : 3)
+  const rank = (o: Run['offer'][number]) => (o.kind === 'gain' ? 0 : o.kind === 'card' ? 1 : o.kind === 'channel' ? 2 - Math.min(1, need(o.element) / 4) : o.kind === 'distill' ? 2 : 3)
   for (let guard = 0; guard < 5 && run.offer.length; guard++) {
     if (run.tookFree && run.metals < EXTRA_RUNE_PRICE) break
     const order = run.offer.map((o, i) => ({ o, i })).sort((a, b) => rank(a.o) - rank(b.o))
     let done = false
     for (const { o, i } of order) {
+      if (o.kind === 'card') {
+        run = takeRune(run, i)
+        done = true
+        break
+      }
       const cards = run.deck.filter((c) => fits(o, c))
       if (!cards.length) continue
       // Gains and distillers go on the water cards (the first commissions feed water most), channels on a card of another element.
@@ -161,7 +167,7 @@ const random: Strategy = {
     let run = r
     for (let guard = 0; guard < 5 && run.offer.length; guard++) {
       if (run.tookFree && (run.metals < EXTRA_RUNE_PRICE || rng.float() < 0.5)) break
-      const pairs = run.offer.flatMap((o, i) => run.deck.filter((c) => fits(o, c)).map((c) => ({ i, id: c.id })))
+      const pairs = run.offer.flatMap((o, i) => (o.kind === 'card' ? [{ i, id: undefined as number | undefined }] : run.deck.filter((c) => fits(o, c)).map((c) => ({ i, id: c.id as number | undefined }))))
       if (!pairs.length) break
       const p = pairs[rng.int(0, pairs.length - 1)]
       run = takeRune(run, p.i, p.id)

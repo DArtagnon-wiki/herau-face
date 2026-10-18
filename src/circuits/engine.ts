@@ -66,8 +66,15 @@ export interface Card {
    * element's; distilling runes add more outputs to any card.
    */
   outputs: Output[]
-  /** Gain stages: each multiplies purification by one more (×2, ×3, …) and costs a tick (a sixteenth of the moon) more. */
+  /**
+   * The collecting stage's main output, below it: purification (a square), or
+   * a ground (what it takes is grounded, purifying nothing).
+   */
+  purifies: boolean
+  /** Gain stages: each multiplies purification by one more (×2, ×3, …); a gain rune also makes the card a tick slower. */
   gain: number
+  /** Time it takes on the dial, in ticks: an eighth of the moon (2) to start, a tick more for each gain rune added. */
+  time: number
   /**
    * Ground stages, each a stage of its own beside the collector: it takes up
    * to GROUND_DRAIN of whatever is most plentiful (a wild input) and grounds it
@@ -76,7 +83,11 @@ export interface Card {
   ground: number
 }
 
-export type Output = { kind: 'principle'; principle: Principle; gate: number } | { kind: 'ward'; gate: number }
+export type Output =
+  | { kind: 'principle'; principle: Principle; gate: number }
+  | { kind: 'ward'; gate: number }
+  /** The next card played purifies this many times over. */
+  | { kind: 'catalyst'; factor: number; gate: number }
 
 export const GROUND_DRAIN = 3
 /** What a principle output needs its stage to collect. */
@@ -84,8 +95,8 @@ export const METAL_GATE = 4
 export const BASE_COST = 2
 /** Most of each part a card can hold. */
 export const CAPS = { channels: 3, gain: 2, outputs: 3, ground: 2 }
-/** Time a card takes on the dial, in ticks: an eighth of the moon (2 ticks), and a tick more for each gain stage. */
-export const costOf = (c: Card) => BASE_COST + c.gain
+/** Time a card takes on the dial, in ticks. */
+export const costOf = (c: Card) => c.time
 
 export interface CardResult {
   /** What the card drains from the pool, by element (channels and grounds). */
@@ -96,6 +107,8 @@ export interface CardResult {
   principles: Record<Principle, number>
   /** Ward it raises against the next flare. */
   ward: number
+  /** What the next card played will purify times over, if it catalyses; else 1. */
+  catalyst: number
   /** What each channel took, in the card's order. */
   took: number[]
   /** What each ground stage took. */
@@ -106,11 +119,12 @@ export interface CardResult {
  * What playing a card does to this pool. Channels for one element take first,
  * up to their capacity; any-element channels then take from whatever is most
  * plentiful; ground stages last. Purification is what the channels took, times
- * (1 + gain). Each side output whose gate the channels reached fires: a
+ * (1 + gain), times any boost a catalyst left; a card whose main output is a
+ * ground purifies nothing. Each side output whose gate the channels reached fires: a
  * principle output yields 1 of its principle, a Ward output Ward 1 for each
  * taken.
  */
-export function resolveCard(card: Card, pool: Pool): CardResult {
+export function resolveCard(card: Card, pool: Pool, boost = 1): CardResult {
   const left = { ...pool }
   const drained = emptyPool()
   const principles: Record<Principle, number> = { salt: 0, sulfur: 0, mercury: 0 }
@@ -139,7 +153,12 @@ export function resolveCard(card: Card, pool: Pool): CardResult {
     took_[i] = took
   }
   let ward = 0
+  let catalyst = 1
   for (const o of card.outputs) {
+    if (o.kind === 'catalyst') {
+      if (processed >= o.gate) catalyst *= o.factor
+      continue
+    }
     if (processed <= 0 || processed < o.gate) continue
     if (o.kind === 'principle') principles[o.principle] += 1
     else ward += processed
@@ -150,7 +169,8 @@ export function resolveCard(card: Card, pool: Pool): CardResult {
     while (need > 0 && poolTotal(left) > 0) need -= takeFrom(most(), need)
     grounded.push(GROUND_DRAIN - need)
   }
-  return { drained, processed, purification: processed * (1 + card.gain), principles, ward, took: took_, grounded }
+  const purification = card.purifies ? processed * (1 + card.gain) * boost : 0
+  return { drained, processed, purification, principles, ward, catalyst, took: took_, grounded }
 }
 
 // ---------------------------------------------------------------------------
@@ -241,6 +261,8 @@ export type RewardRune =
   | { kind: 'gain' }
   | { kind: 'distill'; principle: Principle }
   | { kind: 'ground' }
+  /** A whole new card for the deck. */
+  | { kind: 'card'; card: 'catalyst' }
 
 export const REWARD_POOL: RewardRune[] = [
   { kind: 'channel', element: 'water', capacity: 5 },
@@ -254,13 +276,23 @@ export const REWARD_POOL: RewardRune[] = [
   { kind: 'distill', principle: 'sulfur' },
   { kind: 'distill', principle: 'mercury' },
   { kind: 'ground' },
+  { kind: 'card', card: 'catalyst' },
+  { kind: 'card', card: 'catalyst' },
 ]
 
 export const EXTRA_RUNE_PRICE = 3
 
 /** Whether this rune fits on this card: each kind of part has a cap. */
 export const fits = (r: RewardRune, c: Card) =>
-  r.kind === 'channel' ? c.channels.length < CAPS.channels : r.kind === 'gain' ? c.gain < CAPS.gain : r.kind === 'distill' ? c.outputs.length < CAPS.outputs : c.ground < CAPS.ground
+  r.kind === 'card'
+    ? false
+    : r.kind === 'channel'
+      ? c.channels.length < CAPS.channels
+      : r.kind === 'gain'
+        ? c.purifies && c.gain < CAPS.gain
+        : r.kind === 'distill'
+          ? c.outputs.length < CAPS.outputs
+          : c.ground < CAPS.ground
 
 export function addRune(c: Card, r: RewardRune): Card {
   if (!fits(r, c)) return c
@@ -268,11 +300,13 @@ export function addRune(c: Card, r: RewardRune): Card {
     case 'channel':
       return { ...c, channels: [...c.channels, { element: r.element, capacity: r.capacity }] }
     case 'gain':
-      return { ...c, gain: c.gain + 1 }
+      return { ...c, gain: c.gain + 1, time: c.time + 1 }
     case 'distill':
       return { ...c, outputs: [...c.outputs, { kind: 'principle', principle: r.principle, gate: METAL_GATE }] }
     case 'ground':
       return { ...c, ground: c.ground + 1 }
+    case 'card':
+      return c
   }
 }
 
@@ -303,6 +337,8 @@ export interface Fight {
   ward: number
   principles: Record<Principle, number>
   homunculi: number
+  /** What the next card played purifies times over, from a catalyst; 1 when none waits. */
+  catalyst: number
   hand: Card[]
   draw: Card[]
   discard: Card[]
@@ -333,17 +369,37 @@ export interface Run {
 
 const channel = (element: Elemental | 'any', capacity: number): Channel => ({ element, capacity })
 const yields = (principle: Principle): Output => ({ kind: 'principle', principle, gate: METAL_GATE })
-const card = (id: number, name: string, ch: Channel, out: Output): Card => ({ id, name, channels: [ch], outputs: [out], gain: 0, ground: 0 })
+const card = (id: number, name: string, channels: Channel[], outputs: Output[], purifies = true): Card => ({ id, name, channels, outputs, purifies, gain: 0, time: BASE_COST, ground: 0 })
 
-/** The opening deck: one-input circuits, mostly water and earth. The metal creators yield their principle only from 4 or more; the Sieve raises Ward instead. */
+/** A card the shop can offer: takes a little of anything, purifies it, and the next card played purifies ×2. */
+export function catalystCard(id: number): Card {
+  return card(id, 'Catalyst', [channel('any', 2)], [{ kind: 'catalyst', factor: 2, gate: 0 }])
+}
+
+/**
+ * The opening deck, two kinds of card and a Sieve. The metal makers take up to
+ * 5 of their element and ground it, purifying nothing, and yield their
+ * principle once they take 4 or more. The purifiers take up to 3 each of two
+ * elements and purify 1 for each, yielding nothing: slow to drain, but they
+ * cover two elements and hit hard. Every element has both kinds. The Sieve
+ * takes 3 of anything, purifies it and raises Ward.
+ */
 export function startingDeck(): Card[] {
   let id = 1
+  const metal = (name: string, e: Elemental, p: Principle) => card(id++, name, [channel(e, 5)], [yields(p)], false)
+  const purifier = (name: string, a: Elemental, b: Elemental) => card(id++, name, [channel(a, 3), channel(b, 3)], [])
   return [
-    ...Array.from({ length: 4 }, () => card(id++, 'Wash', channel('water', 5), yields('mercury'))),
-    ...Array.from({ length: 3 }, () => card(id++, 'Calcine', channel('earth', 5), yields('salt'))),
-    card(id++, 'Fan', channel('air', 5), yields('mercury')),
-    card(id++, 'Kindle', channel('fire', 5), yields('sulfur')),
-    card(id++, 'Sieve', channel('any', 3), { kind: 'ward', gate: 1 }),
+    metal('Wash', 'water', 'mercury'),
+    metal('Wash', 'water', 'mercury'),
+    metal('Calcine', 'earth', 'salt'),
+    metal('Fan', 'air', 'mercury'),
+    metal('Kindle', 'fire', 'sulfur'),
+    purifier('Dissolve', 'water', 'earth'),
+    purifier('Coagulate', 'earth', 'water'),
+    purifier('Sublime', 'earth', 'air'),
+    purifier('Cupel', 'air', 'fire'),
+    purifier('Digest', 'fire', 'water'),
+    card(id++, 'Sieve', [channel('any', 3)], [{ kind: 'ward', gate: 1 }]),
   ]
 }
 
@@ -378,6 +434,7 @@ function startFight(run: Run, index: number): Run {
     ward: 0,
     principles: { salt: 0, sulfur: 0, mercury: 0 },
     homunculi: 0,
+    catalyst: 1,
     hand: [],
     draw: rng.shuffle(run.deck),
     discard: [],
@@ -500,7 +557,7 @@ export function playCard(run: Run, id: number): Run {
   if (run.stage !== 'fight') return run
   const c = run.fight.hand.find((x) => x.id === id)
   if (!c) throw new Error('That card is not in hand.')
-  const r = resolveCard(c, run.fight.pool)
+  const r = resolveCard(c, run.fight.pool, run.fight.catalyst)
   const pool = { ...run.fight.pool }
   for (const e of ELEMENTS) pool[e] -= r.drained[e]
   const principles = { ...run.fight.principles }
@@ -511,10 +568,11 @@ export function playCard(run: Run, id: number): Run {
     pool,
     principles,
     ward: run.fight.ward + r.ward,
+    catalyst: r.catalyst,
     purified: run.fight.purified + r.purification,
     hand: run.fight.hand.filter((x) => x.id !== id),
     discard: [...run.fight.discard, c],
-    log: [`${c.name}: takes ${poolTotal(r.drained)}, purifies ${r.purification}${got.length ? `, leaves ${got.join(' and ')}` : ''}${r.ward ? `, raises Ward ${r.ward}` : ''}.`, ...run.fight.log],
+    log: [`${c.name}: takes ${poolTotal(r.drained)}, ${c.purifies ? `purifies ${r.purification}${run.fight.catalyst > 1 ? ` (×${run.fight.catalyst} from a catalyst)` : ''}` : 'grounds it'}${got.length ? `, leaves ${got.join(' and ')}` : ''}${r.ward ? `, raises Ward ${r.ward}` : ''}${r.catalyst > 1 ? `; the next card purifies ×${r.catalyst}` : ''}.`, ...run.fight.log],
   }
   const played = after({ ...run, fight })
   return played.stage === 'fight' ? settle(advance(played, costOf(c))) : played
@@ -558,13 +616,23 @@ export function upcoming(f: Fight, count = 4, drawAt: Phase[] = DRAW_PHASES): { 
 // Between fights
 
 /** Take a rune on offer and add it to a card in the deck: the first is free, more cost metal. */
-export function takeRune(run: Run, offerIndex: number, cardId: number): Run {
+export function takeRune(run: Run, offerIndex: number, cardId?: number): Run {
   if (run.stage !== 'reward') return run
   const r = run.offer[offerIndex]
-  const c = run.deck.find((x) => x.id === cardId)
-  if (!r || !c || !fits(r, c)) throw new Error('That rune does not fit there.')
   const price = run.tookFree ? EXTRA_RUNE_PRICE : 0
   if (price > run.metals) throw new Error('Not enough metal.')
+  if (r?.kind === 'card') {
+    return {
+      ...run,
+      metals: run.metals - price,
+      deck: [...run.deck, catalystCard(run.nextId)],
+      nextId: run.nextId + 1,
+      offer: run.offer.filter((_, i) => i !== offerIndex),
+      tookFree: true,
+    }
+  }
+  const c = run.deck.find((x) => x.id === cardId)
+  if (!r || !c || !fits(r, c)) throw new Error('That rune does not fit there.')
   return {
     ...run,
     metals: run.metals - price,
@@ -587,6 +655,8 @@ export function runeWords(r: RewardRune): string {
       return r.element === 'any' ? `Input: up to ${r.capacity} of any element` : `Input: up to ${r.capacity} ${r.element}`
     case 'gain':
       return 'Gain: purification ×1 more, a tick slower'
+    case 'card':
+      return 'Catalyst: a new card; the next card played after it purifies ×2'
     case 'distill':
       return `Distil ${r.principle}: 1 ${r.principle} whenever the card takes ${METAL_GATE} or more`
     case 'ground':
@@ -598,7 +668,7 @@ export function runeWords(r: RewardRune): string {
 export function cardWords(c: Card): string {
   const ins = c.channels.map((ch) => `${ch.capacity} ${ch.element === 'any' ? 'any' : ch.element}`).join(' + ')
   const g = c.gain ? ` ×${1 + c.gain}` : ''
-  const d = c.outputs.map((o) => (o.kind === 'ward' ? ', Ward 1 for each' : `, ${o.principle} from ${o.gate}`)).join('')
+  const d = c.outputs.map((o) => (o.kind === 'ward' ? ', Ward 1 for each' : o.kind === 'catalyst' ? `, the next card ×${o.factor}` : `, ${o.principle} from ${o.gate}`)).join('')
   const gr = c.ground ? `, ground ${c.ground * GROUND_DRAIN}` : ''
   return `Takes up to ${ins}${g}${d}${gr}`
 }

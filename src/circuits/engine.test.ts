@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { COMMISSIONS, DEFAULT_SETTINGS, METAL_GATE, TINCTURE_WARD, addRune, fits, costOf, craft, emptyPool, newRun, nextFight, playCard, poolTotal, resolveCard, smelt, startingDeck, takeRune, upcoming, wait, type Card, type Run } from './engine'
+import { COMMISSIONS, DEFAULT_SETTINGS, METAL_GATE, catalystCard, TINCTURE_WARD, addRune, fits, costOf, craft, emptyPool, newRun, nextFight, playCard, poolTotal, resolveCard, smelt, startingDeck, takeRune, upcoming, wait, type Card, type Run } from './engine'
 
 const pool = (p: Partial<Record<'water' | 'earth' | 'air' | 'fire', number>>) => ({ ...emptyPool(), ...p })
-const wash: Card = { id: 1, name: 'Wash', channels: [{ element: 'water', capacity: 5 }], outputs: [{ kind: 'principle', principle: 'mercury', gate: 1 }], gain: 0, ground: 0 }
+const wash: Card = { id: 1, name: 'Wash', channels: [{ element: 'water', capacity: 5 }], outputs: [{ kind: 'principle', principle: 'mercury', gate: 1 }], purifies: true, gain: 0, time: 2, ground: 0 }
 
 describe('a circuit card', () => {
   it('takes up to its capacity of its element, purifies that much, and leaves its principle', () => {
@@ -23,9 +23,60 @@ describe('a circuit card', () => {
     expect(resolveCard(calcine, pool({ earth: 4 })).principles.salt).toBe(1)
     const deckWash = deck.find((c) => c.name === 'Wash')!
     expect(resolveCard(deckWash, pool({ water: 3 })).principles.mercury).toBe(0)
-    expect(resolveCard(deckWash, pool({ water: 3 })).purification).toBe(3)
+    expect(resolveCard(deckWash, pool({ water: 3 })).purification).toBe(0)
     expect(resolveCard(deckWash, pool({ water: 4 })).principles.mercury).toBe(1)
     expect(resolveCard(deckWash, pool({ water: 4 })).took).toEqual([4])
+  })
+
+  it('opens with five metal makers that ground, five two-element purifiers, and the Sieve', () => {
+    const deck = startingDeck()
+    expect(deck).toHaveLength(11)
+    const metal = deck.filter((c) => !c.purifies)
+    const purifiers = deck.filter((c) => c.purifies && c.outputs.length === 0)
+    expect(metal.map((c) => c.channels[0].element).sort()).toEqual(['air', 'earth', 'fire', 'water', 'water'])
+    expect(purifiers).toHaveLength(5)
+    for (const c of purifiers) {
+      expect(c.channels.map((ch) => ch.capacity)).toEqual([3, 3])
+      expect(costOf(c)).toBe(2)
+    }
+    const wash = metal.find((c) => c.name === 'Wash')!
+    const r = resolveCard(wash, pool({ water: 7 }))
+    expect(r.purification).toBe(0)
+    expect(r.drained).toEqual(pool({ water: 5 }))
+    expect(r.principles.mercury).toBe(1)
+    expect(fits({ kind: 'gain' }, wash)).toBe(false)
+    const dissolve = purifiers.find((c) => c.name === 'Dissolve')!
+    expect(resolveCard(dissolve, pool({ water: 4, earth: 5 })).purification).toBe(6)
+    expect(resolveCard(dissolve, pool({ water: 4, earth: 5 })).principles).toEqual({ salt: 0, sulfur: 0, mercury: 0 })
+  })
+
+  it('lets a Catalyst make the next card purify ×2, once', () => {
+    let run = newRun(1)
+    const cat = catalystCard(90)
+    const dissolve = startingDeck().find((c) => c.name === 'Dissolve')!
+    const coag = startingDeck().find((c) => c.name === 'Coagulate')!
+    run = { ...run, fight: { ...run.fight, pool: pool({ water: 9, earth: 9 }), hand: [cat, dissolve, coag] } }
+    run = playCard(run, cat.id)
+    expect(run.fight.purified).toBe(2)
+    expect(run.fight.catalyst).toBe(2)
+    run = { ...run, fight: { ...run.fight, pool: pool({ water: 9, earth: 9 }) } }
+    run = playCard(run, dissolve.id)
+    expect(run.fight.purified).toBe(2 + 12)
+    expect(run.fight.catalyst).toBe(1)
+    run = { ...run, fight: { ...run.fight, pool: pool({ water: 9, earth: 9 }) } }
+    run = playCard(run, coag.id)
+    expect(run.fight.purified).toBe(2 + 12 + 6)
+  })
+
+  it('offers the Catalyst as a whole new card for the deck', () => {
+    let run = newRun(1)
+    run = { ...run, fight: { ...run.fight, purified: COMMISSIONS[0].require - 1, hand: [startingDeck().find((c) => c.name === 'Dissolve')!] } }
+    run = playCard(run, run.fight.hand[0].id)
+    run = { ...run, offer: [{ kind: 'card', card: 'catalyst' }] }
+    const before = run.deck.length
+    run = takeRune(run, 0)
+    expect(run.deck).toHaveLength(before + 1)
+    expect(run.deck[run.deck.length - 1].name).toBe('Catalyst')
   })
 
   it('makes the opening Sieve raise Ward for what it takes instead of leaving principles', () => {
@@ -79,7 +130,7 @@ describe('a circuit card', () => {
   })
 
   it('multiplies purification by its gain stages, each a tick slower, and grounds drain without purifying', () => {
-    const big: Card = { ...wash, gain: 2, ground: 1 }
+    const big: Card = addRune(addRune(addRune(wash, { kind: 'gain' }), { kind: 'gain' }), { kind: 'ground' })
     const r = resolveCard(big, pool({ water: 5, earth: 4 }))
     expect(r.purification).toBe(15)
     expect(r.principles.mercury).toBe(1)
@@ -183,7 +234,8 @@ describe('the run', () => {
   it('wins a fight, offers runes, adds one to a card, and goes on to the next commission', () => {
     let run = newRun(1)
     run = { ...run, fight: { ...run.fight, purified: COMMISSIONS[0].require - 1 } }
-    run = playCard(run, run.fight.hand.find((c) => c.channels[0].element === 'water' || c.channels[0].element === 'any')!.id)
+    run = { ...run, fight: { ...run.fight, hand: [startingDeck().find((c) => c.name === 'Dissolve')!, ...run.fight.hand.slice(1)] } }
+    run = playCard(run, run.fight.hand[0].id)
     expect(run.stage).toBe('reward')
     expect(run.offer).toHaveLength(3)
     const i = 0
