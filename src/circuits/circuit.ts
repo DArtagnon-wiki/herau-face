@@ -24,7 +24,7 @@
 // would take, arcs light one by one as the take grows, and outputs that would
 // fire glow; the rest dims.
 
-import { GROUND_DRAIN, fromPool, type Card, type CardResult, type Channel, type DraftOutput, type Output, type Principle, type Recipe } from './engine'
+import { GROUND_DRAIN, fromPool, type Card, type CardResult, type Channel, type Output, type Principle, type Recipe } from './engine'
 import { ELEMENT_COLOR, card as cardSig, discard, element, ground, homunculus, moon, numeral, principle, quintessence, regain, square, status as statusSig, ward } from './sigils'
 
 const LIT = 'var(--lit)'
@@ -91,15 +91,15 @@ function outputSigil(o: Output, x: number, y: number, size: number, color: strin
     // A catalyst: the next card, times its factor.
     case 'catalyst':
       return `${cardSig(x - 1, y, size, { stroke: color, fill, width: 1.5 })}${numeral(`×${o.factor}`, x + size * 1.55, y + size * 0.35, size * 1.35)}`
-    // A draw: a card, one more.
+    // A draw: a card, and how many more.
     case 'draw':
-      return `${cardSig(x - 1, y, size, { stroke: color, fill, width: 1.5 })}${numeral('+1', x + size * 1.55, y + size * 0.35, size * 1.35)}`
+      return `${cardSig(x - 1, y, size, { stroke: color, fill, width: 1.5 })}${numeral(`+${o.n ?? 1}`, x + size * 1.55, y + size * 0.35, size * 1.35)}`
     case 'regain':
-      return regain(x, y, size, { stroke: color, width: 1.4 })
+      return `${regain(x, y, size, { stroke: color, width: 1.4 })}${(o.n ?? 1) > 1 ? numeral(`×${o.n}`, x + size * 1.75, y + size * 0.45, size * 1.25) : ''}`
     case 'quintessence':
       return quintessence(x, y, size * 1.1, { stroke: color, fill, width: 1.4 })
     case 'status':
-      return statusSig(o.status, x, y, size, { stroke: color, width: 1.4 })
+      return `${statusSig(o.status, x, y, size, { stroke: color, width: 1.4 })}${(o.n ?? 1) > 1 ? numeral(`×${o.n}`, x + size * 1.75, y + size * 0.45, size * 1.25) : ''}`
     case 'principle':
       return principle(o.principle, x, y, size, { stroke: color, width: 1.4 })
   }
@@ -211,7 +211,7 @@ export function circuitSvg(c: Card, opts: CircuitOptions = {}): string {
     const [ox, oy] = polar(C.x, C.y, px + size + 1.5, a)
     parts.push(outputSigil(o, ox, oy, size, on(fires), !!live && fires))
     box.add(ox, oy, size + 2)
-    if (o.kind === 'catalyst' || o.kind === 'draw') box.add(ox + size * 1.55 + 7, oy + size * 0.35, 5)
+    if (o.kind === 'catalyst' || o.kind === 'draw' || ((o.kind === 'regain' || o.kind === 'status') && (o.n ?? 1) > 1)) box.add(ox + size * 1.75 + 7, oy + size * 0.4, 5)
   })
 
   // Ground stages hang down to the left: the first linked to the collector, a second from the first.
@@ -304,33 +304,3 @@ export function offerSvg(r: { kind: 'channel'; element: Parameters<typeof elemen
   return `<svg class="circuit" viewBox="-16 -16 32 32" width="${size}" height="${size}" aria-hidden="true">${parts.join('')}</svg>`
 }
 
-/** An option in the opening draft: an input as it would enter the stage, or an output behind its arcs. */
-export function draftSvg(opt: { input: Channel } | { output: DraftOutput }, size = 48): string {
-  const parts: string[] = []
-  if ('input' in opt) {
-    const ch = opt.input
-    const color = inputColor(ch)
-    const sig = inputSigil(ch, fromPool(ch.element) ? 0 : -3, 1, 11, { stroke: color, fill: 'var(--stage)', ink: 'var(--ink)', num: 9 })
-    parts.push(line(-15, 1, sig.left, 1, color, 1.4))
-    parts.push(sig.svg)
-  } else {
-    const o = opt.output
-    if (o.kind === 'purify') parts.push(square(0, 0, 9, { stroke: LIT, fill: 'var(--lit-fill)', width: 1.7 }))
-    else if (o.kind === 'ground') {
-      parts.push(ring(0, -3, 10, LINE, 1.5))
-      parts.push(groundStageInside({ x: 0, y: -3, r: 10 }, 0, false))
-      parts.push(ground(0, 12, 4, { stroke: LIT, width: 1.5 }))
-    } else {
-      const arcs = Math.min(o.gate, 6)
-      const x0 = -6 + arcs * 3.4
-      parts.push(line(-15, 0, x0, 0, LIT, 1.3))
-      for (let i = 1; i <= arcs; i++) parts.push(arc(-24, 0, 12 + i * 3.4, -18, 18, LIT, 1.2))
-      const sx = Math.min(8, x0 + 8)
-      parts.push(outputSigil(o, sx, 0, 6.5, LIT, false))
-    }
-  }
-  // A card sign with its number beside it needs a little more room on the right.
-  const wide = 'output' in opt && (opt.output.kind === 'catalyst' || opt.output.kind === 'draw')
-  const w = wide ? 38 : 32
-  return `<svg class="circuit" viewBox="-16 -16 ${w} 32" width="${Math.round((size * w) / 32)}" height="${size}" aria-hidden="true">${parts.join('')}</svg>`
-}

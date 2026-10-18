@@ -7,7 +7,7 @@ import '../ui/style.css'
 import './circuits.css'
 import { sound } from '../ui/sound'
 import { elementMote, makeRune } from '../sim/deck'
-import { circuitSvg, draftSvg, offerSvg, recipeSvg } from './circuit'
+import { circuitSvg, offerSvg, recipeSvg } from './circuit'
 import { dialSvg, waitIcon, type DialPreview } from './dial'
 import {
   COMMISSIONS,
@@ -19,6 +19,7 @@ import {
   METAL_GATE,
   PHASE_NAMES,
   PRINCIPLES,
+  QUINT_INPUT_COST,
   RECIPES,
   STATUSES,
   UNIT_GATE,
@@ -116,7 +117,7 @@ function inputWords(ch: Channel): string {
     case 'any':
       return `up to ${ch.capacity} of whatever is most plentiful`
     case 'quintessence':
-      return `${ch.capacity} for as much of your quintessence (the star; never your last)`
+      return `${ch.capacity} for ${QUINT_INPUT_COST} of your quintessence (the star; never your last)`
     case 'discard':
       return `${ch.capacity} for a card you discard from your hand (the struck card)`
     case 'moon':
@@ -128,7 +129,9 @@ function inputWords(ch: Channel): string {
 
 function statusWords(k: Output & { kind: 'status' }): string {
   const d = statusDef(k.status)
-  return d.unit ? `${d.name} once it collects ${k.gate} or more (${arcsWord(k.gate)}): ${d.text}` : `${d.name} N, N for what it collects: ${d.text}`
+  const n = k.n ?? 1
+  const text = n > 1 ? d.text.replace('an eighth later', `${n} eighths later`).replace('you draw 2', `you draw ${2 * n}`) : d.text
+  return d.unit ? `${d.name}${n > 1 && !d.cap ? ` ${n}` : ''} once it collects ${k.gate} or more (${arcsWord(k.gate)}): ${text}` : `${d.name} N, N for what it collects: ${text}`
 }
 
 function outputWords(o: Output): string {
@@ -140,9 +143,9 @@ function outputWords(o: Output): string {
     case 'principle':
       return `1 ${o.principle} once it collects ${o.gate} or more (${arcsWord(o.gate)})`
     case 'draw':
-      return `draw a card once it collects ${o.gate} or more (the card with +1, ${arcsWord(o.gate)})`
+      return `draw ${(o.n ?? 1) === 1 ? 'a card' : `${o.n} cards`} once it collects ${o.gate} or more (the card with +${o.n ?? 1}, ${arcsWord(o.gate)})`
     case 'regain':
-      return `spare an eighth of the moon once it collects ${o.gate} or more (the turning arrow): your next cards spend it before the moon moves`
+      return `spare ${(o.n ?? 1) === 1 ? 'an eighth' : `${o.n} eighths`} of the moon once it collects ${o.gate} or more (the turning arrow): your next cards spend it before the moon moves`
     case 'quintessence':
       return '1 quintessence for each it collects (the star)'
     case 'status':
@@ -208,7 +211,7 @@ function runeText(r: RewardRune): string {
     case 'channel':
       return `A new triangle in the card's collecting stage: it also takes up to ${r.capacity} ${r.element === 'any' ? 'of whatever is most plentiful' : r.element}, and purifies 1 for each. More drained before the flare, and more toward its outputs' arcs.`
     case 'gain':
-      return "A square drawn around the card's square: its purification is multiplied once more (×2, then ×3). It also takes a tick longer, a small crescent more of the moon."
+      return "A square drawn around the card's square: its purification is multiplied once more (×2, then ×3), in no more time."
     case 'distill':
       return `A new output on the right of the card, behind ${METAL_GATE} arcs: whenever it takes ${METAL_GATE} or more, it also yields 1 ${r.principle}. ${PRINCIPLE_USE[r.principle]}`
     case 'ground':
@@ -225,7 +228,7 @@ function changeText(r: RewardRune, before: Card): string {
     case 'channel':
       return `${before.name} would take up to ${sumCap(after)} instead of ${sumCap(before)}, for up to ${maxPurify(after)} purification.`
     case 'gain':
-      return `${before.name} would purify up to ${maxPurify(after)} instead of ${maxPurify(before)}, in ${ticks(costOf(after))} of the moon instead of ${ticks(costOf(before))}.`
+      return `${before.name} would purify up to ${maxPurify(after)} instead of ${maxPurify(before)}, in the same ${ticks(costOf(after))} of the moon.`
     case 'distill':
       return `${before.name} would also yield 1 ${r.principle} whenever it takes ${METAL_GATE} or more${sumCap(before) < METAL_GATE ? `, but it can take only ${sumCap(before)} until it gets another input` : ''}.`
     case 'ground':
@@ -549,78 +552,47 @@ function startView(): string {
 function draftOutputTitle(o: DraftOutput): string {
   switch (o.kind) {
     case 'purify':
-      return 'Output: purify'
+      return 'purify'
     case 'ground':
-      return 'Output: a ground stage'
+      return 'ground stage'
     case 'ward':
-      return 'Output: Ward'
+      return 'Ward'
     case 'catalyst':
-      return 'Output: catalyst'
+      return `catalyst ×${o.factor}`
     case 'draw':
-      return 'Output: draw a card'
+      return `draw ${o.n ?? 1}`
     case 'regain':
-      return 'Output: spare an eighth'
+      return (o.n ?? 1) === 1 ? 'spare an eighth' : `spare ${o.n} eighths`
     case 'quintessence':
-      return 'Output: quintessence'
+      return 'quintessence'
     case 'status':
-      return `Output: ${statusDef(o.status).name}`
+      return `${statusDef(o.status).name}${(o.n ?? 1) > 1 ? ` ×${o.n}` : ''}`
     case 'principle':
-      return `Output: ${o.principle}`
+      return o.principle
   }
 }
 
-function draftOutputText(o: DraftOutput): string {
-  if (o.kind === 'purify') return 'A square below the stage: it purifies 1 for each it collects. Gain runes in the shop multiply it.'
-  if (o.kind === 'ground') return `A ground stage hanging from the card: it takes up to ${GROUND_DRAIN} of whatever is most plentiful and grounds it, purifying nothing. What the input takes from the pool is grounded too.`
-  return `${cap(outputWords(o))}.`
-}
-
 function inputTitle(ch: Channel): string {
-  return ch.element === 'any' ? `Input: ${ch.capacity} of any` : ch.element === 'quintessence' ? `Input: ${ch.capacity} quintessence` : ch.element === 'discard' ? 'Input: a discard' : ch.element === 'moon' ? 'Input: an eighth of the moon' : `Input: ${ch.capacity} ${ch.element}`
-}
-
-function inputText(ch: Channel): string {
-  if (fromPool(ch.element)) return `It takes ${inputWords(ch)} from the pool: whatever it takes counts toward its outputs, and is gone from what flares.`
-  if (ch.element === 'quintessence') return `It pays ${ch.capacity} of your quintessence (never your last) and collects ${ch.capacity}, whatever is in the pool.`
-  if (ch.element === 'discard') return `It discards another card from your hand, your choice, and collects ${ch.capacity}. Cheap at a quarter moon, when you would discard anyway.`
-  return `The card takes an eighth more of the moon, a quarter in all, and collects ${ch.capacity}.`
-}
-
-/** The drafted rune so far, without a main output until one is picked. */
-function draftSoFar(input: Channel, output: DraftOutput | null, p: Principle): Card {
-  return output ? draftCard(0, input, output, p) : { id: 0, name: 'Opus', channels: [input], outputs: [{ kind: 'principle', principle: p, gate: 1 }], purifies: false, gain: 0, time: 2, ground: 0 }
+  return ch.element === 'any' ? `${ch.capacity} any` : ch.element === 'discard' ? `discard, ${ch.capacity}` : ch.element === 'moon' ? `an eighth, ${ch.capacity}` : ch.element === 'quintessence' ? `quintessence, ${ch.capacity}` : `${ch.capacity} ${ch.element}`
 }
 
 function draftView(run: Run): string {
   const d = run.draft!
-  const step = d.input ? 'output' : 'input'
   const sel = ui.draft
-  const tile = (i: number) => {
-    const art = step === 'input' ? draftSvg({ input: d.inputs[i] }, 52) : draftSvg({ output: d.outputs[i] }, 52)
-    const title = step === 'input' ? inputTitle(d.inputs[i]) : draftOutputTitle(d.outputs[i])
-    return `<button class="offer ${sel === i ? 'is-on' : ''}" data-act="draft-opt" data-i="${i}" aria-pressed="${sel === i}" aria-label="${esc(title)}">${art}<span class="price">${esc(title.replace(/^(Input|Output): /, ''))}</span></button>`
-  }
-  const input = d.input ?? (sel !== null ? d.inputs[sel] : null)
-  const output = d.input && sel !== null ? d.outputs[sel] : null
-  const opus = input ? draftSoFar(input, output, d.principle) : null
+  const cardOf = (i: number) => draftCard(0, d.offers[i].input, d.offers[i].output, d.principle)
+  const title = (i: number) => `${inputTitle(d.offers[i].input)} → ${draftOutputTitle(d.offers[i].output)}`
+  const tile = (i: number) =>
+    `<button class="ccard ${sel === i ? 'is-on' : ''}" data-act="draft-opt" data-i="${i}" aria-pressed="${sel === i}" aria-label="${esc(title(i))}">${circuitSvg(cardOf(i), { size: 120 })}<span class="cname">${esc(title(i))}</span></button>`
   const note =
     sel === null
-      ? noteView(
-          step === 'input' ? 'Your twelfth rune' : 'Now its output',
-          step === 'input'
-            ? `Draft one more rune for your deck. First pick one of three inputs, what it collects; then one of three outputs. It also yields ${d.principle} once it collects 1 (the single arc).`
-            : `It collects through ${esc(inputWords(d.input!))}. Pick one of three outputs.`,
-        )
-      : step === 'input'
-        ? noteView(inputTitle(d.inputs[sel]), esc(inputText(d.inputs[sel])))
-        : noteView(draftOutputTitle(d.outputs[sel]), esc(draftOutputText(d.outputs[sel])))
+      ? noteView('Your twelfth rune', `Draft one more rune for your deck: pick one of three. Each is tuned to be worth about two Washes, and each yields ${d.principle} once it collects 1 (the single arc). Tap one to read it.`)
+      : noteView(title(sel), `${cardLines(cardOf(sel)).join(' ')} <span class="now">Worth about ${d.offers[sel].worth.toFixed(1)} Washes in the balance simulator.</span>`)
   return `<div class="cx reward draft">
     ${header(run, 'Draft')}
-    <section class="offers" aria-label="${step === 'input' ? 'Inputs' : 'Outputs'} on offer">${[0, 1, 2].map(tile).join('')}</section>
+    <section class="hand-row offers" aria-label="Runes on offer">${[0, 1, 2].filter((i) => d.offers[i]).map(tile).join('')}</section>
     ${note}
-    ${opus ? `<section class="opus" aria-label="Your twelfth rune">${circuitSvg(opus, { size: 150, noMain: !output })}<span class="cname">Opus</span></section>` : ''}
     <section class="deck" aria-label="Your deck">${run.deck.map((c) => `<div class="ccard">${circuitSvg(c, { size: 80 })}<span class="cname">${esc(c.name)}</span></div>`).join('')}</section>
-    <div class="cx-actions one"><button class="primary go" data-act="draft-take" ${sel === null ? 'disabled' : ''}>${sel === null ? `Pick an ${step}` : step === 'input' ? 'Take this input' : 'Take this output · begin'}</button></div>
+    <div class="cx-actions one"><button class="primary go" data-act="draft-take" ${sel === null ? 'disabled' : ''}>${sel === null ? 'Pick a rune' : 'Take this rune · begin'}</button></div>
   </div>${popupView(run)}`
 }
 

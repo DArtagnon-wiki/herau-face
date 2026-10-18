@@ -133,14 +133,14 @@ describe('a circuit card', () => {
     expect(r.principles).toEqual({ salt: 0, sulfur: 0, mercury: 1 })
   })
 
-  it('multiplies purification by its gain stages, each a tick slower, and grounds drain without purifying', () => {
+  it('multiplies purification by its gain stages at no cost in time, and grounds drain without purifying', () => {
     const big: Card = addRune(addRune(addRune(wash, { kind: 'gain' }), { kind: 'gain' }), { kind: 'ground' })
     const r = resolveCard(big, pool({ water: 5, earth: 4 }))
     expect(r.purification).toBe(15)
     expect(r.principles.mercury).toBe(1)
     expect(r.drained).toEqual(pool({ water: 5, earth: 3 }))
     expect(r.grounded).toEqual([3])
-    expect(costOf(big)).toBe(4)
+    expect(costOf(big)).toBe(2)
   })
 
   it('grows by adding runes, up to a cap for each kind of part', () => {
@@ -259,14 +259,12 @@ describe('the run', () => {
 })
 
 describe('the opening draft', () => {
-  it('offers three inputs, then three outputs, and adds the rune with a principle at 1 before the first fight', () => {
+  it('offers three tuned runes and adds the one picked, with a principle at 1, before the first fight', () => {
     let run = newRun(1)
     expect(run.stage).toBe('draft')
-    expect(run.draft!.inputs).toHaveLength(3)
-    expect(run.draft!.outputs).toHaveLength(3)
-    const input = run.draft!.inputs[1]
-    run = draftPick(run, 1)
-    expect(run.draft!.input).toEqual(input)
+    expect(run.draft!.offers).toHaveLength(3)
+    expect(new Set(run.draft!.offers.map((o) => JSON.stringify(o.output))).size).toBe(3)
+    const input = run.draft!.offers[2].input
     run = draftPick(run, 2)
     expect(run.stage).toBe('fight')
     expect(run.deck).toHaveLength(12)
@@ -280,14 +278,15 @@ describe('the opening draft', () => {
 describe('inputs that feed the collector from elsewhere', () => {
   const inHand = (run: Run, ...cards: Card[]): Run => ({ ...run, fight: { ...run.fight, hand: [...cards, ...run.fight.hand] } })
 
-  it('pays quintessence for what it collects, never the last', () => {
-    const opus = draftCard(99, { element: 'quintessence', capacity: 3 }, { kind: 'purify' }, 'salt')
+  it('pays 3 quintessence for what it collects, never the last', () => {
+    const opus = draftCard(99, { element: 'quintessence', capacity: 7 }, { kind: 'purify' }, 'salt')
     let run = inHand(begin(), opus)
     run = playCard(run, 99)
     expect(run.quintessence).toBe(DEFAULT_SETTINGS.stock - 3)
-    expect(run.fight.purified).toBe(3)
+    expect(run.fight.purified).toBe(7)
     expect(run.fight.principles.salt).toBe(1)
-    expect(resolveCard(opus, emptyPool(), 1, { quintessence: 2 }).processed).toBe(1)
+    expect(resolveCard(opus, emptyPool(), 1, { quintessence: 3 }).processed).toBe(0)
+    expect(resolveCard(opus, emptyPool(), 1, { quintessence: 4 }).processed).toBe(7)
   })
 
   it('discards a card from hand for what it collects', () => {

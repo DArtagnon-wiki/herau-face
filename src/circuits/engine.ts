@@ -7,6 +7,7 @@
 // See CIRCUITS.md.
 
 import { makeRng } from '../sim/rng'
+import { DRAFT_PAIRS } from './draft-pairs'
 import type { Elemental } from '../sim/types'
 
 export const ELEMENTS: Elemental[] = ['water', 'earth', 'air', 'fire']
@@ -53,10 +54,11 @@ export const phaseAt = (pos: number): Phase | null => (pos % 2 === 0 ? PHASES[(p
 // Cards
 
 /**
- * What an input takes from. An element or "any" takes from the pool. The
- * others feed the collector from elsewhere, each collecting its capacity:
- * quintessence pays up to that much of yours (never your last), discard
- * throws away a card from your hand, moon makes the card take an eighth more.
+ * What an input takes from. An element or "any" takes from the pool, up to
+ * its capacity: it drains the commission and powers the card at once. The
+ * others feed the collector from elsewhere for a fixed cost, collecting their
+ * capacity: quintessence pays 3 of yours (never your last), discard throws
+ * away a card from your hand, moon makes the card take an eighth more.
  */
 export type Source = Elemental | 'any' | 'quintessence' | 'discard' | 'moon'
 export const fromPool = (s: Source): s is Elemental | 'any' => s === 'any' || ELEMENTS.includes(s as Elemental)
@@ -116,9 +118,9 @@ export interface Card {
    * a ground (what it takes is grounded, purifying nothing).
    */
   purifies: boolean
-  /** Gain stages: each multiplies purification by one more (×2, ×3, …); a gain rune also makes the card a tick slower. */
+  /** Gain stages: each multiplies purification by one more (×2, ×3, …), at no cost in time. */
   gain: number
-  /** Time it takes on the dial, in ticks: an eighth of the moon (2) to start, a tick more for each gain rune added. */
+  /** Time it takes on the dial, in ticks: an eighth of the moon (2). */
   time: number
   /**
    * Ground stages, each a stage of its own beside the collector: it takes up
@@ -133,16 +135,18 @@ export type Output =
   | { kind: 'ward'; gate: number }
   /** The next card played purifies this many times over. */
   | { kind: 'catalyst'; factor: number; gate: number }
-  /** Draw a card. */
-  | { kind: 'draw'; gate: number }
-  /** Spare an eighth of the moon: the next cards spend it before the dial moves. */
-  | { kind: 'regain'; gate: number }
+  /** Draw n cards (1 if not given). */
+  | { kind: 'draw'; gate: number; n?: number }
+  /** Spare n eighths of the moon: the next cards spend them before the dial moves. */
+  | { kind: 'regain'; gate: number; n?: number }
   /** Gain 1 quintessence for each collected. */
   | { kind: 'quintessence'; gate: number }
-  /** Put a status on the commission or on you: N (what was collected), or 1 for a unit status. */
-  | { kind: 'status'; status: StatusKey; gate: number }
+  /** Put a status on the commission or on you: N (what was collected), or n (1 if not given) for a unit status. */
+  | { kind: 'status'; status: StatusKey; gate: number; n?: number }
 
 export const GROUND_DRAIN = 3
+/** What a quintessence input pays, whatever it collects. */
+export const QUINT_INPUT_COST = 3
 /** What a principle output needs its stage to collect. */
 export const METAL_GATE = 4
 export const BASE_COST = 2
@@ -233,8 +237,11 @@ export function resolveCard(card: Card, pool: Pool, boost = 1, ctx: Context = {}
     const src = ch.element
     if (src === 'any') took = takeMost(left, ch.capacity, drained)
     else if (src === 'quintessence') {
-      took = Math.min(ch.capacity, Math.max(0, (ctx.quintessence ?? 0) - 1 - paid))
-      paid += took
+      // It pays its fixed cost only if that leaves you some quintessence.
+      if ((ctx.quintessence ?? 0) - paid > QUINT_INPUT_COST) {
+        took = ch.capacity
+        paid += QUINT_INPUT_COST
+      }
     } else if (src === 'discard') {
       if ((ctx.others ?? 0) > discards) {
         took = ch.capacity
@@ -270,16 +277,16 @@ export function resolveCard(card: Card, pool: Pool, boost = 1, ctx: Context = {}
         ward += processed
         break
       case 'draw':
-        draw += 1
+        draw += o.n ?? 1
         break
       case 'regain':
-        regain += EIGHTH
+        regain += EIGHTH * (o.n ?? 1)
         break
       case 'quintessence':
         gain += processed
         break
       case 'status':
-        statuses[o.status] = (statuses[o.status] ?? 0) + (statusDef(o.status).unit ? 1 : processed)
+        statuses[o.status] = (statuses[o.status] ?? 0) + (statusDef(o.status).unit ? (o.n ?? 1) : processed)
         break
     }
   }
@@ -458,7 +465,7 @@ export function addRune(c: Card, r: RewardRune): Card {
     case 'channel':
       return { ...c, channels: [...c.channels, { element: r.element, capacity: r.capacity }] }
     case 'gain':
-      return { ...c, gain: c.gain + 1, time: c.time + 1 }
+      return { ...c, gain: c.gain + 1 }
     case 'distill':
       return { ...c, outputs: [...c.outputs, { kind: 'principle', principle: r.principle, gate: METAL_GATE }] }
     case 'ground':
@@ -527,15 +534,19 @@ export interface Run {
 }
 
 /**
- * The opening draft of a twelfth rune: pick one of three inputs, then one of
- * three outputs; the rune also yields a principle once it collects 1.
+ * The opening draft of a twelfth rune: pick one of three runes, each an input
+ * and an output tuned by the balance simulator to be worth about two Washes;
+ * the rune also yields a principle once it collects 1.
  */
 export interface Draft {
-  inputs: Channel[]
-  outputs: DraftOutput[]
-  /** The input picked, once it is. */
-  input: Channel | null
+  offers: DraftPair[]
   principle: Principle
+}
+export interface DraftPair {
+  input: Channel
+  output: DraftOutput
+  /** What the balance simulator found it worth, in Washes. */
+  worth: number
 }
 /** An output on offer in the draft: purification or a ground stage, or a side output. */
 export type DraftOutput = { kind: 'purify' } | { kind: 'ground' } | Output
@@ -588,16 +599,16 @@ export const DRAFT_INPUTS: Channel[] = [
   channel('moon', 3),
 ]
 
-/** Outputs the draft offers, with how often: each of the ten statuses half as often as the rest. */
-export const DRAFT_OUTPUTS: { output: DraftOutput; weight: number }[] = [
-  { output: { kind: 'purify' }, weight: 2 },
-  { output: { kind: 'ground' }, weight: 2 },
-  { output: { kind: 'ward', gate: 1 }, weight: 2 },
-  { output: { kind: 'catalyst', factor: 2, gate: 0 }, weight: 2 },
-  { output: { kind: 'draw', gate: UNIT_GATE }, weight: 2 },
-  { output: { kind: 'regain', gate: UNIT_GATE }, weight: 2 },
-  { output: { kind: 'quintessence', gate: 1 }, weight: 2 },
-  ...STATUSES.map((st) => ({ output: { kind: 'status', status: st.key, gate: st.unit ? UNIT_GATE : 1 } as DraftOutput, weight: 1 })),
+/** Every output a drafted rune can have; the balance simulator pairs each with each input. */
+export const DRAFT_OUTPUTS: DraftOutput[] = [
+  { kind: 'purify' },
+  { kind: 'ground' },
+  { kind: 'ward', gate: 1 },
+  { kind: 'catalyst', factor: 2, gate: 0 },
+  { kind: 'draw', gate: UNIT_GATE },
+  { kind: 'regain', gate: UNIT_GATE },
+  { kind: 'quintessence', gate: 1 },
+  ...STATUSES.map((st): DraftOutput => ({ kind: 'status', status: st.key, gate: st.unit ? UNIT_GATE : 1 })),
 ]
 
 /** The drafted rune: its input, its output, and a principle once it collects 1. */
@@ -609,32 +620,22 @@ export function draftCard(id: number, input: Channel, output: DraftOutput, princ
   return { ...c, outputs: [{ ...output }, metal] }
 }
 
+/** Three runes from the tuned pairs, no two with the same output, and the principle they would yield. */
 function rollDraft(rng: ReturnType<typeof makeRng>): Draft {
-  const inputs = rng.shuffle(DRAFT_INPUTS).slice(0, 3)
-  const outputs: DraftOutput[] = []
-  const bag = DRAFT_OUTPUTS.slice()
-  while (outputs.length < 3 && bag.length) {
-    let t = rng.float() * bag.reduce((n, x) => n + x.weight, 0)
-    let k = 0
-    while (k < bag.length - 1 && t >= bag[k].weight) t -= bag[k++].weight
-    outputs.push(bag[k].output)
-    bag.splice(k, 1)
+  const offers: DraftPair[] = []
+  for (const p of rng.shuffle(DRAFT_PAIRS)) {
+    if (offers.length < 3 && !offers.some((o) => JSON.stringify(o.output) === JSON.stringify(p.output))) offers.push(p)
   }
-  return { inputs, outputs, input: null, principle: PRINCIPLES[rng.int(0, PRINCIPLES.length - 1)] }
+  return { offers, principle: PRINCIPLES[rng.int(0, PRINCIPLES.length - 1)] }
 }
 
-/** Pick in the draft: an input first, then an output, which adds the rune to the deck and opens the first fight. */
+/** Take a rune on offer in the draft: it joins the deck and the first fight opens. */
 export function draftPick(run: Run, i: number): Run {
   const d = run.draft
   if (run.stage !== 'draft' || !d) return run
-  if (!d.input) {
-    const input = d.inputs[i]
-    if (!input) throw new Error('No such input on offer.')
-    return { ...run, draft: { ...d, input } }
-  }
-  const output = d.outputs[i]
-  if (!output) throw new Error('No such output on offer.')
-  const opus = draftCard(run.nextId, d.input, output, d.principle)
+  const pick = d.offers[i]
+  if (!pick) throw new Error('No such rune on offer.')
+  const opus = draftCard(run.nextId, pick.input, pick.output, d.principle)
   return startFight({ ...run, deck: [...run.deck, opus], nextId: run.nextId + 1, draft: null }, 0)
 }
 
@@ -874,7 +875,7 @@ export function playCard(run: Run, id: number, discardId?: number): Run {
     r.ward ? `raises Ward ${r.ward}` : '',
     r.gain ? `gains ${r.gain} quintessence` : '',
     r.draw ? `draws ${r.draw}` : '',
-    r.regain ? 'spares an eighth' : '',
+    r.regain ? `spares ${r.regain === EIGHTH ? 'an eighth' : `${r.regain / EIGHTH} eighths`}` : '',
     put.length ? `puts on ${put.join(', ')}` : '',
     r.catalyst > 1 ? `the next card purifies ×${r.catalyst}` : '',
   ].filter(Boolean)
@@ -985,6 +986,29 @@ export function takeRune(run: Run, offerIndex: number, cardId?: number): Run {
   }
 }
 
+/**
+ * A single fight against one commission with this deck, at full
+ * quintessence: what the balance simulator plays.
+ */
+export function fightWith(seed: number, deck: Card[], index: number, settings: Settings = DEFAULT_SETTINGS): Run {
+  const run: Run = {
+    settings,
+    seed,
+    quintessence: settings.stock,
+    metals: 0,
+    deck,
+    stage: 'fight',
+    fightIndex: index,
+    fight: null as unknown as Fight,
+    offer: [],
+    tookFree: false,
+    smelted: null,
+    nextId: 1 + Math.max(0, ...deck.map((c) => c.id)),
+    draft: null,
+  }
+  return startFight(run, index)
+}
+
 /** Go on to the next fight. */
 export function nextFight(run: Run): Run {
   if (run.stage !== 'reward') return run
@@ -997,7 +1021,7 @@ export function runeWords(r: RewardRune): string {
     case 'channel':
       return r.element === 'any' ? `Input: up to ${r.capacity} of any element` : `Input: up to ${r.capacity} ${r.element}`
     case 'gain':
-      return 'Gain: purification ×1 more, a tick slower'
+      return 'Gain: purification ×1 more'
     case 'card':
       return 'Catalyst: a new card; the next card played after it purifies ×2'
     case 'distill':
@@ -1017,14 +1041,14 @@ export function outputWords(o: Output): string {
     case 'principle':
       return `${o.principle} from ${o.gate}`
     case 'draw':
-      return `draw 1 from ${o.gate}`
+      return `draw ${o.n ?? 1} from ${o.gate}`
     case 'regain':
-      return `spare an eighth from ${o.gate}`
+      return `spare ${(o.n ?? 1) === 1 ? 'an eighth' : `${o.n} eighths`} from ${o.gate}`
     case 'quintessence':
       return 'quintessence 1 for each'
     case 'status': {
       const d = statusDef(o.status)
-      return d.unit ? `${d.name} from ${o.gate}` : `${d.name} 1 for each`
+      return d.unit ? `${d.name}${(o.n ?? 1) > 1 ? ` ${o.n}` : ''} from ${o.gate}` : `${d.name} 1 for each`
     }
   }
 }
@@ -1035,7 +1059,7 @@ export function inputWords(ch: Channel): string {
     case 'any':
       return `${ch.capacity} any`
     case 'quintessence':
-      return `${ch.capacity} for ${ch.capacity} quintessence`
+      return `${ch.capacity} for ${QUINT_INPUT_COST} quintessence`
     case 'discard':
       return `${ch.capacity} for a discard`
     case 'moon':

@@ -32,8 +32,7 @@ body { overflow: hidden; }
 }
 .cx.fight { grid-template-rows: auto minmax(0, 1fr) auto auto auto auto; grid-template-areas: "head" "dial" "note" "bench" "hand" "actions"; }
 .cx.reward { grid-template-rows: auto auto auto auto minmax(0, 1fr) auto; grid-template-areas: "head" "smelt" "offers" "note" "deck" "actions"; }
-.cx.reward.draft { grid-template-rows: auto auto auto auto minmax(0, 1fr) auto; grid-template-areas: "head" "offers" "note" "opus" "deck" "actions"; }
-.draft > .opus { grid-area: opus; }
+.cx.reward.draft { grid-template-rows: auto auto auto minmax(0, 1fr) auto; grid-template-areas: "head" "offers" "note" "deck" "actions"; }
 /* Named areas only where the grid names them (start and end lay out by rows). */
 :is(.fight, .reward) > .cx-head { grid-area: head; }
 :is(.fight, .reward) > .note { grid-area: note; }
@@ -67,7 +66,7 @@ body { overflow: hidden; }
   .cx.fight, .cx.reward { max-width: 940px; column-gap: 18px; grid-template-columns: minmax(0, 1fr) 300px; }
   .cx.fight { grid-template-rows: auto minmax(0, 1fr) auto auto auto; grid-template-areas: "head head" "dial note" "bench note" "hand note" "actions note"; }
   .cx.reward { grid-template-rows: auto auto auto minmax(0, 1fr) auto; grid-template-areas: "head head" "smelt note" "offers note" "deck note" "actions note"; }
-  .cx.reward.draft { grid-template-rows: auto auto auto minmax(0, 1fr) auto; grid-template-areas: "head head" "offers note" "opus note" "deck note" "actions note"; }
+  .cx.reward.draft { grid-template-rows: auto auto minmax(0, 1fr) auto; grid-template-areas: "head head" "offers note" "deck note" "actions note"; }
   .note, .reward .note { height: auto; max-height: 100%; align-self: start; flex-direction: column; align-items: stretch; font-size: 16px; padding: 12px 14px; }
   .note-art { justify-content: center; }
   .note-art .circuit { width: 110px; }
@@ -181,11 +180,10 @@ body { overflow: hidden; }
 .deck .ccard.is-on { border-color: var(--gilt-bright); background: rgba(217, 184, 114, 0.2); }
 
 /* The opening draft */
-.draft .offer { flex: 1 1 0; min-width: 0; max-width: 150px; }
-.draft .offer .price { font-size: 12.5px; color: var(--ink-soft); text-align: center; }
-.opus { display: grid; justify-items: center; gap: 2px; }
-.opus .circuit { width: auto; height: 120px; }
-.opus .cname { font-size: 11px; letter-spacing: 0.14em; color: var(--gilt-bright); }
+.draft .offers { justify-content: stretch; }
+.draft .offers .ccard { flex: 1 1 0; min-width: 0; padding: 8px 4px 6px; }
+.draft .offers .ccard .circuit { height: 104px; }
+.draft .offers .cname { font-size: 11px; letter-spacing: 0.04em; text-align: center; line-height: 1.25; }
 .draft .deck .ccard { padding: 4px 2px 3px; }
 .draft .deck .ccard .circuit { height: 62px; }
 
