@@ -20,7 +20,7 @@
 //   npx tsx scripts/circuits-sim.ts [--strategy greedy|random|delay] [--reserve 1] [--delay-in 0,1,2] [--runs 300]
 //   npx tsx scripts/circuits-sim.ts --compare [--runs 300]   every strategy side by side
 //   (also --picks need|wet: inputs for what the coming commissions feed, or only water and earth;
-//    --draw refill|draw, --hand 4, --stock 80)
+//    --hand 4, --stock 80)
 
 import { makeRng, type Rng } from '../src/sim/rng'
 import type { Elemental } from '../src/sim/types'
@@ -52,7 +52,6 @@ const runs = Number(arg('--runs') ?? 300)
 const picks = (arg('--picks') ?? 'need') as 'need' | 'wet'
 const settings: Settings = {
   ...DEFAULT_SETTINGS,
-  draw: (arg('--draw') as Settings['draw']) ?? DEFAULT_SETTINGS.draw,
   hand: Number(arg('--hand') ?? DEFAULT_SETTINGS.hand),
   stock: Number(arg('--stock') ?? DEFAULT_SETTINGS.stock),
 }
@@ -317,14 +316,14 @@ function header(): string {
 const delayIn = (arg('--delay-in') ?? COMMISSIONS.slice(0, -1).map((_, i) => i).join(',')).split(',').map(Number)
 const reserve = Number(arg('--reserve') ?? 1)
 
-console.log(`${runs} runs · ${settings.draw === 'cycle' ? `discard and draw ${settings.hand} at full and new moons` : `${settings.draw} ${settings.hand} at the quarters`} · stock ${settings.stock}`)
+console.log(`${runs} runs · draw ${settings.hand} at new and full moons, discard at the quarters · stock ${settings.stock}`)
 if (args.includes('--compare')) {
   const early = COMMISSIONS.slice(0, -1).map((_, i) => i)
   const list: Strategy[] = [
     random,
     greedy,
-    ...[1, 30, 50, 60, 65, 70, 75].map((k) => ({ ...delay(k, early), name: `delay before the boss, keep ${k}` })),
-    ...[65, 70, 75].map((k) => ({ ...delay(k, [0]), name: `delay in ${COMMISSIONS[0].name} only, keep ${k}` })),
+    ...[1, 15, 25, 30, 35].map((k) => ({ ...delay(k, early), name: `delay before the boss, keep ${k}` })),
+    ...[30, 35].map((k) => ({ ...delay(k, [0]), name: `delay in ${COMMISSIONS[0].name} only, keep ${k}` })),
   ]
   console.log(`\n${header()}`)
   for (const s of list) console.log(row(play(s)))

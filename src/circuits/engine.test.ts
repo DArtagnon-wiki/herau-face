@@ -63,9 +63,10 @@ describe('a circuit card', () => {
     run = playCard(run, dissolve.id)
     expect(run.fight.purified).toBe(2 + 12)
     expect(run.fight.catalyst).toBe(1)
-    run = { ...run, fight: { ...run.fight, pool: pool({ water: 9, earth: 9 }) } }
+    const purified = run.fight.purified
+    run = { ...run, fight: { ...run.fight, pool: pool({ water: 9, earth: 9 }), hand: [coag] } }
     run = playCard(run, coag.id)
-    expect(run.fight.purified).toBe(2 + 12 + 6)
+    expect(run.fight.purified).toBe(purified + 6)
   })
 
   it('offers the Catalyst as a whole new card for the deck', () => {
@@ -109,10 +110,10 @@ describe('a circuit card', () => {
     run = { ...run, fight: { ...run.fight, hand: [sieve, ...run.fight.hand.slice(1)] } }
     run = playCard(run, sieve.id)
     expect(run.fight.ward).toBe(3)
-    // 4 fed, 3 taken, 4 fed at the first quarter: 5 flare at the full moon, Ward takes 3.
+    // 7 fed at the new moon, 3 taken: 4 flare at 3/8, Ward takes 3.
     run = wait(run)
-    expect(run.fight.flares).toEqual([5])
-    expect(run.quintessence).toBe(DEFAULT_SETTINGS.stock - 2)
+    expect(run.fight.flares).toEqual([4])
+    expect(run.quintessence).toBe(DEFAULT_SETTINGS.stock - 1)
     expect(run.fight.ward).toBe(0)
   })
 
@@ -152,61 +153,63 @@ describe('a circuit card', () => {
 })
 
 describe('the moon dial', () => {
-  it('opens at the first quarter with the first feed and a hand of four', () => {
+  it('opens at the new moon with the first bulk feed and a hand of four', () => {
     const run = newRun(1)
     expect(run.fight.dial).toBe(0)
     expect(run.fight.hand).toHaveLength(4)
-    expect(run.fight.pool).toEqual(pool({ water: 3, earth: 1 }))
+    expect(run.fight.pool).toEqual(pool(COMMISSIONS[0].feed))
   })
 
-  it('moves an eighth of the moon for a plain card, feeding again at the next phase', () => {
+  it('moves an eighth of the moon for a plain card, with no feed until the next new or full moon', () => {
     let run = newRun(1)
     const card = run.fight.hand[0]
     const before = poolTotal(run.fight.pool)
     const took = poolTotal(resolveCard(card, run.fight.pool).drained)
     run = playCard(run, card.id)
     expect(run.fight.dial).toBe(2)
-    expect(poolTotal(run.fight.pool)).toBe(before - took + 4)
+    expect(poolTotal(run.fight.pool)).toBe(before - took)
     expect(run.fight.hand).toHaveLength(3)
   })
 
-  it('flares the pool at the full moon, Ward first, leaves the pool in place, and refills the hand there', () => {
+  it('discards the hand at the first quarter, flares at 3/8, and feeds and draws 4 at the full moon', () => {
+    let run = newRun(1)
+    const card = run.fight.hand[0]
+    const left = poolTotal(run.fight.pool) - poolTotal(resolveCard(card, run.fight.pool).drained)
+    run = playCard(run, card.id)
+    run = wait(run)
+    // Discarded at the first quarter with nothing to brew, the moon moves on by itself to the next draw.
+    expect(run.fight.dial).toBe(8)
+    expect(run.fight.flares).toEqual([left])
+    expect(run.quintessence).toBe(DEFAULT_SETTINGS.stock - left)
+    expect(poolTotal(run.fight.pool)).toBe(left + poolTotal(pool(COMMISSIONS[0].feed)))
+    expect(run.fight.hand).toHaveLength(4)
+  })
+
+  it('takes a flare out of Ward first, and leaves the pool in place', () => {
     let run: Run = newRun(1)
-    run = { ...run, fight: { ...run.fight, ward: TINCTURE_WARD } }
+    run = { ...run, fight: { ...run.fight, ward: TINCTURE_WARD + 4, hand: [] } }
     run = wait(run)
-    run = wait(run)
-    expect(run.fight.dial).toBe(4)
-    // Fed at the new moon and first quarter: 8 instability, Ward takes 6, 2 paid; the full moon then feeds again.
-    expect(run.fight.flares).toEqual([8])
-    expect(run.quintessence).toBe(DEFAULT_SETTINGS.stock - 2)
-    // The pool stays, and the full moon feeds it again.
-    expect(run.fight.pool).toEqual(pool({ water: 9, earth: 3 }))
-    expect(run.fight.hand).toHaveLength(4)
+    expect(run.fight.flares).toEqual([7])
+    expect(run.quintessence).toBe(DEFAULT_SETTINGS.stock)
+    expect(run.fight.ward).toBe(TINCTURE_WARD + 4 - 7)
+    expect(run.fight.pool).toEqual(pool({ water: 10, earth: 4 }))
   })
 
-  it('in half-moon turns, discards what is left at the full moon and draws 4', () => {
-    let run = newRun(1, { ...DEFAULT_SETTINGS, draw: 'cycle' })
-    expect(run.fight.hand).toHaveLength(4)
-    const kept = run.fight.hand.slice(1).map((c) => c.id)
-    run = playCard(run, run.fight.hand[0].id)
+  it('grows the Mire at each bulk feed after the first', () => {
+    let run: Run = newRun(1)
+    run = { ...run, fight: { ...run.fight, commission: COMMISSIONS[3], pool: emptyPool(), hand: [] } }
     run = wait(run)
-    expect(run.fight.dial).toBe(4)
-    expect(run.fight.hand).toHaveLength(4)
-    expect(run.fight.discard.map((c) => c.id)).toEqual(expect.arrayContaining(kept))
-  })
-
-  it('moves the moon on by itself when nothing can be played', () => {
-    let run = newRun(1, { ...DEFAULT_SETTINGS, draw: 'cycle' })
-    run = { ...run, fight: { ...run.fight, hand: run.fight.hand.slice(0, 1) } }
-    run = playCard(run, run.fight.hand[0].id)
-    expect(run.fight.dial).toBe(4)
-    expect(run.fight.hand).toHaveLength(4)
+    expect(run.fight.dial).toBe(8)
+    expect(run.fight.pool).toEqual(pool({ water: 5, earth: 4, fire: 1 }))
   })
 
   it('lists what the coming phases bring', () => {
     const next = upcoming(newRun(1).fight, 4)
-    expect(next.map((x) => x.phase)).toEqual(['waxing-gibbous', 'full', 'waning-gibbous', 'last'])
-    expect(next.find((x) => x.phase === 'full')!.attack).toBe(true)
+    expect(next.map((x) => x.phase)).toEqual(['waxing-crescent', 'first', 'waxing-gibbous', 'full'])
+    expect(next.find((x) => x.phase === 'first')!.discard).toBe(true)
+    expect(next.find((x) => x.phase === 'waxing-gibbous')!.attack).toBe(true)
+    const full = next.find((x) => x.phase === 'full')!
+    expect(full.feed && full.draw).toBe(true)
   })
 })
 

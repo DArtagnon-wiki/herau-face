@@ -1,7 +1,7 @@
 // The moon dial: the one picture of the fight's state. The outer ring is the
 // moon (sixteen ticks, its eight phases drawn as they look, the new moon at the
-// top and the full moon at the bottom), with what each phase brings
-// marked outside it: a red star where the commission flares, an arrow where
+// top where a fight opens, the full moon at the bottom), with what each phase brings
+// marked outside it: a star where the commission feeds, a red star where it flares, an arrow where
 // it grows, a card where you draw. The next flare carries a badge with what
 // would flare now. The inner ring fills with purification against the
 // requirement. In the middle, the pool: one element triangle each, with how
@@ -9,12 +9,12 @@
 // where the needle would land, how far purification would reach, what the
 // pool would lose.
 
-import { ELEMENTS, PHASES, PHASE_CYCLE, TICKS, phaseAt, poolTotal, type Fight, type Phase, type Pool } from './engine'
+import { DISCARD_PHASES, DRAW_PHASES, ELEMENTS, PHASES, PHASE_CYCLE, TICKS, phaseAt, poolTotal, type Fight, type Phase, type Pool } from './engine'
 import { ELEMENT_COLOR, card as cardSig, element, moon, numeral, quintessence } from './sigils'
 
 const rad = (deg: number) => (deg * Math.PI) / 180
-/** Position 0 is the first quarter, on the right; the new moon (position 12) is at the top. */
-const angleOf = (pos: number) => -90 + (((pos + 4) % TICKS) * 360) / TICKS
+/** Position 0, the new moon where a fight opens, is at the top; the full moon at the bottom. */
+const angleOf = (pos: number) => -90 + ((pos % TICKS) * 360) / TICKS
 const at = (pos: number, r: number) => [Math.cos(rad(angleOf(pos))) * r, Math.sin(rad(angleOf(pos))) * r] as const
 const r2 = (n: number) => Math.round(n * 100) / 100
 
@@ -51,7 +51,7 @@ export interface DialPreview {
   flares: number[]
 }
 
-export function dialSvg(f: Fight, feed: Pool, drawAt: Phase[], preview?: DialPreview | null, flareFx = false): string {
+export function dialSvg(f: Fight, feed: Pool, preview?: DialPreview | null, flareFx = false): string {
   const parts: string[] = []
   const R = 136
   const c = f.commission
@@ -78,12 +78,21 @@ export function dialSvg(f: Fight, feed: Pool, drawAt: Phase[], preview?: DialPre
     const marks: string[] = []
     if (c.attacks.includes(phase)) marks.push('attack')
     if (c.buffs?.includes(phase)) marks.push('buff')
-    if (drawAt.includes(phase)) marks.push('draw')
+    if (c.feedAt.includes(phase)) marks.push('feed')
+    if (DRAW_PHASES.includes(phase)) marks.push('draw')
+    if (DISCARD_PHASES.includes(phase)) marks.push('discard')
+    // Side by side along the ring, outside it.
+    const ta = rad(angleOf(pos))
     marks.forEach((m, j) => {
-      const [mx, my] = at(pos, R + 23 + j * 15)
+      const [cx0, cy0] = at(pos, R + 24)
+      const off = (j - (marks.length - 1) / 2) * 16
+      const mx = cx0 - Math.sin(ta) * off
+      const my = cy0 + Math.cos(ta) * off
       if (m === 'attack') parts.push(quintessence(mx, my, 8, { stroke: 'var(--fire)', fill: 'var(--fire)', width: 1 }))
       if (m === 'buff') parts.push(`<path d="M${r2(mx)} ${r2(my - 6)}L${r2(mx + 5.5)} ${r2(my + 4)}H${r2(mx - 5.5)}Z" fill="none" stroke="var(--warn)" stroke-width="1.6"/>`)
       if (m === 'draw') parts.push(cardSig(mx, my, 6, { stroke: 'var(--ink-soft)', width: 1.3 }))
+      if (m === 'discard') parts.push(`${cardSig(mx, my, 6, { stroke: 'var(--ink-faint)', width: 1.2 })}<path d="M${r2(mx - 5.5)} ${r2(my + 6.5)}L${r2(mx + 5.5)} ${r2(my - 6.5)}" stroke="var(--ink-soft)" stroke-width="1.3" stroke-linecap="round"/>`)
+      if (m === 'feed') parts.push(element('any', mx, my, 7, { stroke: 'var(--ink-soft)', width: 1.2 }))
     })
     if (pos === nextAttack) {
       const threat = Math.max(0, poolTotal(f.pool) - f.ward)
@@ -121,7 +130,7 @@ export function dialSvg(f: Fight, feed: Pool, drawAt: Phase[], preview?: DialPre
     parts.push(element(e, x, y, 25, { stroke: n ? color : 'var(--dim)', fill, width: 2 }))
     parts.push(numeral(n, x, y + (down ? -4 : 6), 21, n ? 'var(--ink)' : 'var(--ink-faint)'))
     if (preview?.drain[e]) parts.push(numeral(`−${preview.drain[e]}`, x + (x < 0 ? -33 : 33), y + (down ? -4 : 6), 14, 'var(--lit)'))
-    // What the commission feeds it at each phase, at the triangle's point.
+    // What the commission's next bulk feed will add, at the triangle's point.
     if (feed[e]) parts.push(numeral(`+${feed[e]}`, x, down ? y + 33 : y - 32, 11, 'var(--ink-faint)'))
   }
   // Purified so far, in the middle.

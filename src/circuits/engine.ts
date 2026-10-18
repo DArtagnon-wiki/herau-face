@@ -22,13 +22,12 @@ export const poolTotal = (p: Pool) => ELEMENTS.reduce((n, e) => n + p[e], 0)
 
 /**
  * The dial counts sixteenths of a moon (ticks). A phase falls on every second
- * tick: the eight phases of the moon. A fight opens at the first quarter, so
- * position 0 is the first quarter and the full moon falls 4 ticks later.
+ * tick: the eight phases of the moon. A fight opens at the new moon, position 0.
  */
 export const TICKS = 16
-export type Phase = 'first' | 'waxing-gibbous' | 'full' | 'waning-gibbous' | 'last' | 'waning-crescent' | 'new' | 'waxing-crescent'
+export type Phase = 'new' | 'waxing-crescent' | 'first' | 'waxing-gibbous' | 'full' | 'waning-gibbous' | 'last' | 'waning-crescent'
 /** In the order the dial meets them from the opening. */
-export const PHASES: Phase[] = ['first', 'waxing-gibbous', 'full', 'waning-gibbous', 'last', 'waning-crescent', 'new', 'waxing-crescent']
+export const PHASES: Phase[] = ['new', 'waxing-crescent', 'first', 'waxing-gibbous', 'full', 'waning-gibbous', 'last', 'waning-crescent']
 export const PHASE_NAMES: Record<Phase, string> = {
   new: 'New moon',
   'waxing-crescent': 'Waxing crescent',
@@ -41,8 +40,12 @@ export const PHASE_NAMES: Record<Phase, string> = {
 }
 /** How lit each phase is, as a fraction of the cycle from the new moon (0) through full (0.5). */
 export const PHASE_CYCLE: Record<Phase, number> = { new: 0, 'waxing-crescent': 0.125, first: 0.25, 'waxing-gibbous': 0.375, full: 0.5, 'waning-gibbous': 0.625, last: 0.75, 'waning-crescent': 0.875 }
-/** The quarter phases, when you draw. */
-export const DRAW_PHASES: Phase[] = ['new', 'first', 'full', 'last']
+/** You draw at the new and full moons, and discard what is left at the quarters between. */
+export const DRAW_PHASES: Phase[] = ['new', 'full']
+export const DISCARD_PHASES: Phase[] = ['first', 'last']
+/** The common rhythm: a commission feeds in bulk at the new and full moons and attacks at 3/8 and 7/8 of the moon. */
+export const FEED_PHASES: Phase[] = ['new', 'full']
+export const ATTACK_PHASES: Phase[] = ['waxing-gibbous', 'waning-crescent']
 /** The phase at a dial position that falls on one, else null. */
 export const phaseAt = (pos: number): Phase | null => (pos % 2 === 0 ? PHASES[(pos / 2) % PHASES.length] : null)
 
@@ -182,8 +185,10 @@ export interface Commission {
   blurb: string
   /** Purification that finishes it. */
   require: number
-  /** Instability fed into the pool at every phase, by element. */
+  /** Instability it feeds into the pool in one bulk, by element, at each of its feeding phases. */
   feed: Partial<Pool>
+  /** When it feeds; the common rhythm is the new and full moons. */
+  feedAt: Phase[]
   /** Phases at which the pool flares: what is in it costs quintessence, less Ward, and stays. */
   attacks: Phase[]
   /** Phases at which it grows stronger, adding buffFeed to its feed. */
@@ -192,27 +197,46 @@ export interface Commission {
 }
 
 export const COMMISSIONS: Commission[] = [
-  { key: 'mud', name: 'Mud', blurb: 'Feeds mostly water and a little earth. Flares at every full and new moon.', require: 30, feed: { water: 3, earth: 1 }, attacks: ['full', 'new'] },
-  { key: 'peat', name: 'Peat bog', blurb: 'Water, earth and a smoulder of fire. Flares at every full and new moon.', require: 45, feed: { water: 2, earth: 2, fire: 1 }, attacks: ['full', 'new'] },
+  {
+    key: 'mud',
+    name: 'Mud',
+    blurb: 'Feeds mostly water and some earth at every new and full moon, and flares at 3/8 and 7/8 of the moon.',
+    require: 20,
+    feed: { water: 5, earth: 2 },
+    feedAt: FEED_PHASES,
+    attacks: ATTACK_PHASES,
+  },
+  {
+    key: 'peat',
+    name: 'Peat bog',
+    blurb: 'Water, earth and a smoulder of fire at every new and full moon; flares at 3/8 and 7/8 of the moon.',
+    require: 30,
+    feed: { water: 4, earth: 4, fire: 1 },
+    feedAt: FEED_PHASES,
+    attacks: ATTACK_PHASES,
+  },
   {
     key: 'fumarole',
     name: 'Fumarole',
-    blurb: 'A vent of hot breath: air and fire, a little water. Flares at every full and new moon.',
-    require: 40,
-    feed: { air: 2, fire: 2, water: 1 },
-    attacks: ['full', 'new'],
+    blurb: 'A vent of hot breath: air and fire, a little water, at every new and full moon; flares at 3/8 and 7/8 of the moon.',
+    require: 30,
+    feed: { air: 4, fire: 4, water: 1 },
+    feedAt: FEED_PHASES,
+    attacks: ATTACK_PHASES,
   },
   {
     key: 'mire',
     name: 'The Mire',
-    blurb: 'A boss. Grows at every crescent and gibbous moon, adding earth to its feed, and flares at every quarter.',
-    require: 50,
-    feed: { water: 3, earth: 2, fire: 1 },
-    attacks: ['first', 'full', 'last', 'new'],
-    buffs: ['waxing-gibbous', 'waning-gibbous', 'waning-crescent', 'waxing-crescent'],
+    blurb: 'A boss. Feeds at every new and full moon, a little more earth each time, and flares at 3/8 and 7/8 of the moon.',
+    require: 40,
+    feed: { water: 5, earth: 3, fire: 1 },
+    feedAt: FEED_PHASES,
+    attacks: ATTACK_PHASES,
+    buffs: ['new', 'full'],
     buffFeed: { earth: 1 },
   },
 ]
+
 
 /** Its feed after this many buffs. */
 export function feedOf(c: Commission, buffs: number): Pool {
@@ -315,18 +339,11 @@ export function addRune(c: Card, r: RewardRune): Card {
 
 export interface Settings {
   stock: number
+  /** How many you draw at each new and full moon. */
   hand: number
-  /**
-   * When and how you draw. refill: at every quarter, refill the hand to
-   * `hand`; draw: at every quarter, draw `hand` more; cycle: each half moon is
-   * a turn, so at every full and new moon, discard what is left and draw `hand`.
-   */
-  draw: 'refill' | 'draw' | 'cycle'
 }
 
-/** The phases at which you draw under these settings (the opening always draws). */
-export const drawPhases = (s: Settings): Phase[] => (s.draw === 'cycle' ? ['full', 'new'] : DRAW_PHASES)
-export const DEFAULT_SETTINGS: Settings = { stock: 80, hand: 4, draw: 'refill' }
+export const DEFAULT_SETTINGS: Settings = { stock: 40, hand: 4 }
 
 export interface Fight {
   commission: Commission
@@ -442,7 +459,7 @@ function startFight(run: Run, index: number): Run {
     paid: 0,
     flares: [],
   }
-  // The first quarter that opens the fight: the first feed and the first hand.
+  // The new moon that opens the fight: the first feed and the first hand.
   return phaseEvents({ ...run, stage: 'fight', fightIndex: index, seed: rng.state(), fight }, 0, true)
 }
 
@@ -462,7 +479,11 @@ function drawCards(run: Run, n: number): Run {
   return { ...run, seed: rng.state(), fight: { ...run.fight, hand, draw, discard } }
 }
 
-/** What happens at a phase: helpers work, the commission attacks and grows, it feeds the pool, and at the quarters you draw. */
+/**
+ * What happens at a phase: helpers work; the commission attacks, grows and
+ * feeds the pool in bulk, each at its own phases; at the first and last
+ * quarters you discard your hand; at the new and full moons you draw.
+ */
 function phaseEvents(run: Run, pos: number, opening = false): Run {
   const phase = phaseAt(pos)!
   let f = { ...run.fight, pool: { ...run.fight.pool }, log: run.fight.log.slice() }
@@ -500,20 +521,20 @@ function phaseEvents(run: Run, pos: number, opening = false): Run {
     f.buffs += 1
     notes.push(`${c.name} grows`)
   }
-  const feed = feedOf(c, f.buffs)
-  for (const e of ELEMENTS) f.pool[e] += feed[e]
-  const draws = opening || drawPhases(run.settings).includes(phase)
-  if (draws && run.settings.draw === 'cycle' && f.hand.length) {
-    notes.push(`discards ${f.hand.length}`)
+  if (opening || c.feedAt.includes(phase)) {
+    const feed = feedOf(c, f.buffs)
+    for (const e of ELEMENTS) f.pool[e] += feed[e]
+    notes.push(`${c.name} feeds ${ELEMENTS.filter((e) => feed[e]).map((e) => `${feed[e]} ${e}`).join(', ')}`)
+  }
+  if (!opening && DISCARD_PHASES.includes(phase) && f.hand.length) {
+    notes.push(`you discard ${f.hand.length}`)
     f.discard = [...f.discard, ...f.hand]
     f.hand = []
   }
-  f.log.unshift(`${PHASE_NAMES[phase]}: ${[...notes, `feeds ${ELEMENTS.filter((e) => feed[e]).map((e) => `${feed[e]} ${e}`).join(', ')}`].join('; ')}.`)
+  const draws = opening || DRAW_PHASES.includes(phase)
+  if (notes.length) f.log.unshift(`${PHASE_NAMES[phase]}: ${notes.join('; ')}.`)
   let next: Run = { ...run, quintessence: Math.max(0, run.quintessence - paid), fight: f }
-  if (draws) {
-    const n = run.settings.draw === 'refill' ? Math.max(0, run.settings.hand - f.hand.length) : run.settings.hand
-    next = drawCards(next, n)
-  }
+  if (draws) next = drawCards(next, run.settings.hand)
   return next
 }
 
@@ -601,12 +622,21 @@ export function wait(run: Run): Run {
 }
 
 /** The next phases and what they bring, for the dial. */
-export function upcoming(f: Fight, count = 4, drawAt: Phase[] = DRAW_PHASES): { pos: number; phase: Phase; attack: boolean; buff: boolean; draw: boolean }[] {
+export function upcoming(f: Fight, count = 4): { pos: number; phase: Phase; attack: boolean; buff: boolean; feed: boolean; draw: boolean; discard: boolean }[] {
   const out = []
   let pos = f.dial + 1
   while (out.length < count) {
     const phase = phaseAt(pos)
-    if (phase) out.push({ pos, phase, attack: f.commission.attacks.includes(phase), buff: !!f.commission.buffs?.includes(phase), draw: drawAt.includes(phase) })
+    if (phase)
+      out.push({
+        pos,
+        phase,
+        attack: f.commission.attacks.includes(phase),
+        buff: !!f.commission.buffs?.includes(phase),
+        feed: f.commission.feedAt.includes(phase),
+        draw: DRAW_PHASES.includes(phase),
+        discard: DISCARD_PHASES.includes(phase),
+      })
     pos++
   }
   return out

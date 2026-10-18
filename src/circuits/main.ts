@@ -24,7 +24,6 @@ import {
   catalystCard,
   costOf,
   craft,
-  drawPhases,
   feedOf,
   fits,
   newRun,
@@ -37,6 +36,7 @@ import {
   wait,
   type Card,
   type Output,
+  type Pool,
   type Principle,
   type Recipe,
   type RewardRune,
@@ -170,17 +170,28 @@ function changeText(r: RewardRune, before: Card): string {
   }
 }
 
+/** The next bulk feed, with any growth that comes with it. */
+function nextFeed(run: Run): { phase: string; feed: Pool } | null {
+  const f = run.fight
+  const x = upcoming(f, 8).find((u) => u.feed)
+  if (!x) return null
+  return { phase: PHASE_NAMES[x.phase].toLowerCase(), feed: feedOf(f.commission, f.buffs + (x.buff ? 1 : 0)) }
+}
+const feedWords = (p: Pool) => ELEMENTS.filter((e) => p[e]).map((e) => `${p[e]} ${e}`).join(', ')
+
 function situationNote(run: Run): [string, string] {
   const f = run.fight
-  const drawAt = drawPhases(run.settings)
-  const up = upcoming(f, 8, drawAt)
+  const up = upcoming(f, 8)
   const atk = up.find((x) => x.attack)
+  const dis = up.find((x) => x.discard)
   const drw = up.find((x) => x.draw)
+  const nf = nextFeed(run)
   const threat = Math.max(0, poolTotal(f.pool) - f.ward)
   const title = atk ? `${PHASE_NAMES[atk.phase]} in ${ticks(atk.pos - f.dial)}` : 'The moon'
   const lines = [
     atk ? `${f.commission.name} flares there: whatever is in the pool, less Ward (${threat} now, the red badge). The pool stays.` : '',
-    drw ? `You ${run.settings.draw === 'cycle' ? 'discard and draw' : 'draw'} at the ${PHASE_NAMES[drw.phase].toLowerCase()}${drw === atk ? ', after the flare' : ''}.` : '',
+    dis && (!atk || dis.pos < atk.pos) ? `You discard your hand at the ${PHASE_NAMES[dis.phase].toLowerCase()}, before it.` : '',
+    drw ? `You draw ${run.settings.hand} at the ${PHASE_NAMES[drw.phase].toLowerCase()}${nf ? `, when ${f.commission.name.toLowerCase()} feeds ${feedWords(nf.feed)}` : ''}.` : '',
     f.catalyst > 1 ? `The next card you play purifies ×${f.catalyst}.` : '',
     'Pick a card to see what it would do.',
   ]
@@ -189,11 +200,10 @@ function situationNote(run: Run): [string, string] {
 
 function dialNote(run: Run): [string, string] {
   const f = run.fight
-  const drawAt = drawPhases(run.settings)
-  const items = upcoming(f, 3, drawAt).map((x) => {
+  const items = upcoming(f, 4).map((x) => {
     const fd = feedOf(f.commission, f.buffs + (x.buff ? 1 : 0))
-    const what = [x.attack ? 'flare' : '', x.buff ? 'it grows' : '', x.draw ? (run.settings.draw === 'cycle' ? 'discard, draw' : 'draw') : '', `+${ELEMENTS.filter((e) => fd[e]).map((e) => `${fd[e]} ${e}`).join(', ')}`].filter(Boolean)
-    return `<b>${PHASE_NAMES[x.phase]}</b> (${ticks(x.pos - f.dial)}): ${what.join(', ')}`
+    const what = [x.attack ? 'flare' : '', x.buff ? 'it grows' : '', x.feed ? `it feeds ${feedWords(fd)}` : '', x.discard ? 'you discard' : '', x.draw ? `you draw ${run.settings.hand}` : ''].filter(Boolean)
+    return `<b>${PHASE_NAMES[x.phase]}</b> (${ticks(x.pos - f.dial)}): ${what.length ? what.join(', ') : 'nothing'}`
   })
   return ['The moon', `${items.join('. ')}. Purified ${f.purified} of ${f.commission.require} (the inner ring).`]
 }
@@ -281,7 +291,7 @@ function recipes(run: Run): string {
 
 function hand(run: Run): string {
   const f = run.fight
-  if (!f.hand.length) return `<section class="hand-row empty"><p>No cards in hand until the next draw.</p></section>`
+  if (!f.hand.length) return `<section class="hand-row empty"><p>No cards in hand until the next new or full moon.</p></section>`
   return `<section class="hand-row" aria-label="Hand">${f.hand
     .map((c) => {
       const live = resolveCard(c, f.pool, f.catalyst)
@@ -342,12 +352,11 @@ function popupView(run: Run | null): string {
     title = 'Alchemical Circuits'
     const s = ui.settings
     const opt = (v: string, cur: string, label: string) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${label}</option>`
-    const drawKey = `${s.draw}-${s.hand}`
     body = `<div class="pop-actions"><button data-act="legend">Reading a circuit</button><button data-act="restart">Start again</button></div>
       ${run ? `<p class="label">What happened</p><ol class="pop-list log">${run.fight.log.slice(0, 10).map((l) => `<li>${esc(l)}</li>`).join('')}</ol>` : ''}
       <p class="label">Tuning, on restart</p>
-      <div class="tune"><label>Drawing <select id="c-draw">${opt('refill-4', drawKey, 'Refill to 4 at every quarter')}${opt('cycle-4', drawKey, 'Discard and draw 4 at full and new moons')}${opt('draw-4', drawKey, 'Draw 4 at every quarter')}${opt('draw-2', drawKey, 'Draw 2 at every quarter')}${opt('refill-5', drawKey, 'Refill to 5 at every quarter')}</select></label>
-      <label>Quintessence <select id="c-stock">${[60, 80, 100].map((v) => opt(String(v), String(s.stock), String(v))).join('')}</select></label></div>`
+      <div class="tune"><label>Drawn at new and full moons <select id="c-hand">${[3, 4, 5].map((v) => opt(String(v), String(s.hand), String(v))).join('')}</select></label>
+      <label>Quintessence <select id="c-stock">${[30, 40, 60, 80].map((v) => opt(String(v), String(s.stock), String(v))).join('')}</select></label></div>`
   }
   if (!title) return ''
   return `<div class="pop-veil" data-act="close"></div>
@@ -362,7 +371,7 @@ function fightView(run: Run): string {
   const preview = previewOf(run, after)
   return `<div class="cx fight">
     ${header(run, run.fight.commission.name)}
-    <button class="dial-box ${ui.focus === 'dial' ? 'is-on' : ''}" data-act="dial" aria-label="The moon: what comes next">${dialSvg(run.fight, feedOf(run.fight.commission, run.fight.buffs), drawPhases(run.settings), preview, !!ui.fx?.flared)}</button>
+    <button class="dial-box ${ui.focus === 'dial' ? 'is-on' : ''}" data-act="dial" aria-label="The moon: what comes next">${dialSvg(run.fight, nextFeed(run)?.feed ?? feedOf(run.fight.commission, run.fight.buffs), preview, !!ui.fx?.flared)}</button>
     ${fightNote(run)}
     <div class="bench">${materials(run)}${recipes(run)}</div>
     ${ui.flash ? `<p class="flash">${esc(ui.flash)}</p>` : ''}
@@ -462,12 +471,8 @@ function render() {
 // Events
 
 function readTuning() {
-  const draw = (document.getElementById('c-draw') as HTMLSelectElement | null)?.value
-  if (draw) {
-    const [mode, n] = draw.split('-')
-    ui.settings.draw = mode as Settings['draw']
-    ui.settings.hand = Number(n)
-  }
+  const hand = (document.getElementById('c-hand') as HTMLSelectElement | null)?.value
+  if (hand) ui.settings.hand = Number(hand)
   const stock = (document.getElementById('c-stock') as HTMLSelectElement | null)?.value
   if (stock) ui.settings.stock = Number(stock)
 }
