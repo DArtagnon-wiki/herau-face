@@ -14,7 +14,7 @@ Electrical schematics are a kind of runic composition. In this direction a card 
 
 - **The commission feeds instability into a pool,** per element, on a schedule: mud feeds mostly water and some earth.
 - **Cards drain the pool** through their input channels and turn what they take into purification, plus a little material.
-- **When the commission attacks, whatever is left in the pool flares** and costs quintessence. Every play is both defence (it drains the pool) and progress (it purifies), as block and attack are in one Slay the Spire card.
+- **When the commission flares, whatever is above its vessel flares** and costs quintessence, less Ward. The vessel holds a few of each element safely (4 for most commissions, 3 for the boss), and what is under it stays in the pool for you to harvest. Every play is both defence (it drains the pool under the vessel) and progress (it purifies), as block and attack are in one Slay the Spire card. (At first the whole pool flared and was emptied, which wiped the stock the gates need just as a good card arrived.)
 - **The commission is done when its purification requirement is met.** It asks for purification only, not for any particular element.
 - **Elements work like damage types on defence.** A deck without fire channels suffers against a fire-heavy commission, so weaker any-element channels exist (half capacity, say) to make a missing element a problem rather than a hard loss.
 
@@ -22,10 +22,11 @@ Electrical schematics are a kind of runic composition. In this direction a card 
 
 - **Input channel:** an element and a capacity, as in "up to 5 water".
 - **Gain stage:** multiplies the card's purification.
+- **Rail:** the most a card purifies in one play, 10 to start; rail runes raise it by 5. Without it, several inputs times a gain or two ran away with the fights.
 - **Distilling rune:** adds a principle output to any card; the rune names the principle.
-- **Later parts:** a ground or filter that soaks instability without purifying (Ward), a capacitor that stores flow for a later burst, a feedback loop (combo), a rail that caps output until it is raised.
+- **Later parts:** a ground or filter that soaks instability without purifying (Ward), a capacitor that stores flow for a later burst, a feedback loop (combo).
 - **Beginner cards have one input and no stages:** take up to 5 water, make 5 purification, and 1 mercury once they take 4 or more.
-- **Deck growth adds runes to existing cards:** another input channel, a gain stage, a principle output or a ground. Composition is the deckbuilding.
+- **Deck growth adds runes to existing cards:** another input channel, a gain stage, a principle output, a ground or a higher rail. Composition is the deckbuilding.
 
 ```
 Beginner:   WATER ─┤5├──────────► purification 5, mercury 1
@@ -40,7 +41,7 @@ Grown:      WATER ─┤5├─┐
 There are no turns. Every card costs time on a dial, and the dial's phases carry the events.
 
 - **The moon.** The dial shows the moon's eight phases, and a fight opens at the first quarter. A beginner card costs an eighth of the moon, and each phase feeds the pool. You draw at every quarter. A weak commission flares at every full and new moon; a tough one flares at every quarter and grows at the phases between. (At first a card cost a quarter of a four-phase moon; the cycle was halved to slow the feel, with play unchanged.)
-- **The draw needs care.** Drawing 4 every two plays grows the hand by 2 every half moon. The prototype refills the hand to 4 at every quarter instead, so you choose your best 2 of 4 before each event. But unplayed cards wait in hand for free, an advantage other deckbuilders make you pay for. **Half-moon turns** would add the discard: at every full and new moon, discard what is left and draw 4. The prototype has them as a tuning option; the attacks need rebalancing first (see the simulation below).
+- **The draw needs care.** Drawing 4 every two plays grows the hand by 2 every half moon. The prototype refills the hand to 4 at every quarter instead, so you choose your best 2 of 4 before each event. But unplayed cards wait in hand for free, an advantage other deckbuilders make you pay for. **Half-moon turns** would add the discard: at every full and new moon, discard what is left and draw 4. The prototype has them as a tuning option; with overflow flares they win about half the runs, so the attacks need some rebalancing first (see the simulation below).
 - **Cards can cost different amounts of time.** A quick circuit costs a sixteenth of the moon, a heavy amplifier chain a quarter. Gain stages add time, so a bigger circuit is also a slower one. "How much can I fit before the attack?" is the core decision.
 - **Waiting.** When the hand can't help, waiting advances the dial an eighth, so you can never stall. With no cards and nothing to brew, the moon moves on by itself to the next draw.
 - **Slower trackers can stack on the moon.** The Western zodiac cycles fire, earth, air and water around the wheel (Aries, Taurus, Gemini, Cancer, then again from Leo), so a zodiac dial gives a fight elemental seasons; its modalities fit too, with mutable signs suited to transmutation. Planetary hours, by which alchemists timed their work, could make a metal cheaper in its planet's hour. A boss can run its own clock for its signature moves.
@@ -89,41 +90,49 @@ Wash, as sketched: a moon is its input and its circle must run before the collec
 - **Make decisions meaningful.** The play loop works but offers few real choices; thresholds like Wash's (wait for the pool to fill, or wash now?) are one lever.
 - **Tune the numbers:** feed rates, purification requirements, card capacities, the draw rule.
 - **Decide crafting:** which recipes are in-fight, what each costs in time and material, how recipes are earned.
-- **Decide the pool after an attack:** cleared by the flare, or carried over.
+- **The pool after a flare.** The prototype flares only what is over the vessel; the menu keeps the old rule (flare and empty the pool) and a harsher one (flare the whole pool and keep it) to compare, though only overflow is tuned.
 - **Try the zodiac and planetary trackers** once the moon works.
 
 ## Prototype
 
-A separate page beside Mud to Clay (`circuits.html`), on one screen: the moon dial with the pool in its middle, materials and recipes always in view, the hand of circuit cards drawn with the runic schema, and a note that always explains whatever is picked, in its own slot under the dial (beside the game on wide screens). Only the menu and the reading guide open over the game. It plays a run of four commissions with single-number purification, the three principles, three recipes (a tincture for Ward, a spirit to draw 2, the homunculus), metal smelted after each fight, and runes added to cards between fights; the shop explains each rune in words and shows the card before and after.
+A separate page beside Mud to Clay (`circuits.html`), on one screen: the moon dial with the pool in its middle, materials and recipes always in view, the hand of circuit cards drawn with the runic schema, and a note that always explains whatever is picked, in its own slot under the dial (beside the game on wide screens). Only the menu and the reading guide open over the game. It plays a run of four commissions with single-number purification, overflow flares, rails, the three principles, three recipes (a tincture for Ward, a spirit to draw 2, the homunculus), metal smelted after each fight, and runes added to cards between fights; the shop explains each rune in words and shows the card before and after.
 
-- **Commissions,** each fed at every phase. Mud: 3 water and 1 earth, flares at every full and new moon, needs 30. The peat bog: 2 water, 2 earth and 1 fire, flares at every full and new moon, needs 45. The Fumarole: 2 air, 2 fire and 1 water, flares at every full and new moon, needs 40; it is there so a deck built only for water and earth suffers. The Mire: 3 water, 2 earth and 1 fire, grows by an earth at every crescent and gibbous moon, flares at every quarter, needs 50. The run starts with 80 quintessence (60 before the Fumarole).
-- **The opening deck** is ten one-input circuits. The metal creators, four Wash (5 water, mercury), three Calcine (5 earth, salt), a Fan (5 air, mercury) and a Kindle (5 fire, sulfur), yield their principle once they take 4 or more. The Sieve (3 of any element) raises Ward, 1 for each it takes. A card holds at most 3 inputs, 2 gains, 3 side outputs and 2 grounds; distilling runes (salt, sulfur or mercury) go on any card.
+- **Commissions,** each fed at every phase; what is over the vessel flares. Mud: 4 water and 2 earth, vessel 4, flares at every full and new moon, needs 30. The peat bog: 3 water, 3 earth and 1 fire, vessel 4, flares at every full and new moon, needs 45. The Fumarole: 3 air, 3 fire and 1 water, vessel 4, flares at every full and new moon, needs 40; it is there so a deck built only for water and earth suffers. The Mire: 4 water, 3 earth and 1 fire, vessel 3, grows by an earth at every crescent and gibbous moon, flares at every quarter, needs 50. The run starts with 60 quintessence.
+- **The opening deck** is ten one-input circuits. The metal creators, four Wash (5 water, mercury), three Calcine (5 earth, salt), a Fan (5 air, mercury) and a Kindle (5 fire, sulfur), yield their principle once they take 4 or more. The Sieve (3 of any element) raises Ward, 1 for each it takes. Every card purifies at most its rail in one play, 10 to start. A card holds at most 3 inputs, 2 gains, 3 side outputs, 2 grounds and 2 rail runes (a rail of 20); distilling runes (salt, sulfur or mercury) go on any card.
 - **Recipes.** Tincture of salt: 2 salt, a sixteenth of the moon, Ward 6. Spirit of mercury: 3 mercury, a sixteenth, draw 2. Homunculus: 3 mercury, 2 salt and 1 sulfur, an eighth, then it drains 2 of the most plentiful instability and purifies 2 at every phase.
 - **Metal.** Silver from 2 mercury and a salt (worth 3), lead from any two principles (worth 1). The first rune between fights is free; more cost 3 metal.
 
 ### Simulated strategies
 
-`scripts/circuits-sim.ts` plays the run three ways (600 runs each, refilling to 4 at every quarter, 80 quintessence):
+`scripts/circuits-sim.ts` plays the run three ways (500 runs each, refilling to 4 at every quarter, 60 quintessence, overflow flares, rails):
 
-- **Greedy** plays, brews or waits for whatever looks best right now: purification, quintessence kept, the pool it would face, helpers, Ward, cards in hand. It ignores the gates. Between fights it takes gains first, then inputs for the elements the coming commissions feed most.
+- **Greedy** plays, brews or waits for whatever looks best right now: purification, quintessence kept, the pool it would face, helpers, Ward, cards in hand. It ignores the gates. Between fights it takes gains first, then rails for cards that outgrow theirs, then inputs for the elements the coming commissions feed most.
 - **Random** makes any legal move, and puts random runes on random cards.
 - **Delay** keeps the fights before the boss going to gather principles, as long as doing so doesn't lose: a move is allowed only if playing greedy after it would still finish the fight with a chosen reserve of quintessence. It takes the move that gathers most, else the one that purifies least, and plays greedy when nothing is allowed. The engine is deterministic, so this look-ahead is exact.
 
 | Strategy | Runs won | Paid in Mud | Metal | Paid in Peat | Metal | Paid in Fumarole | Metal | Into the Mire |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Random | 0% | 24.5 | 1.3 | 39.6 | 2.1 | 26.3 | 0.0 | 7 (1% get there) |
-| Greedy | 69% | 6.5 | 0.7 | 10.1 | 3.2 | 30.0 | 1.2 | 33 |
-| Delay, keep 1 | 0% | 77.0 | 5.8 | 6.1 | 0.5 | 6.2 | 0.0 | none get there |
-| Delay, keep 50 | 37% | 29.0 | 5.8 | 8.7 | 3.4 | 24.6 | 1.6 | 19 |
-| Delay, keep 60 | 77% | 13.8 | 5.7 | 7.9 | 4.6 | 24.0 | 1.8 | 34 |
-| Delay, keep 70 | 82% | 8.0 | 5.3 | 8.8 | 3.5 | 25.5 | 1.6 | 38 |
-| Delay, keep 75 | 80% | 4.7 | 3.1 | 9.6 | 3.4 | 27.6 | 1.5 | 38 |
-| Delay in Mud only, keep 70 | 82% | 8.0 | 5.3 | 9.2 | 3.3 | 25.6 | 1.6 | 37 |
+| Random | 0% | 19.3 | 2.9 | 27.6 | 2.5 | 29.3 | 0.0 | 4 (1% get there) |
+| Greedy | 77% | 0.2 | 4.1 | 1.5 | 4.2 | 27.7 | 1.8 | 31 |
+| Delay, keep 1 | 0% | 49.2 | 5.5 | 7.5 | 6.9 | 10.7 | 0.2 | 2 (7% get there) |
+| Delay, keep 35 | 31% | 22.7 | 5.5 | 1.9 | 5.7 | 23.7 | 1.8 | 14 |
+| Delay, keep 45 | 65% | 6.2 | 5.5 | 6.7 | 6.7 | 23.1 | 2.0 | 25 |
+| Delay, keep 55 | 81% | 2.2 | 4.9 | 2.3 | 5.9 | 24.5 | 2.0 | 31 |
+| Delay in Mud only, keep 55 | 79% | 2.2 | 4.9 | 1.5 | 4.2 | 25.5 | 1.9 | 31 |
 
-- **Patience pays.** Keeping 70, the delay player spends 1.5 more quintessence in Mud than greedy, mostly waiting a phase or two for the pool to reach the gates, and leaves with 5.3 metal instead of 0.7: nearly two more runes. It reaches the Mire with more quintessence than greedy and wins 82%. Delaying after Mud adds nothing.
-- **Sacrifice doesn't.** Mud yields about 6 metal at most however long you stall, because every principle comes with at least 4 purification and 30 ends the fight. Spending more buys almost nothing: keeping 50 wins 37%, keeping 1 none. As the rules stand, the answer to "save health or spend it for power" is: save it, but wait for the gates. A real trade would need power that doesn't bring the fight closer to its end.
-- **Building for air and fire now matters.** With rune picks for only water and earth inputs (`--picks wet`), greedy wins 55% instead of 69%, delay 74% instead of 83%.
-- **Half-moon turns need new attacks.** Against today's commissions, discarding and drawing 4 at every full and new moon (`--draw cycle`) wins 7% for greedy and 24% for delay. Mud alone costs greedy twice as much (14.6 against 6.5): a card that can't take anything, like a Fan in Mud, now uses up the turn instead of waiting in hand.
-- **The draw rule** matters most: drawing 4 at every quarter without a cap wins every run (greedy) with 53 left; drawing 2 wins 5%.
+The flare rules side by side, with the commissions above (greedy; fully blocked flares and metal per commission, Mud to the Mire):
 
-Before the Fumarole, with 60 quintessence and three commissions, greedy won 83% and delay (keeping 50) 93%.
+| Flares | Rails | Greedy | Delay, keep 50 | Flares fully blocked | Metal | Biggest play |
+| --- | --- | --- | --- | --- | --- | --- |
+| Whole pool, emptied | off | 5% | 10% | 17%, 1%, 1%, 2% | 3.0, 3.1, 0.5, 0.4 | 4.9, 7.9, 9.2, 13.5 |
+| Whole pool, kept | off | 2% | 2% | 0%, 0%, 0%, 1% | 2.4, 3.8, 0.3, 0.3 | 5.0, 8.6, 9.1, 12.2 |
+| Over the vessel | off | 89% | 85% | 93%, 74%, 23%, 25% | 4.1, 4.2, 2.0, 3.6 | 5.0, 9.4, 10.6, 18.1 |
+| Over the vessel | on | 77% | 72% | 93%, 76%, 22%, 22% | 4.1, 4.2, 1.8, 3.4 | 5.0, 8.2, 7.8, 10.8 |
+
+- **The stock stays.** Under overflow flares a flare trims each element back to the vessel, so the pool keeps enough for a gate: greedy leaves Mud with 4.1 metal (0.7 when flares emptied the pool) without trying.
+- **Full blocks are possible where they should be.** Mud's flares are fully blocked 93% of the time, the peat bog's 76%; the Fumarole and the Mire, which feed faster than an opening deck drains, about 22%. Under the old rule it was 26% in Mud and 3% in the hard fights.
+- **Rails tame the runaway card.** The biggest single play in the Mire drops from 18 to 11; greedy wins 77% instead of 89%.
+- **Patience is worth less now, and sacrifice still nothing.** The pool no longer empties, so even greedy hits the gates; keeping 55 wins 81%, and spending below 45 loses runs fast.
+- **Building for air and fire matters less than before.** Rune picks for only water and earth inputs (`--picks wet`) win 70% instead of 77% (delay 75% instead of 81%).
+- **Half-moon turns become playable.** Discarding and drawing 4 at every full and new moon (`--draw cycle`) wins 53% for greedy, against 7% under the old flare rule.
+- **The draw rule** still matters most: drawing 4 at every quarter without a cap wins every run (greedy); drawing 2 wins 11%.

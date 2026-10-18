@@ -22,7 +22,7 @@
 // would take, arcs light one by one as the take grows, and outputs that would
 // fire glow; the rest dims.
 
-import { GROUND_DRAIN, costOf, type Card, type CardResult, type Output, type Principle, type Recipe } from './engine'
+import { GROUND_DRAIN, RAIL_STEP, costOf, type Card, type CardResult, type Output, type Principle, type Recipe } from './engine'
 import { ELEMENT_COLOR, card as cardSig, element, ground, homunculus, moon, numeral, principle, square, ward } from './sigils'
 
 const LIT = 'var(--lit)'
@@ -90,6 +90,8 @@ export interface CircuitOptions {
   /** What playing it now would do, to light the circuit; omit to draw it plain. */
   live?: CardResult | null
   size?: number
+  /** Draw the card's rail, the most it purifies in one play. */
+  rails?: boolean
 }
 
 /** A card's circuit as an SVG. */
@@ -127,6 +129,15 @@ export function circuitSvg(c: Card, opts: CircuitOptions = {}): string {
     parts.push(square(0, sy, h, { stroke: on(purifying), fill: g === 0 ? (live && purifying ? 'var(--lit-fill)' : 'var(--stage)') : 'var(--stage)', width: g === 0 ? 1.6 : 1.3 }))
   }
   box.add(0, sy, hOut + 1)
+  // The rail: a bar under the square with the most it purifies in one play; it lights when a play would hit it.
+  if (opts.rails) {
+    const clipped = !!live && live.processed * (1 + c.gain) > c.rail
+    const ry = sy + hOut + 5
+    parts.push(line(-hOut - 3, ry, hOut + 3, ry, clipped ? LIT : live ? DIM : LINE, clipped ? 2.2 : 1.6))
+    parts.push(numeral(c.rail, hOut + 10, ry + 0.5, 7.5, clipped ? 'var(--lit)' : 'var(--ink-soft)'))
+    box.add(hOut + 10, ry, 7)
+    box.add(0, ry, 2)
+  }
 
   // The side outputs to the right, each behind its own arcs.
   const angles = outputAngles(c.outputs.length)
@@ -208,7 +219,7 @@ export function recipeSvg(r: Recipe, affordable: boolean, size = 64): string {
 }
 
 /** A rune on offer between fights, drawn as the part it adds. */
-export function offerSvg(r: { kind: 'channel'; element: Parameters<typeof element>[0]; capacity: number } | { kind: 'gain' } | { kind: 'distill'; principle: Principle } | { kind: 'ground' }, size = 44): string {
+export function offerSvg(r: { kind: 'channel'; element: Parameters<typeof element>[0]; capacity: number } | { kind: 'gain' } | { kind: 'distill'; principle: Principle } | { kind: 'ground' } | { kind: 'rail' }, size = 44): string {
   const parts: string[] = []
   if (r.kind === 'channel') {
     const color = r.element === 'any' ? 'var(--gilt)' : ELEMENT_COLOR[r.element]
@@ -226,5 +237,11 @@ export function offerSvg(r: { kind: 'channel'; element: Parameters<typeof elemen
     parts.push(principle(r.principle, 9, 0, 7, { stroke: LIT, width: 1.5 }))
   }
   if (r.kind === 'ground') parts.push(ground(0, 2, 9, { stroke: LIT, width: 1.8 }))
+  if (r.kind === 'rail') {
+    parts.push(square(0, -4, 6.5, { stroke: LIT, width: 1.5 }))
+    parts.push(line(-11, 7, 11, 7, LIT, 2))
+    parts.push(line(0, 9.5, 0, 14, LIT, 1.4))
+    parts.push(numeral(`+${RAIL_STEP}`, 0, -4, 7.5))
+  }
   return `<svg class="circuit" viewBox="-16 -16 32 32" width="${size}" height="${size}" aria-hidden="true">${parts.join('')}</svg>`
 }

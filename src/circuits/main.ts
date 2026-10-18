@@ -12,12 +12,14 @@ import { dialSvg, waitIcon, type DialPreview } from './dial'
 import {
   COMMISSIONS,
   DEFAULT_SETTINGS,
+  DEFAULT_VESSEL,
   ELEMENTS,
   EXTRA_RUNE_PRICE,
   GROUND_DRAIN,
   METAL_GATE,
   PHASE_NAMES,
   PRINCIPLES,
+  RAIL_STEP,
   RECIPES,
   addRune,
   canAfford,
@@ -26,6 +28,7 @@ import {
   drawPhases,
   feedOf,
   fits,
+  flareOf,
   newRun,
   nextFight,
   playCard,
@@ -93,7 +96,10 @@ const PRINCIPLE_USE: Record<Principle, string> = {
   mercury: 'Mercury brews spirits (draw 2) and homunculi, and smelts with salt into silver.',
 }
 const sumCap = (c: Card) => c.channels.reduce((n, ch) => n + ch.capacity, 0)
-const maxPurify = (c: Card) => sumCap(c) * (1 + c.gain)
+const rails = () => ui.run?.settings.rails ?? ui.settings.rails
+/** The most a card purifies in one play: all it can take, times its gain, held to its rail when rails are on. */
+const maxPurify = (c: Card) => (rails() ? Math.min(sumCap(c) * (1 + c.gain), c.rail) : sumCap(c) * (1 + c.gain))
+const heldNote = (c: Card) => (rails() && sumCap(c) * (1 + c.gain) > c.rail ? ` (its rail holds it to ${c.rail})` : '')
 
 function outputWords(o: Output): string {
   return o.kind === 'ward' ? 'Ward 1 for each it takes (the shield)' : `1 ${o.principle} once it takes ${o.gate} or more (${o.gate} arcs)`
@@ -105,15 +111,17 @@ function cardLines(c: Card): string[] {
     `Takes ${ins} and purifies 1 for each${c.gain ? `, ×${1 + c.gain} through the ${c.gain === 1 ? 'square' : 'squares'} drawn around its square` : ''}.`,
     `${cap(c.outputs.map(outputWords).join('; '))}.`,
     c.ground ? `${c.ground === 1 ? 'Its ground drains' : 'Its grounds drain'} ${GROUND_DRAIN * c.ground} more, purifying nothing.` : '',
+    rails() ? `Purifies at most ${c.rail} in one play (the bar under its square).` : '',
   ].filter(Boolean)
 }
 
 function nowLine(run: Run, c: Card): string {
-  const r = resolveCard(c, run.fight.pool)
+  const r = resolveCard(c, run.fight.pool, run.settings.rails)
   if (!r.processed && !Object.values(r.drained).some(Boolean)) return 'Now: nothing in the pool for it.'
+  const held = run.settings.rails && r.processed * (1 + c.gain) > c.rail
   const got = PRINCIPLES.filter((p) => r.principles[p]).map((p) => `${r.principles[p]} ${p}`)
   const short = c.outputs.filter((o) => o.kind === 'principle' && r.processed > 0 && r.processed < o.gate).map((o) => `${o.gate - r.processed} short of ${(o as { principle: Principle }).principle}`)
-  return `Now: takes ${poolTotal(r.drained)}, purifies ${r.purification}${got.length ? `, yields ${got.join(' and ')}` : ''}${r.ward ? `, Ward ${r.ward}` : ''}${short.length ? `; ${short.join(', ')}` : ''}.`
+  return `Now: takes ${poolTotal(r.drained)}, purifies ${r.purification}${held ? ' (held to its rail)' : ''}${got.length ? `, yields ${got.join(' and ')}` : ''}${r.ward ? `, Ward ${r.ward}` : ''}${short.length ? `; ${short.join(', ')}` : ''}.`
 }
 
 function runeTitle(r: RewardRune): string {
@@ -126,6 +134,8 @@ function runeTitle(r: RewardRune): string {
       return `Distil ${r.principle}`
     case 'ground':
       return 'Ground'
+    case 'rail':
+      return 'Rail'
   }
 }
 
@@ -139,6 +149,8 @@ function runeText(r: RewardRune): string {
       return `A new output on the right of the card, behind ${METAL_GATE} arcs: whenever it takes ${METAL_GATE} or more, it also yields 1 ${r.principle}. ${PRINCIPLE_USE[r.principle]}`
     case 'ground':
       return `A ground hanging from the card's collecting stage: it also drains ${GROUND_DRAIN} of whatever is most plentiful, purifying nothing. Less is left to flare.`
+    case 'rail':
+      return `Raises the bar under the card's square: it can purify ${RAIL_STEP} more in one play. Whatever a card takes beyond its rail still drains the pool, but purifies nothing more.`
   }
 }
 
@@ -147,13 +159,15 @@ function changeText(r: RewardRune, before: Card): string {
   const after = addRune(before, r)
   switch (r.kind) {
     case 'channel':
-      return `${before.name} would take up to ${sumCap(after)} instead of ${sumCap(before)}, for up to ${maxPurify(after)} purification.`
+      return `${before.name} would take up to ${sumCap(after)} instead of ${sumCap(before)}, for up to ${maxPurify(after)} purification${heldNote(after)}.`
     case 'gain':
-      return `${before.name} would purify up to ${maxPurify(after)} instead of ${maxPurify(before)}, in ${ticks(costOf(after))} of the moon instead of ${ticks(costOf(before))}.`
+      return `${before.name} would purify up to ${maxPurify(after)} instead of ${maxPurify(before)}${heldNote(after)}, in ${ticks(costOf(after))} of the moon instead of ${ticks(costOf(before))}.`
     case 'distill':
       return `${before.name} would also yield 1 ${r.principle} whenever it takes ${METAL_GATE} or more${sumCap(before) < METAL_GATE ? `, but it can take only ${sumCap(before)} until it gets another input` : ''}.`
     case 'ground':
       return `${before.name} would also drain ${GROUND_DRAIN} more of anything each time you play it.`
+    case 'rail':
+      return `${before.name} would purify up to ${maxPurify(after)} in one play instead of ${maxPurify(before)}${maxPurify(after) === maxPurify(before) ? ': it cannot take enough to use the higher rail yet' : ''}.`
   }
 }
 
@@ -163,10 +177,16 @@ function situationNote(run: Run): [string, string] {
   const up = upcoming(f, 8, drawAt)
   const atk = up.find((x) => x.attack)
   const drw = up.find((x) => x.draw)
-  const threat = Math.max(0, poolTotal(f.pool) - f.ward)
+  const rule = run.settings.flare
+  const threat = Math.max(0, poolTotal(flareOf(f.pool, f.commission, rule)) - f.ward)
+  const vessel = f.commission.vessel ?? DEFAULT_VESSEL
   const title = atk ? `${PHASE_NAMES[atk.phase]} in ${ticks(atk.pos - f.dial)}` : 'The moon'
   const lines = [
-    atk ? `${f.commission.name} flares there: whatever is in the pool, less Ward (${threat} now, the red badge).` : '',
+    atk
+      ? rule === 'overflow'
+        ? `${f.commission.name} flares there: whatever is above its vessel (${vessel} of each), less Ward (${threat} now, the red badge); the rest stays for you.`
+        : `${f.commission.name} flares there: whatever is in the pool, less Ward (${threat} now, the red badge)${rule === 'keep' ? '; it stays in the pool' : ''}.`
+      : '',
     drw ? `You ${run.settings.draw === 'cycle' ? 'discard and draw' : 'draw'} at the ${PHASE_NAMES[drw.phase].toLowerCase()}${drw === atk ? ', after the flare' : ''}.` : '',
     'Pick a card to see what it would do.',
   ]
@@ -226,6 +246,8 @@ function legendText(): string {
     ${legendRow(I(principle('salt', -6, 0, 6, { stroke: 'var(--lit)' }) + principle('mercury', 6, 0, 6, { stroke: 'var(--lit)' })), 'Salt, sulfur and mercury: the principles a card yields from its outputs. They brew recipes and smelt into metal.')}
     ${legendRow(I(ward(0, 0, 9, { stroke: 'var(--lit)' })), 'A shield is Ward: it catches the next flare. A shield on a card raises Ward, 1 for each it takes.')}
     ${legendRow(I(ground(0, -1, 8, { stroke: 'var(--lit)' })), `A ground drains ${GROUND_DRAIN} more instability away, purifying nothing.`)}
+    ${legendRow(I(square(0, -3, 5, { stroke: 'var(--lit)' }) + '<path d="M-9 6H9" stroke="var(--lit)" stroke-width="1.8" stroke-linecap="round"/>'), 'A bar under the square is the rail: the most the card purifies in one play. It lights when a play would hit it.')}
+    ${legendRow(I(element('earth', 0, 0, 7, { stroke: 'var(--earth)' }) + element('earth', 0, 0, 9.5, { stroke: 'var(--fire)', width: 1.2 })), "In the pool, a red rim and a red count mean that element is over the commission's vessel: that much would flare.")}
     ${legendRow(I(metal(0, 0, 8, { stroke: 'var(--lit)' })), 'Metal, counted by worth: what is left after a commission smelts into silver and lead. It buys extra runes.')}
     ${legendRow(I(homunculus(0, 0, 9, { stroke: 'var(--lit)' })), 'A homunculus purifies on its own at every phase.')}
   </ul>`
@@ -268,10 +290,10 @@ function hand(run: Run): string {
   if (!f.hand.length) return `<section class="hand-row empty"><p>No cards in hand until the next draw.</p></section>`
   return `<section class="hand-row" aria-label="Hand">${f.hand
     .map((c) => {
-      const live = resolveCard(c, f.pool)
+      const live = resolveCard(c, f.pool, run.settings.rails)
       const on = ui.pick?.kind === 'card' && ui.pick.id === c.id
       const idle = !live.processed && !Object.values(live.drained).some(Boolean)
-      return `<button class="ccard ${on ? 'is-on' : ''} ${idle ? 'idle' : ''}" data-act="pick-card" data-id="${c.id}" aria-pressed="${on}" aria-label="${esc(c.name)}: would purify ${live.purification}">${circuitSvg(c, { live, size: 120 })}<span class="cname">${esc(c.name)}</span></button>`
+      return `<button class="ccard ${on ? 'is-on' : ''} ${idle ? 'idle' : ''}" data-act="pick-card" data-id="${c.id}" aria-pressed="${on}" aria-label="${esc(c.name)}: would purify ${live.purification}">${circuitSvg(c, { live, size: 120, rails: run.settings.rails })}<span class="cname">${esc(c.name)}</span></button>`
     })
     .join('')}</section>`
 }
@@ -331,7 +353,9 @@ function popupView(run: Run | null): string {
       ${run ? `<p class="label">What happened</p><ol class="pop-list log">${run.fight.log.slice(0, 10).map((l) => `<li>${esc(l)}</li>`).join('')}</ol>` : ''}
       <p class="label">Tuning, on restart</p>
       <div class="tune"><label>Drawing <select id="c-draw">${opt('refill-4', drawKey, 'Refill to 4 at every quarter')}${opt('cycle-4', drawKey, 'Discard and draw 4 at full and new moons')}${opt('draw-4', drawKey, 'Draw 4 at every quarter')}${opt('draw-2', drawKey, 'Draw 2 at every quarter')}${opt('refill-5', drawKey, 'Refill to 5 at every quarter')}</select></label>
-      <label>Quintessence <select id="c-stock">${[60, 80, 100].map((v) => opt(String(v), String(s.stock), String(v))).join('')}</select></label></div>`
+      <label>Flares <select id="c-flare">${opt('overflow', s.flare, 'Only what is over the vessel')}${opt('clear', s.flare, 'The whole pool, emptying it')}${opt('keep', s.flare, 'The whole pool, which stays')}</select></label>
+      <label>Rails <select id="c-rails">${opt('on', s.rails ? 'on' : 'off', 'Cards purify at most their rail')}${opt('off', s.rails ? 'on' : 'off', 'No rails')}</select></label>
+      <label>Quintessence <select id="c-stock">${[40, 60, 80, 100].map((v) => opt(String(v), String(s.stock), String(v))).join('')}</select></label></div>`
   }
   if (!title) return ''
   return `<div class="pop-veil" data-act="close"></div>
@@ -346,7 +370,7 @@ function fightView(run: Run): string {
   const preview = previewOf(run, after)
   return `<div class="cx fight">
     ${header(run, run.fight.commission.name)}
-    <button class="dial-box ${ui.focus === 'dial' ? 'is-on' : ''}" data-act="dial" aria-label="The moon: what comes next">${dialSvg(run.fight, feedOf(run.fight.commission, run.fight.buffs), drawPhases(run.settings), preview, !!ui.fx?.flared)}</button>
+    <button class="dial-box ${ui.focus === 'dial' ? 'is-on' : ''}" data-act="dial" aria-label="The moon: what comes next">${dialSvg(run.fight, feedOf(run.fight.commission, run.fight.buffs), drawPhases(run.settings), run.settings.flare, preview, !!ui.fx?.flared)}</button>
     ${fightNote(run)}
     <div class="bench">${materials(run)}${recipes(run)}</div>
     ${ui.flash ? `<p class="flash">${esc(ui.flash)}</p>` : ''}
@@ -359,7 +383,7 @@ function rewardNote(run: Run): string {
   const r = ui.offer !== null ? run.offer[ui.offer] : null
   const target = ui.target !== null ? run.deck.find((c) => c.id === ui.target) : null
   if (r && target) {
-    const art = `${circuitSvg(target, { size: 84 })}<span class="arrow" aria-hidden="true">→</span>${circuitSvg(addRune(target, r), { size: 84 })}`
+    const art = `${circuitSvg(target, { size: 84, rails: run.settings.rails })}<span class="arrow" aria-hidden="true">→</span>${circuitSvg(addRune(target, r), { size: 84, rails: run.settings.rails })}`
     return noteView(`${runeTitle(r)} on ${target.name}`, `${esc(changeText(r, target))}`, art)
   }
   if (r) return noteView(runeTitle(r), `${esc(runeText(r))} The cards it fits are lit; tap one to see it before and after.`)
@@ -395,7 +419,7 @@ function rewardView(run: Run): string {
       .map((c) => {
         const ok = sel ? fits(sel, c) : true
         const on = sel ? ui.target === c.id : ui.look === c.id
-        return `<button class="ccard ${sel && ok ? 'fits' : ''} ${on ? 'is-on' : ''}" data-act="deck-card" data-id="${c.id}" ${ok ? '' : 'disabled'} aria-pressed="${on}" aria-label="${esc(c.name)}">${circuitSvg(c, { size: 110 })}<span class="cname">${esc(c.name)}</span></button>`
+        return `<button class="ccard ${sel && ok ? 'fits' : ''} ${on ? 'is-on' : ''}" data-act="deck-card" data-id="${c.id}" ${ok ? '' : 'disabled'} aria-pressed="${on}" aria-label="${esc(c.name)}">${circuitSvg(c, { size: 110, rails: run.settings.rails })}<span class="cname">${esc(c.name)}</span></button>`
       })
       .join('')}</section>
     <div class="cx-actions">
@@ -421,7 +445,7 @@ function endView(run: Run): string {
 function startView(): string {
   const wash = newRun(1).deck[0]
   return `<div class="cx start">
-    <div class="start-art">${circuitSvg(wash, { size: 220 })}</div>
+    <div class="start-art">${circuitSvg(wash, { size: 220, rails: ui.settings.rails })}</div>
     <div class="start-words">
       <p class="eyebrow">A prototype</p>
       <h1>Alchemical Circuits</h1>
@@ -452,6 +476,10 @@ function readTuning() {
   }
   const stock = (document.getElementById('c-stock') as HTMLSelectElement | null)?.value
   if (stock) ui.settings.stock = Number(stock)
+  const flare = (document.getElementById('c-flare') as HTMLSelectElement | null)?.value
+  if (flare) ui.settings.flare = flare as Settings['flare']
+  const railsOn = (document.getElementById('c-rails') as HTMLSelectElement | null)?.value
+  if (railsOn) ui.settings.rails = railsOn === 'on'
 }
 
 function apply(next: Run) {
