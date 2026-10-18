@@ -1,8 +1,8 @@
 // Circuits: a card is a small circuit. The commission feeds instability into a
 // pool, element by element, on a moon dial; cards drain it through their input
 // channels and turn what they take into purification (one number) and the
-// three principles (salt, sulfur, mercury). Whatever is left in the pool when
-// the commission attacks flares and costs quintessence. There are no turns:
+// three principles (salt, sulfur, mercury). When the commission attacks, what
+// is in the pool flares and costs quintessence, and the pool stays. No turns:
 // every card costs time on the dial, and the dial's phases carry the events.
 // See CIRCUITS.md.
 
@@ -68,9 +68,11 @@ export interface Card {
   outputs: Output[]
   /** Gain stages: each multiplies purification by one more (×2, ×3, …) and costs a tick (a sixteenth of the moon) more. */
   gain: number
-  /** The most it purifies in one play, when rails are on; rail runes raise it. */
-  rail: number
-  /** Grounds: each drains up to GROUND_DRAIN more of any instability, purifying nothing. */
+  /**
+   * Ground stages, each a stage of its own beside the collector: it takes up
+   * to GROUND_DRAIN of whatever is most plentiful (a wild input) and grounds it
+   * (its output), purifying nothing.
+   */
   ground: number
 }
 
@@ -81,10 +83,7 @@ export const GROUND_DRAIN = 3
 export const METAL_GATE = 4
 export const BASE_COST = 2
 /** Most of each part a card can hold. */
-export const CAPS = { channels: 3, gain: 2, outputs: 3, ground: 2, rail: 2 }
-/** A card's rail to start, and what each rail rune adds. */
-export const RAIL_BASE = 10
-export const RAIL_STEP = 5
+export const CAPS = { channels: 3, gain: 2, outputs: 3, ground: 2 }
 /** Time a card takes on the dial, in ticks: an eighth of the moon (2 ticks), and a tick more for each gain stage. */
 export const costOf = (c: Card) => BASE_COST + c.gain
 
@@ -99,17 +98,19 @@ export interface CardResult {
   ward: number
   /** What each channel took, in the card's order. */
   took: number[]
+  /** What each ground stage took. */
+  grounded: number[]
 }
 
 /**
  * What playing a card does to this pool. Channels for one element take first,
  * up to their capacity; any-element channels then take from whatever is most
- * plentiful; grounds last. Purification is what the channels took, times
+ * plentiful; ground stages last. Purification is what the channels took, times
  * (1 + gain). Each side output whose gate the channels reached fires: a
  * principle output yields 1 of its principle, a Ward output Ward 1 for each
  * taken.
  */
-export function resolveCard(card: Card, pool: Pool, rails = false): CardResult {
+export function resolveCard(card: Card, pool: Pool): CardResult {
   const left = { ...pool }
   const drained = emptyPool()
   const principles: Record<Principle, number> = { salt: 0, sulfur: 0, mercury: 0 }
@@ -143,12 +144,13 @@ export function resolveCard(card: Card, pool: Pool, rails = false): CardResult {
     if (o.kind === 'principle') principles[o.principle] += 1
     else ward += processed
   }
+  const grounded: number[] = []
   for (let g = 0; g < card.ground; g++) {
     let need = GROUND_DRAIN
     while (need > 0 && poolTotal(left) > 0) need -= takeFrom(most(), need)
+    grounded.push(GROUND_DRAIN - need)
   }
-  const raw = processed * (1 + card.gain)
-  return { drained, processed, purification: rails ? Math.min(raw, card.rail) : raw, principles, ward, took: took_ }
+  return { drained, processed, purification: processed * (1 + card.gain), principles, ward, took: took_, grounded }
 }
 
 // ---------------------------------------------------------------------------
@@ -162,43 +164,35 @@ export interface Commission {
   require: number
   /** Instability fed into the pool at every phase, by element. */
   feed: Partial<Pool>
-  /** Phases at which whatever is left in the pool flares. */
+  /** Phases at which the pool flares: what is in it costs quintessence, less Ward, and stays. */
   attacks: Phase[]
   /** Phases at which it grows stronger, adding buffFeed to its feed. */
   buffs?: Phase[]
   buffFeed?: Partial<Pool>
-  /** Under the overflow rule: how much of each element the vessel holds safely; only what is above it flares. */
-  vessel?: number
 }
 
-/** The vessel a commission holds its pool in, under the overflow rule. */
-export const DEFAULT_VESSEL = 6
-
 export const COMMISSIONS: Commission[] = [
-  { key: 'mud', name: 'Mud', blurb: 'Feeds mostly water and some earth. Its vessel holds 4 of each; what is above flares at every full and new moon.', require: 30, feed: { water: 4, earth: 2 }, attacks: ['full', 'new'], vessel: 4 },
-  { key: 'peat', name: 'Peat bog', blurb: 'Water, earth and a smoulder of fire. Its vessel holds 4 of each; what is above flares at every full and new moon.', require: 45, feed: { water: 3, earth: 3, fire: 1 }, attacks: ['full', 'new'], vessel: 4 },
+  { key: 'mud', name: 'Mud', blurb: 'Feeds mostly water and a little earth. Flares at every full and new moon.', require: 30, feed: { water: 3, earth: 1 }, attacks: ['full', 'new'] },
+  { key: 'peat', name: 'Peat bog', blurb: 'Water, earth and a smoulder of fire. Flares at every full and new moon.', require: 45, feed: { water: 2, earth: 2, fire: 1 }, attacks: ['full', 'new'] },
   {
     key: 'fumarole',
     name: 'Fumarole',
-    blurb: 'A vent of hot breath: air and fire, a little water. Its vessel holds 4 of each; what is above flares at every full and new moon.',
+    blurb: 'A vent of hot breath: air and fire, a little water. Flares at every full and new moon.',
     require: 40,
-    feed: { air: 3, fire: 3, water: 1 },
+    feed: { air: 2, fire: 2, water: 1 },
     attacks: ['full', 'new'],
-    vessel: 4,
   },
   {
     key: 'mire',
     name: 'The Mire',
-    blurb: 'A boss. Its vessel holds only 3 of each; what is above flares at every quarter. Grows at every crescent and gibbous moon, adding earth to its feed.',
+    blurb: 'A boss. Grows at every crescent and gibbous moon, adding earth to its feed, and flares at every quarter.',
     require: 50,
-    feed: { water: 4, earth: 3, fire: 1 },
+    feed: { water: 3, earth: 2, fire: 1 },
     attacks: ['first', 'full', 'last', 'new'],
     buffs: ['waxing-gibbous', 'waning-gibbous', 'waning-crescent', 'waxing-crescent'],
     buffFeed: { earth: 1 },
-    vessel: 3,
   },
 ]
-
 
 /** Its feed after this many buffs. */
 export function feedOf(c: Commission, buffs: number): Pool {
@@ -247,7 +241,6 @@ export type RewardRune =
   | { kind: 'gain' }
   | { kind: 'distill'; principle: Principle }
   | { kind: 'ground' }
-  | { kind: 'rail' }
 
 export const REWARD_POOL: RewardRune[] = [
   { kind: 'channel', element: 'water', capacity: 5 },
@@ -261,22 +254,13 @@ export const REWARD_POOL: RewardRune[] = [
   { kind: 'distill', principle: 'sulfur' },
   { kind: 'distill', principle: 'mercury' },
   { kind: 'ground' },
-  { kind: 'rail' },
 ]
 
 export const EXTRA_RUNE_PRICE = 3
 
 /** Whether this rune fits on this card: each kind of part has a cap. */
 export const fits = (r: RewardRune, c: Card) =>
-  r.kind === 'channel'
-    ? c.channels.length < CAPS.channels
-    : r.kind === 'gain'
-      ? c.gain < CAPS.gain
-      : r.kind === 'distill'
-        ? c.outputs.length < CAPS.outputs
-        : r.kind === 'rail'
-          ? c.rail < RAIL_BASE + CAPS.rail * RAIL_STEP
-          : c.ground < CAPS.ground
+  r.kind === 'channel' ? c.channels.length < CAPS.channels : r.kind === 'gain' ? c.gain < CAPS.gain : r.kind === 'distill' ? c.outputs.length < CAPS.outputs : c.ground < CAPS.ground
 
 export function addRune(c: Card, r: RewardRune): Card {
   if (!fits(r, c)) return c
@@ -289,8 +273,6 @@ export function addRune(c: Card, r: RewardRune): Card {
       return { ...c, outputs: [...c.outputs, { kind: 'principle', principle: r.principle, gate: METAL_GATE }] }
     case 'ground':
       return { ...c, ground: c.ground + 1 }
-    case 'rail':
-      return { ...c, rail: c.rail + RAIL_STEP }
   }
 }
 
@@ -306,19 +288,11 @@ export interface Settings {
    * a turn, so at every full and new moon, discard what is left and draw `hand`.
    */
   draw: 'refill' | 'draw' | 'cycle'
-  /**
-   * What a flare does to the pool. clear: all of it flares and the pool is
-   * emptied; keep: all of it flares but it stays; overflow: only what is above
-   * the commission's vessel flares, and only that is lost.
-   */
-  flare: 'clear' | 'keep' | 'overflow'
-  /** Whether cards purify at most their rail per play. */
-  rails: boolean
 }
 
 /** The phases at which you draw under these settings (the opening always draws). */
 export const drawPhases = (s: Settings): Phase[] => (s.draw === 'cycle' ? ['full', 'new'] : DRAW_PHASES)
-export const DEFAULT_SETTINGS: Settings = { stock: 60, hand: 4, draw: 'refill', flare: 'overflow', rails: true }
+export const DEFAULT_SETTINGS: Settings = { stock: 80, hand: 4, draw: 'refill' }
 
 export interface Fight {
   commission: Commission
@@ -359,7 +333,7 @@ export interface Run {
 
 const channel = (element: Elemental | 'any', capacity: number): Channel => ({ element, capacity })
 const yields = (principle: Principle): Output => ({ kind: 'principle', principle, gate: METAL_GATE })
-const card = (id: number, name: string, ch: Channel, out: Output): Card => ({ id, name, channels: [ch], outputs: [out], gain: 0, ground: 0, rail: RAIL_BASE })
+const card = (id: number, name: string, ch: Channel, out: Output): Card => ({ id, name, channels: [ch], outputs: [out], gain: 0, ground: 0 })
 
 /** The opening deck: one-input circuits, mostly water and earth. The metal creators yield their principle only from 4 or more; the Sieve raises Ward instead. */
 export function startingDeck(): Card[] {
@@ -431,14 +405,6 @@ function drawCards(run: Run, n: number): Run {
   return { ...run, seed: rng.state(), fight: { ...run.fight, hand, draw, discard } }
 }
 
-/** What would flare from this pool under a flare rule, by element: all of it, or what is above the vessel. */
-export function flareOf(pool: Pool, c: Commission, rule: Settings['flare']): Pool {
-  const out = emptyPool()
-  const cap = rule === 'overflow' ? (c.vessel ?? DEFAULT_VESSEL) : 0
-  for (const e of ELEMENTS) out[e] = Math.max(0, pool[e] - cap)
-  return out
-}
-
 /** What happens at a phase: helpers work, the commission attacks and grows, it feeds the pool, and at the quarters you draw. */
 function phaseEvents(run: Run, pos: number, opening = false): Run {
   const phase = phaseAt(pos)!
@@ -464,16 +430,14 @@ function phaseEvents(run: Run, pos: number, opening = false): Run {
   }
   let paid = 0
   if (!opening && c.attacks.includes(phase)) {
-    const rule = run.settings.flare
-    const flaring = flareOf(f.pool, c, rule)
-    const flare = poolTotal(flaring)
+    const flare = poolTotal(f.pool)
     const absorbed = Math.min(f.ward, flare)
     paid = flare - absorbed
     f.flares = [...f.flares, flare]
     f.ward -= absorbed
     f.paid += paid
-    if (rule !== 'keep') for (const e of ELEMENTS) f.pool[e] -= flaring[e]
-    notes.push(flare ? `${c.name} flares ${flare}${absorbed ? `, Ward takes ${absorbed}` : ''}${paid ? `: pay ${paid}` : ''}` : `${c.name} flares, but nothing ${rule === 'overflow' ? 'is over the vessel' : 'is in the pool'}`)
+    // The pool stays: a flare costs what is in it, but does not empty it.
+    notes.push(flare ? `${c.name} flares ${flare}${absorbed ? `, Ward takes ${absorbed}` : ''}${paid ? `: pay ${paid}` : ''}` : `${c.name} flares, but the pool is empty`)
   }
   if (!opening && c.buffs?.includes(phase)) {
     f.buffs += 1
@@ -515,7 +479,7 @@ function finish(run: Run): Run {
   const metals = run.metals + smelted.value
   if (run.fightIndex >= COMMISSIONS.length - 1) return { ...run, metals, smelted, stage: 'won' }
   const rng = makeRng(run.seed)
-  const offer = rng.shuffle(REWARD_POOL.filter((r) => r.kind !== 'rail' || run.settings.rails)).slice(0, 3)
+  const offer = rng.shuffle(REWARD_POOL).slice(0, 3)
   return { ...run, metals, smelted, stage: 'reward', offer, tookFree: false, seed: rng.state() }
 }
 
@@ -536,7 +500,7 @@ export function playCard(run: Run, id: number): Run {
   if (run.stage !== 'fight') return run
   const c = run.fight.hand.find((x) => x.id === id)
   if (!c) throw new Error('That card is not in hand.')
-  const r = resolveCard(c, run.fight.pool, run.settings.rails)
+  const r = resolveCard(c, run.fight.pool)
   const pool = { ...run.fight.pool }
   for (const e of ELEMENTS) pool[e] -= r.drained[e]
   const principles = { ...run.fight.principles }
@@ -626,9 +590,7 @@ export function runeWords(r: RewardRune): string {
     case 'distill':
       return `Distil ${r.principle}: 1 ${r.principle} whenever the card takes ${METAL_GATE} or more`
     case 'ground':
-      return `Ground: drains ${GROUND_DRAIN} more of anything, purifying nothing`
-    case 'rail':
-      return `Rail: purifies up to ${RAIL_STEP} more in one play`
+      return `Ground: a new stage that takes up to ${GROUND_DRAIN} of anything and grounds it, purifying nothing`
   }
 }
 

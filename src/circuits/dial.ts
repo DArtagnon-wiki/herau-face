@@ -9,7 +9,7 @@
 // where the needle would land, how far purification would reach, what the
 // pool would lose.
 
-import { DEFAULT_VESSEL, ELEMENTS, PHASES, PHASE_CYCLE, TICKS, flareOf, phaseAt, poolTotal, type Fight, type Phase, type Pool, type Settings } from './engine'
+import { ELEMENTS, PHASES, PHASE_CYCLE, TICKS, phaseAt, poolTotal, type Fight, type Phase, type Pool } from './engine'
 import { ELEMENT_COLOR, card as cardSig, element, moon, numeral, quintessence } from './sigils'
 
 const rad = (deg: number) => (deg * Math.PI) / 180
@@ -51,11 +51,10 @@ export interface DialPreview {
   flares: number[]
 }
 
-export function dialSvg(f: Fight, feed: Pool, drawAt: Phase[], rule: Settings['flare'], preview?: DialPreview | null, flareFx = false): string {
+export function dialSvg(f: Fight, feed: Pool, drawAt: Phase[], preview?: DialPreview | null, flareFx = false): string {
   const parts: string[] = []
   const R = 136
   const c = f.commission
-  const flaring = flareOf(f.pool, c, rule)
   parts.push(`<circle r="${R}" fill="var(--well)" stroke="var(--line)" stroke-opacity="0.55" stroke-width="1.3"/>`)
   for (let i = 0; i < TICKS * 2; i++) {
     const a = rad(-90 + (i * 360) / (TICKS * 2))
@@ -87,7 +86,7 @@ export function dialSvg(f: Fight, feed: Pool, drawAt: Phase[], rule: Settings['f
       if (m === 'draw') parts.push(cardSig(mx, my, 6, { stroke: 'var(--ink-soft)', width: 1.3 }))
     })
     if (pos === nextAttack) {
-      const threat = Math.max(0, poolTotal(flaring) - f.ward)
+      const threat = Math.max(0, poolTotal(f.pool) - f.ward)
       const [bx, by] = at(pos, R + 23)
       // Beside the star, a little way clockwise along the ring.
       const a = rad(angleOf(pos))
@@ -119,11 +118,8 @@ export function dialSvg(f: Fight, feed: Pool, drawAt: Phase[], rule: Settings['f
     const color = ELEMENT_COLOR[e]
     const fill = n ? `color-mix(in srgb, ${color} ${Math.round(18 + 62 * Math.min(1, n / 10))}%, transparent)` : 'none'
     const down = e === 'water' || e === 'earth'
-    // Over the vessel: a red rim, and the count in red; that much would flare.
-    const over = rule === 'overflow' && flaring[e] > 0
-    if (over) parts.push(element(e, x, y, 29.5, { stroke: 'var(--fire)', width: 1.6, opacity: 0.85 }))
     parts.push(element(e, x, y, 25, { stroke: n ? color : 'var(--dim)', fill, width: 2 }))
-    parts.push(numeral(n, x, y + (down ? -4 : 6), 21, over ? 'var(--fire)' : n ? 'var(--ink)' : 'var(--ink-faint)'))
+    parts.push(numeral(n, x, y + (down ? -4 : 6), 21, n ? 'var(--ink)' : 'var(--ink-faint)'))
     if (preview?.drain[e]) parts.push(numeral(`−${preview.drain[e]}`, x + (x < 0 ? -33 : 33), y + (down ? -4 : 6), 14, 'var(--lit)'))
     // What the commission feeds it at each phase, at the triangle's point.
     if (feed[e]) parts.push(numeral(`+${feed[e]}`, x, down ? y + 33 : y - 32, 11, 'var(--ink-faint)'))
@@ -131,8 +127,6 @@ export function dialSvg(f: Fight, feed: Pool, drawAt: Phase[], rule: Settings['f
   // Purified so far, in the middle.
   parts.push(numeral(preview ? preview.purified : f.purified, 0, -4, 22, preview ? 'var(--lit)' : 'var(--ink)'))
   parts.push(numeral(`/${c.require}`, 0, 15, 11, 'var(--ink-faint)'))
-  // The vessel: how much of each element is safe from a flare.
-  if (rule === 'overflow') parts.push(numeral(`vessel ${c.vessel ?? DEFAULT_VESSEL}`, 0, 72, 10.5, 'var(--ink-faint)'))
   return `<svg class="dial${flareFx ? ' flared' : ''}" viewBox="-182 -182 364 364" role="img" aria-label="Moon dial: ${f.purified} of ${c.require} purified; pool ${ELEMENTS.map((e) => `${f.pool[e]} ${e}`).join(', ')}">${parts.join('')}</svg>`
 }
 

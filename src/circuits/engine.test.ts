@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { COMMISSIONS, DEFAULT_SETTINGS, METAL_GATE, RAIL_BASE, RAIL_STEP, TINCTURE_WARD, flareOf, addRune, fits, costOf, craft, emptyPool, newRun, nextFight, playCard, poolTotal, resolveCard, smelt, startingDeck, takeRune, upcoming, wait, type Card, type Run } from './engine'
+import { COMMISSIONS, DEFAULT_SETTINGS, METAL_GATE, TINCTURE_WARD, addRune, fits, costOf, craft, emptyPool, newRun, nextFight, playCard, poolTotal, resolveCard, smelt, startingDeck, takeRune, upcoming, wait, type Card, type Run } from './engine'
 
 const pool = (p: Partial<Record<'water' | 'earth' | 'air' | 'fire', number>>) => ({ ...emptyPool(), ...p })
-const wash: Card = { id: 1, name: 'Wash', channels: [{ element: 'water', capacity: 5 }], outputs: [{ kind: 'principle', principle: 'mercury', gate: 1 }], gain: 0, ground: 0, rail: 10 }
+const wash: Card = { id: 1, name: 'Wash', channels: [{ element: 'water', capacity: 5 }], outputs: [{ kind: 'principle', principle: 'mercury', gate: 1 }], gain: 0, ground: 0 }
 
 describe('a circuit card', () => {
   it('takes up to its capacity of its element, purifies that much, and leaves its principle', () => {
@@ -53,15 +53,15 @@ describe('a circuit card', () => {
   })
 
   it('carries Ward from a Sieve into the next flare', () => {
-    let run = newRun(1, { ...DEFAULT_SETTINGS, flare: 'clear' })
+    let run = newRun(1)
     const sieve = startingDeck().find((c) => c.name === 'Sieve')!
     run = { ...run, fight: { ...run.fight, hand: [sieve, ...run.fight.hand.slice(1)] } }
     run = playCard(run, sieve.id)
     expect(run.fight.ward).toBe(3)
-    // 6 fed, 3 taken, 6 more fed: 9 flare at the full moon, Ward takes 3.
+    // 4 fed, 3 taken, 4 fed at the first quarter: 5 flare at the full moon, Ward takes 3.
     run = wait(run)
-    expect(run.fight.flares).toEqual([9])
-    expect(run.quintessence).toBe(DEFAULT_SETTINGS.stock - 6)
+    expect(run.fight.flares).toEqual([5])
+    expect(run.quintessence).toBe(DEFAULT_SETTINGS.stock - 2)
     expect(run.fight.ward).toBe(0)
   })
 
@@ -84,19 +84,8 @@ describe('a circuit card', () => {
     expect(r.purification).toBe(15)
     expect(r.principles.mercury).toBe(1)
     expect(r.drained).toEqual(pool({ water: 5, earth: 3 }))
+    expect(r.grounded).toEqual([3])
     expect(costOf(big)).toBe(4)
-  })
-
-  it('holds purification to its rail when rails are on; rail runes raise it', () => {
-    const big: Card = { ...wash, channels: [{ element: 'water', capacity: 5 }, { element: 'earth', capacity: 5 }], gain: 1 }
-    const p = pool({ water: 5, earth: 5 })
-    expect(resolveCard(big, p).purification).toBe(20)
-    expect(resolveCard(big, p, true).purification).toBe(RAIL_BASE)
-    expect(resolveCard(big, p, true).drained).toEqual(p)
-    const raised = addRune(big, { kind: 'rail' })
-    expect(raised.rail).toBe(RAIL_BASE + RAIL_STEP)
-    expect(resolveCard(raised, p, true).purification).toBe(RAIL_BASE + RAIL_STEP)
-    expect(fits({ kind: 'rail' }, addRune(raised, { kind: 'rail' }))).toBe(false)
   })
 
   it('grows by adding runes, up to a cap for each kind of part', () => {
@@ -116,7 +105,7 @@ describe('the moon dial', () => {
     const run = newRun(1)
     expect(run.fight.dial).toBe(0)
     expect(run.fight.hand).toHaveLength(4)
-    expect(run.fight.pool).toEqual(pool(COMMISSIONS[0].feed))
+    expect(run.fight.pool).toEqual(pool({ water: 3, earth: 1 }))
   })
 
   it('moves an eighth of the moon for a plain card, feeding again at the next phase', () => {
@@ -126,39 +115,22 @@ describe('the moon dial', () => {
     const took = poolTotal(resolveCard(card, run.fight.pool).drained)
     run = playCard(run, card.id)
     expect(run.fight.dial).toBe(2)
-    expect(poolTotal(run.fight.pool)).toBe(before - took + poolTotal(pool(COMMISSIONS[0].feed)))
+    expect(poolTotal(run.fight.pool)).toBe(before - took + 4)
     expect(run.fight.hand).toHaveLength(3)
   })
 
-  it('under the clear rule, flares the whole pool at the full moon, Ward first, and empties it', () => {
-    let run: Run = newRun(1, { ...DEFAULT_SETTINGS, flare: 'clear' })
+  it('flares the pool at the full moon, Ward first, leaves the pool in place, and refills the hand there', () => {
+    let run: Run = newRun(1)
     run = { ...run, fight: { ...run.fight, ward: TINCTURE_WARD } }
     run = wait(run)
     run = wait(run)
     expect(run.fight.dial).toBe(4)
-    // Fed twice before the full moon: 12 instability, Ward takes 6, 6 paid; the full moon then feeds again.
-    expect(run.fight.flares).toEqual([12])
-    expect(run.quintessence).toBe(DEFAULT_SETTINGS.stock - 6)
-    expect(run.fight.pool).toEqual(pool(COMMISSIONS[0].feed))
+    // Fed at the new moon and first quarter: 8 instability, Ward takes 6, 2 paid; the full moon then feeds again.
+    expect(run.fight.flares).toEqual([8])
+    expect(run.quintessence).toBe(DEFAULT_SETTINGS.stock - 2)
+    // The pool stays, and the full moon feeds it again.
+    expect(run.fight.pool).toEqual(pool({ water: 9, earth: 3 }))
     expect(run.fight.hand).toHaveLength(4)
-  })
-
-  it('under the overflow rule, flares only what is above the vessel and keeps the rest', () => {
-    let run: Run = newRun(1)
-    expect(DEFAULT_SETTINGS.flare).toBe('overflow')
-    run = wait(wait(run))
-    // Water 8 and earth 4 against a vessel of 4: 4 water flares, 4 of each stays, then the full moon feeds again.
-    expect(run.fight.flares).toEqual([4])
-    expect(run.quintessence).toBe(DEFAULT_SETTINGS.stock - 4)
-    expect(run.fight.pool).toEqual(pool({ water: 8, earth: 6 }))
-    expect(flareOf(pool({ water: 9, earth: 2 }), COMMISSIONS[0], 'overflow')).toEqual(pool({ water: 5 }))
-  })
-
-  it('under the keep rule, flares the whole pool and leaves it there', () => {
-    let run: Run = newRun(1, { ...DEFAULT_SETTINGS, flare: 'keep' })
-    run = wait(wait(run))
-    expect(run.fight.flares).toEqual([12])
-    expect(run.fight.pool).toEqual(pool({ water: 12, earth: 6 }))
   })
 
   it('in half-moon turns, discards what is left at the full moon and draws 4', () => {

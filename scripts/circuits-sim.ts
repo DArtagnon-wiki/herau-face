@@ -55,8 +55,6 @@ const settings: Settings = {
   draw: (arg('--draw') as Settings['draw']) ?? DEFAULT_SETTINGS.draw,
   hand: Number(arg('--hand') ?? DEFAULT_SETTINGS.hand),
   stock: Number(arg('--stock') ?? DEFAULT_SETTINGS.stock),
-  flare: (arg('--flare') as Settings['flare']) ?? DEFAULT_SETTINGS.flare,
-  rails: args.includes('--rails') ? true : args.includes('--no-rails') ? false : DEFAULT_SETTINGS.rails,
 }
 
 // ---------------------------------------------------------------------------
@@ -129,10 +127,7 @@ function greedyReward(r: Run): Run {
     const cap = run.deck.reduce((n, c) => n + c.channels.filter((ch) => ch.element === e).reduce((k, ch) => k + ch.capacity, 0), 0)
     return fed / (1 + cap / 5)
   }
-  /** How far a card's biggest play would go past its rail. */
-  const clipped = (c: Run['deck'][number]) => (run.settings.rails ? c.channels.reduce((n, ch) => n + ch.capacity, 0) * (1 + c.gain) - c.rail : 0)
-  const rank = (o: Run['offer'][number]) =>
-    o.kind === 'gain' ? 0 : o.kind === 'rail' ? (run.deck.some((c) => clipped(c) > 0) ? 0.5 : 9) : o.kind === 'channel' ? 2 - Math.min(1, need(o.element) / 4) : o.kind === 'distill' ? 2 : 3
+  const rank = (o: Run['offer'][number]) => (o.kind === 'gain' ? 0 : o.kind === 'channel' ? 2 - Math.min(1, need(o.element) / 4) : o.kind === 'distill' ? 2 : 3)
   for (let guard = 0; guard < 5 && run.offer.length; guard++) {
     if (run.tookFree && run.metals < EXTRA_RUNE_PRICE) break
     const order = run.offer.map((o, i) => ({ o, i })).sort((a, b) => rank(a.o) - rank(b.o))
@@ -141,13 +136,10 @@ function greedyReward(r: Run): Run {
       const cards = run.deck.filter((c) => fits(o, c))
       if (!cards.length) continue
       // Gains and distillers go on the water cards (the first commissions feed water most), channels on a card of another element.
-      if (o.kind === 'rail' && !cards.some((c) => clipped(c) > 0)) continue
       const pick =
         o.kind === 'channel'
           ? (cards.find((c) => !c.channels.some((ch) => ch.element === o.element)) ?? cards[0])
-          : o.kind === 'rail'
-            ? cards.reduce((a, b) => (clipped(b) > clipped(a) ? b : a))
-            : (cards.find((c) => c.channels[0].element === 'water' && (!run.settings.rails || clipped(c) < 0)) ?? cards.find((c) => c.channels[0].element === 'water') ?? cards[0])
+          : (cards.find((c) => c.channels[0].element === 'water') ?? cards[0])
       run = takeRune(run, i, pick.id)
       done = true
       break
@@ -223,12 +215,10 @@ type FightStat = {
   /** Flares, and how many cost nothing. */
   flares: number
   blocked: number
-  /** Instability the flares took out of the pool. */
-  lost: number
   /** The most one card purified. */
   best: number
 }
-const freshStat = (q: number): FightStat => ({ reached: true, won: false, paid: 0, metal: 0, runes: 0, quintIn: q, moons: 0, plays: 0, waits: 0, brews: 0, flares: 0, blocked: 0, lost: 0, best: 0 })
+const freshStat = (q: number): FightStat => ({ reached: true, won: false, paid: 0, metal: 0, runes: 0, quintIn: q, moons: 0, plays: 0, waits: 0, brews: 0, flares: 0, blocked: 0, best: 0 })
 
 interface Result {
   name: string
@@ -258,7 +248,6 @@ function play(strategy: Strategy): Result {
           if (newFlares.length) {
             stat.flares += newFlares.length
             if (r.quintessence === next.quintessence) stat.blocked += newFlares.length
-            if (settings.flare !== 'keep') stat.lost += newFlares.reduce((a, b) => a + b, 0)
           }
         }
         if (ended(r, next)) {
@@ -294,7 +283,7 @@ function report(res: Result) {
     const s = res.fights[i]
     if (!s.length) return console.log(`  ${c.name}: never reached`)
     console.log(
-      `  ${c.name}: reached ${pct(s.length, runs)}, won ${pct(s.filter((x) => x.won).length, s.length)} · came in with ${mean(s.map((x) => x.quintIn)).toFixed(0)} · paid ${mean(s.map((x) => x.paid)).toFixed(1)} · metal ${mean(s.map((x) => x.metal)).toFixed(1)} · runes after ${mean(s.map((x) => x.runes)).toFixed(1)} · moons ${mean(s.map((x) => x.moons)).toFixed(1)} · cards ${mean(s.map((x) => x.plays)).toFixed(1)} · waits ${mean(s.map((x) => x.waits)).toFixed(1)} · brews ${mean(s.map((x) => x.brews)).toFixed(1)} · flares ${mean(s.map((x) => x.flares)).toFixed(1)}, fully blocked ${pct(s.reduce((n, x) => n + x.blocked, 0), s.reduce((n, x) => n + x.flares, 0))} · pool lost to flares ${mean(s.map((x) => x.lost)).toFixed(1)} · best play ${mean(s.map((x) => x.best)).toFixed(1)}`,
+      `  ${c.name}: reached ${pct(s.length, runs)}, won ${pct(s.filter((x) => x.won).length, s.length)} · came in with ${mean(s.map((x) => x.quintIn)).toFixed(0)} · paid ${mean(s.map((x) => x.paid)).toFixed(1)} · metal ${mean(s.map((x) => x.metal)).toFixed(1)} · runes after ${mean(s.map((x) => x.runes)).toFixed(1)} · moons ${mean(s.map((x) => x.moons)).toFixed(1)} · cards ${mean(s.map((x) => x.plays)).toFixed(1)} · waits ${mean(s.map((x) => x.waits)).toFixed(1)} · brews ${mean(s.map((x) => x.brews)).toFixed(1)} · flares ${mean(s.map((x) => x.flares)).toFixed(1)}, fully blocked ${pct(s.reduce((n, x) => n + x.blocked, 0), s.reduce((n, x) => n + x.flares, 0))} · best play ${mean(s.map((x) => x.best)).toFixed(1)}`,
     )
   })
 }
@@ -322,14 +311,14 @@ function header(): string {
 const delayIn = (arg('--delay-in') ?? COMMISSIONS.slice(0, -1).map((_, i) => i).join(',')).split(',').map(Number)
 const reserve = Number(arg('--reserve') ?? 1)
 
-console.log(`${runs} runs · ${settings.draw === 'cycle' ? `discard and draw ${settings.hand} at full and new moons` : `${settings.draw} ${settings.hand} at the quarters`} · stock ${settings.stock} · flares: ${settings.flare}${settings.rails ? " · rails" : ""}`)
+console.log(`${runs} runs · ${settings.draw === 'cycle' ? `discard and draw ${settings.hand} at full and new moons` : `${settings.draw} ${settings.hand} at the quarters`} · stock ${settings.stock}`)
 if (args.includes('--compare')) {
   const early = COMMISSIONS.slice(0, -1).map((_, i) => i)
   const list: Strategy[] = [
     random,
     greedy,
-    ...[1, 20, 35, 45, 50, 55].map((k) => ({ ...delay(k, early), name: `delay before the boss, keep ${k}` })),
-    ...[45, 55].map((k) => ({ ...delay(k, [0]), name: `delay in ${COMMISSIONS[0].name} only, keep ${k}` })),
+    ...[1, 30, 50, 60, 65, 70, 75].map((k) => ({ ...delay(k, early), name: `delay before the boss, keep ${k}` })),
+    ...[65, 70, 75].map((k) => ({ ...delay(k, [0]), name: `delay in ${COMMISSIONS[0].name} only, keep ${k}` })),
   ]
   console.log(`\n${header()}`)
   for (const s of list) console.log(row(play(s)))

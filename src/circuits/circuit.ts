@@ -10,19 +10,21 @@
 // - Shapes name mechanics: a crescent is time on the moon, a triangle an
 //   element, a square purification (a square drawn around it, circumscribed,
 //   multiplies it once more), the principle signs those materials, a shield
-//   Ward, a ground symbol instability drained away.
+//   Ward, a ground symbol instability grounded away.
 //
 // A card is a time stage (its crescents, entering from the top) linked to a
 // collecting stage (its element triangles in a column, entering from the
 // left, each with its capacity). The collector outputs its square below and
-// its side outputs to the right, each behind its own arcs; grounds hang down
-// to the left.
+// its side outputs to the right, each behind its own arcs. A ground stage is
+// a stage of its own, hanging down to the left: a wild 3 inside (it takes 3 of
+// whatever is most plentiful), a ground sign outside; a second hangs from the
+// first.
 //
 // Given a live result, the drawing lights up: triangles fill with what they
 // would take, arcs light one by one as the take grows, and outputs that would
 // fire glow; the rest dims.
 
-import { GROUND_DRAIN, RAIL_STEP, costOf, type Card, type CardResult, type Output, type Principle, type Recipe } from './engine'
+import { GROUND_DRAIN, costOf, type Card, type CardResult, type Output, type Principle, type Recipe } from './engine'
 import { ELEMENT_COLOR, card as cardSig, element, ground, homunculus, moon, numeral, principle, square, ward } from './sigils'
 
 const LIT = 'var(--lit)'
@@ -86,12 +88,20 @@ function outputSigil(o: Output, x: number, y: number, size: number, color: strin
   return principle(o.principle, x, y, size, { stroke: color, width: 1.4 })
 }
 
+/** Inside a ground stage: its wild input, the six-pointed star with the 3 it takes, and a lead up to the rim. */
+function groundStageInside(G: { x: number; y: number; r: number }, took: number, live: boolean): string {
+  const color = 'var(--gilt)'
+  const s = 6.2
+  const cy = G.y + 1.5
+  const fill = live && took ? `color-mix(in srgb, ${color} ${Math.round(25 + 60 * Math.min(1, took / GROUND_DRAIN))}%, transparent)` : 'var(--stage)'
+  const stroke = live && !took ? DIM : color
+  return `${line(G.x, cy - s, G.x, G.y - G.r, stroke, 1.1)}${element('any', G.x, cy, s, { stroke, fill, width: 1.3 })}${numeral(GROUND_DRAIN, G.x, cy + 0.3, 6.5, live && !took ? 'var(--ink-faint)' : 'var(--ink)')}`
+}
+
 export interface CircuitOptions {
   /** What playing it now would do, to light the circuit; omit to draw it plain. */
   live?: CardResult | null
   size?: number
-  /** Draw the card's rail, the most it purifies in one play. */
-  rails?: boolean
 }
 
 /** A card's circuit as an SVG. */
@@ -129,15 +139,6 @@ export function circuitSvg(c: Card, opts: CircuitOptions = {}): string {
     parts.push(square(0, sy, h, { stroke: on(purifying), fill: g === 0 ? (live && purifying ? 'var(--lit-fill)' : 'var(--stage)') : 'var(--stage)', width: g === 0 ? 1.6 : 1.3 }))
   }
   box.add(0, sy, hOut + 1)
-  // The rail: a bar under the square with the most it purifies in one play; it lights when a play would hit it.
-  if (opts.rails) {
-    const clipped = !!live && live.processed * (1 + c.gain) > c.rail
-    const ry = sy + hOut + 5
-    parts.push(line(-hOut - 3, ry, hOut + 3, ry, clipped ? LIT : live ? DIM : LINE, clipped ? 2.2 : 1.6))
-    parts.push(numeral(c.rail, hOut + 10, ry + 0.5, 7.5, clipped ? 'var(--lit)' : 'var(--ink-soft)'))
-    box.add(hOut + 10, ry, 7)
-    box.add(0, ry, 2)
-  }
 
   // The side outputs to the right, each behind its own arcs.
   const angles = outputAngles(c.outputs.length)
@@ -156,18 +157,22 @@ export function circuitSvg(c: Card, opts: CircuitOptions = {}): string {
     box.add(ox, oy, size + 2)
   })
 
-  // Grounds hang down to the left, each on its own lead.
-  const grounded = live ? Object.values(live.drained).reduce((a, b) => a + b, 0) - live.processed : 0
-  const groundAt = [117, 141]
+  // Ground stages hang down to the left: the first linked to the collector, a second from the first.
+  let prev: { x: number; y: number; r: number } = C
   for (let g = 0; g < c.ground; g++) {
-    const deg = groundAt[g]
-    const lit = !live || grounded > g * GROUND_DRAIN
-    const len = 7 + g * 5
-    parts.push(line(...polar(C.x, C.y, C.r, deg), ...polar(C.x, C.y, C.r + len, deg), on(lit)))
-    const [cx2, cy2] = polar(C.x, C.y, C.r + len + 4.5, deg)
-    parts.push(`<g transform="rotate(${r2(deg - 90)} ${r2(cx2)} ${r2(cy2)})">${ground(cx2, cy2, 4.5, { stroke: on(lit) })}</g>`)
-    parts.push(numeral(GROUND_DRAIN, ...polar(C.x, C.y, C.r + len + 4.5, deg + 12), 6.5))
-    box.add(cx2, cy2, 7)
+    const G = g === 0 ? (() => { const [x, y] = polar(C.x, C.y, C.r + 19, 125); return { x, y, r: 11 } })() : { x: prev.x - 23, y: prev.y + 11, r: 11 }
+    const took = live?.grounded[g] ?? 0
+    const lit = !live || took > 0
+    const dx = G.x - prev.x
+    const dy = G.y - prev.y
+    const d = Math.hypot(dx, dy)
+    parts.push(line(prev.x + (dx / d) * prev.r, prev.y + (dy / d) * prev.r, G.x - (dx / d) * G.r, G.y - (dy / d) * G.r, on(lit)))
+    parts.push(ring(G.x, G.y, G.r))
+    parts.push(groundStageInside(G, took, !!live))
+    parts.push(ground(G.x, G.y + G.r + 5, 4.5, { stroke: on(lit) }))
+    box.add(G.x, G.y, G.r + 1)
+    box.add(G.x, G.y + G.r + 9, 5)
+    prev = G
   }
 
   // The collecting stage itself, its triangles in a column inside, each with a lead to the rim.
@@ -219,7 +224,7 @@ export function recipeSvg(r: Recipe, affordable: boolean, size = 64): string {
 }
 
 /** A rune on offer between fights, drawn as the part it adds. */
-export function offerSvg(r: { kind: 'channel'; element: Parameters<typeof element>[0]; capacity: number } | { kind: 'gain' } | { kind: 'distill'; principle: Principle } | { kind: 'ground' } | { kind: 'rail' }, size = 44): string {
+export function offerSvg(r: { kind: 'channel'; element: Parameters<typeof element>[0]; capacity: number } | { kind: 'gain' } | { kind: 'distill'; principle: Principle } | { kind: 'ground' }, size = 44): string {
   const parts: string[] = []
   if (r.kind === 'channel') {
     const color = r.element === 'any' ? 'var(--gilt)' : ELEMENT_COLOR[r.element]
@@ -236,12 +241,10 @@ export function offerSvg(r: { kind: 'channel'; element: Parameters<typeof elemen
     for (let i = 0; i < 4; i++) parts.push(arc(-24, 0, 12 + i * 3.4, -18, 18, LIT, 1.2))
     parts.push(principle(r.principle, 9, 0, 7, { stroke: LIT, width: 1.5 }))
   }
-  if (r.kind === 'ground') parts.push(ground(0, 2, 9, { stroke: LIT, width: 1.8 }))
-  if (r.kind === 'rail') {
-    parts.push(square(0, -4, 6.5, { stroke: LIT, width: 1.5 }))
-    parts.push(line(-11, 7, 11, 7, LIT, 2))
-    parts.push(line(0, 9.5, 0, 14, LIT, 1.4))
-    parts.push(numeral(`+${RAIL_STEP}`, 0, -4, 7.5))
+  if (r.kind === 'ground') {
+    parts.push(ring(0, -3, 10, LINE, 1.5))
+    parts.push(groundStageInside({ x: 0, y: -3, r: 10 }, 0, false))
+    parts.push(ground(0, 12, 4, { stroke: LIT, width: 1.5 }))
   }
   return `<svg class="circuit" viewBox="-16 -16 32 32" width="${size}" height="${size}" aria-hidden="true">${parts.join('')}</svg>`
 }
