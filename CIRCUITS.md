@@ -50,7 +50,7 @@ There are no turns. Every card costs time on a dial, and the dial's phases carry
 ## Materials and recipes
 
 - **Cards yield Paracelsus's three principles** from their outputs: salt, sulfur and mercury. Which principle a card yields is its own design, not its element's (Wash happens to yield mercury), and distilling runes add principle outputs to any card. A principle output needs its stage to collect 4 or more.
-- **Recipes are earned.** In a fight, crafting costs time on the dial: tinctures and elixirs for one-off effects (like Slay the Spire's potions), and the homunculus of Paracelsian lore, a helper that processes a little instability at every phase by itself.
+- **Recipes are earned.** In a fight, brewing costs principles but no time on the dial (with time it was too expensive to use): tinctures and elixirs for one-off effects (like Slay the Spire's potions), and the homunculus of Paracelsian lore, a helper that processes a little instability at every phase by itself.
 - **After a fight, metals are currency.** The sulfur–mercury theory of the Jabirian writings makes every metal sulfur and mercury in some proportion and purity, with gold the perfect balance of pure principles. Crude principles make lead; pure ones are needed for gold. That gives purity its late payoff: rewarding early, required later.
 - **Metals keep their planets:** the Sun gold, the Moon silver, Mars iron, Venus copper, Jupiter tin, Saturn lead, Mercury quicksilver.
 - **Two outputs make two archetypes:** a fast deck heavy on gain stages that purifies, and a greedy deck heavy on principle outputs that farms principles for helpers and gold. It is the money-against-score tension of Balatro.
@@ -90,9 +90,8 @@ Wash, as sketched: a moon is its input and its circle must run before the collec
 - **Advanced rhythms and tools.** Other attack rhythms for harder fights, and runes to meet them ("on the next quarter moon, draw 2").
 - **Make decisions meaningful.** The play loop works but offers few real choices; thresholds like Wash's (wait for the pool to fill, or wash now?) are one lever.
 - **Tune the numbers:** feed rates, purification requirements, card capacities, the draw rule.
-- **Decide crafting:** which recipes are in-fight, what each costs in time and material, how recipes are earned.
+- **Decide crafting:** which recipes are in-fight, what each costs in material, how recipes are earned.
 - **The pool after an attack.** Now trying non-resetting flares: the pool stays.
-- **Metal is scarce.** With the new deck and rhythm, about one metal per fight, and extra runes cost 3.
 - **Try the zodiac and planetary trackers** once the moon works.
 
 ## Prototype
@@ -101,7 +100,7 @@ A separate page beside Mud to Clay (`circuits.html`), on one screen: the moon di
 
 - **Commissions,** each feeding in bulk at every new and full moon and flaring at 3/8 and 7/8 of the moon. Mud: 5 water and 2 earth, needs 20. The peat bog: 4 water, 4 earth and 1 fire, needs 30. The Fumarole: 4 air, 4 fire and 1 water, needs 30; it is there so a deck built only for water and earth suffers. The Mire: 5 water, 3 earth and 1 fire, an earth more at each feed after the first, needs 40. The run starts with 40 quintessence.
 - **The opening deck** is eleven cards. Five metal makers take up to 5 of one element and ground it, yielding their principle once they take 4 or more: two Wash (water, mercury), Calcine (earth, salt), Fan (air, mercury) and Kindle (fire, sulfur). Five purifiers take up to 3 each of two elements and purify 1 for each, yielding nothing: Dissolve and Coagulate (water and earth), Sublime (earth and air), Cupel (air and fire) and Digest (fire and water). The Sieve takes 3 of anything, purifies it and raises Ward. Every card takes an eighth of the moon. A card holds at most 3 inputs, 2 gains (only on cards that purify), 3 side outputs and 2 ground stages; distilling runes (salt, sulfur or mercury) go on any card, and the shop sometimes offers a whole new card, the Catalyst.
-- **Recipes.** Tincture of salt: 2 salt, a sixteenth of the moon, Ward 6. Spirit of mercury: 3 mercury, a sixteenth, draw 2. Homunculus: 3 mercury, 2 salt and 1 sulfur, an eighth, then it drains 2 of the most plentiful instability and purifies 2 at every phase.
+- **Recipes,** each brewed in no time. Tincture of salt: 2 salt, Ward 6. Spirit of mercury: 3 mercury, draw 2. Homunculus: 3 mercury, 2 salt and 1 sulfur, then it drains 2 of the most plentiful instability and purifies 2 at every phase.
 - **Metal.** Silver from 2 mercury and a salt (worth 3), lead from any two principles (worth 1). The first rune between fights is free; more cost 3 metal.
 
 ### Simulated strategies
@@ -115,12 +114,14 @@ A separate page beside Mud to Clay (`circuits.html`), on one screen: the moon di
 | Strategy | Runs won | Paid in Mud | Metal | Paid in Peat | Metal | Paid in Fumarole | Metal | Reach the Mire, with |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Random | 0% | 39.7 | 0.2 | 21.3 | 0.0 | 11.0 | 0.0 | none |
-| Greedy | 71% | 1.3 | 0.1 | 5.0 | 0.2 | 15.6 | 0.5 | 95%, with 19 |
-| Delay, keep 1 | 0% | 38.6 | 1.1 | 2.6 | 0.2 | 3.9 | 0.0 | 1%, with 1 |
-| Delay, keep 25 | 34% | 14.7 | 1.0 | 4.8 | 0.3 | 15.2 | 0.4 | 72%, with 9 |
-| Delay, keep 30 | 52% | 9.8 | 1.0 | 4.8 | 0.3 | 14.9 | 0.4 | 84%, with 13 |
-| Delay, keep 35 | 69% | 4.8 | 0.9 | 4.6 | 0.3 | 15.2 | 0.5 | 95%, with 17 |
+| Greedy | 72% | 1.3 | 0.1 | 5.0 | 0.2 | 15.6 | 0.5 | 95%, with 19 |
+| Delay, keep 1 | 0% | 38.6 | 0.9 | 2.5 | 0.2 | 3.8 | 0.0 | none |
+| Delay, keep 25 | 34% | 14.7 | 0.9 | 4.7 | 0.3 | 14.9 | 0.4 | 75%, with 9 |
+| Delay, keep 30 | 52% | 9.8 | 0.9 | 4.9 | 0.3 | 15.2 | 0.4 | 83%, with 13 |
+| Delay, keep 35 | 68% | 4.8 | 0.8 | 4.7 | 0.3 | 15.2 | 0.5 | 95%, with 16 |
 
-- **Full blocks are within reach in the easy fights:** greedy fully blocks 79% of Mud's flares and 37% of the peat bog's, 14% of the Fumarole's and 26% of the Mire's.
+- **Full blocks are within reach in the easy fights:** greedy fully blocks 79% of Mud's flares and 37% of the peat bog's, 13% of the Fumarole's and 27% of the Mire's.
 - **Fights last 1.6 to 2.2 moons,** about 8 to 10 cards.
 - **Holding back doesn't pay.** Metal comes out at about one per fight, so stalling for it never beats greedy.
+
+Playtest: the scarcity felt right (one bought rune per shop, where the earlier version bought three), and so did two plays per draw.

@@ -252,15 +252,15 @@ export interface Recipe {
   key: 'tincture' | 'spirit' | 'homunculus'
   name: string
   cost: Partial<Record<Principle, number>>
-  /** Time on the dial, in ticks. */
+  /** Time on the dial, in ticks: none, so brewing never costs a play. */
   time: number
   effect: string
 }
 
 export const RECIPES: Recipe[] = [
-  { key: 'tincture', name: 'Tincture of salt', cost: { salt: 2 }, time: 1, effect: 'Ward 6 against the next flare' },
-  { key: 'spirit', name: 'Spirit of mercury', cost: { mercury: 3 }, time: 1, effect: 'Draw 2' },
-  { key: 'homunculus', name: 'Homunculus', cost: { mercury: 3, salt: 2, sulfur: 1 }, time: 2, effect: 'A helper: at every phase it drains 2 of the most plentiful instability and purifies 2' },
+  { key: 'tincture', name: 'Tincture of salt', cost: { salt: 2 }, time: 0, effect: 'Ward 6 against the next flare' },
+  { key: 'spirit', name: 'Spirit of mercury', cost: { mercury: 3 }, time: 0, effect: 'Draw 2' },
+  { key: 'homunculus', name: 'Homunculus', cost: { mercury: 3, salt: 2, sulfur: 1 }, time: 0, effect: 'A helper: at every phase it drains 2 of the most plentiful instability and purifies 2' },
 ]
 export const TINCTURE_WARD = 6
 export const HOMUNCULUS_DRAIN = 2
@@ -601,7 +601,7 @@ export function playCard(run: Run, id: number): Run {
 
 export const canAfford = (f: Fight, r: Recipe) => PRINCIPLES.every((p) => f.principles[p] >= (r.cost[p] ?? 0))
 
-/** Brew a recipe: pay its principles, take its time, apply it. */
+/** Brew a recipe: pay its principles and apply it; brewing takes no time on the dial. */
 export function craft(run: Run, key: Recipe['key']): Run {
   if (run.stage !== 'fight') return run
   const r = RECIPES.find((x) => x.key === key)!

@@ -214,12 +214,15 @@ describe('the moon dial', () => {
 })
 
 describe('recipes', () => {
-  it('brews a homunculus that purifies on its own every quarter', () => {
+  it('brews in no time; a homunculus then purifies on its own at every phase', () => {
     let run = newRun(1)
     run = { ...run, fight: { ...run.fight, principles: { salt: 2, sulfur: 1, mercury: 3 } } }
     run = craft(run, 'homunculus')
     expect(run.fight.homunculi).toBe(1)
     expect(run.fight.principles).toEqual({ salt: 0, sulfur: 0, mercury: 0 })
+    expect(run.fight.dial).toBe(0)
+    expect(run.fight.purified).toBe(0)
+    run = wait(run)
     expect(run.fight.dial).toBe(2)
     expect(run.fight.purified).toBe(2)
   })

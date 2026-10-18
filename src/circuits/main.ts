@@ -218,7 +218,7 @@ function materialsNote(run: Run): [string, string] {
 
 function recipeNote(run: Run, r: Recipe): [string, string] {
   const cost = PRINCIPLES.filter((p) => r.cost[p]).map((p) => `${r.cost[p]} ${p}`).join(', ')
-  return [r.name, `${r.effect}. Takes ${cost} and ${ticks(r.time)} of the moon.${canAfford(run.fight, r) ? '' : ' <span class="now">You need more principles first.</span>'}`]
+  return [r.name, `${r.effect}. Takes ${cost}${r.time ? ` and ${ticks(r.time)} of the moon` : ', and no time'}.${canAfford(run.fight, r) ? '' : ' <span class="now">You need more principles first.</span>'}`]
 }
 
 function noteView(title: string, body: string, art = ''): string {
