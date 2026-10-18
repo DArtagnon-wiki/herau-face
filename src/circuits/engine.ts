@@ -52,10 +52,52 @@ export const phaseAt = (pos: number): Phase | null => (pos % 2 === 0 ? PHASES[(p
 // ---------------------------------------------------------------------------
 // Cards
 
+/**
+ * What an input takes from. An element or "any" takes from the pool. The
+ * others feed the collector from elsewhere, each collecting its capacity:
+ * quintessence pays up to that much of yours (never your last), discard
+ * throws away a card from your hand, moon makes the card take an eighth more.
+ */
+export type Source = Elemental | 'any' | 'quintessence' | 'discard' | 'moon'
+export const fromPool = (s: Source): s is Elemental | 'any' => s === 'any' || ELEMENTS.includes(s as Elemental)
+
 export interface Channel {
-  element: Elemental | 'any'
+  element: Source
   capacity: number
 }
+
+/** What a moon input adds to a card's time, and what a regain output spares: an eighth. */
+export const EIGHTH = 2
+/** What a unit output (draw, regain, and the statuses that don't scale) needs its stage to collect. */
+export const UNIT_GATE = 3
+
+export type StatusKey = 'settle' | 'starve' | 'expose' | 'thorns' | 'stall' | 'volatile' | 'condense' | 'mend' | 'retain' | 'foresight'
+export interface StatusDef {
+  key: StatusKey
+  name: string
+  /** On the commission, or on you. */
+  on: 'commission' | 'you'
+  /** A unit status adds 1 when it fires; the others add what the card collected (N). */
+  unit: boolean
+  /** Most it stacks to. */
+  cap?: number
+  text: string
+}
+export const STATUSES: StatusDef[] = [
+  { key: 'settle', name: 'Settle', on: 'commission', unit: false, text: 'at every phase N of the most plentiful instability settles and is purified, then N falls by 1' },
+  { key: 'starve', name: 'Starve', on: 'commission', unit: false, text: 'its next bulk feed is N smaller' },
+  { key: 'expose', name: 'Expose', on: 'commission', unit: false, text: 'your cards purify ×1.5 for the next N phases' },
+  { key: 'thorns', name: 'Thorns', on: 'commission', unit: false, text: 'when it next flares, N of the pool is purified first' },
+  { key: 'stall', name: 'Stall', on: 'commission', unit: true, text: 'its next flare comes an eighth later' },
+  { key: 'volatile', name: 'Volatile', on: 'commission', unit: true, cap: 1, text: 'until its next flare your cards purify ×2, but that flare is doubled' },
+  { key: 'condense', name: 'Condense', on: 'you', unit: false, text: 'your next card also takes N of whatever is most plentiful' },
+  { key: 'mend', name: 'Mend', on: 'you', unit: false, text: 'at every phase you gain N quintessence, then N falls by 1' },
+  { key: 'retain', name: 'Retain', on: 'you', unit: true, cap: 1, text: 'at the next quarter moon you keep your hand' },
+  { key: 'foresight', name: 'Foresight', on: 'you', unit: true, text: 'at the next quarter moon you draw 2' },
+]
+export const statusDef = (k: StatusKey) => STATUSES.find((s) => s.key === k)!
+export const noStatus = (): Record<StatusKey, number> => Object.fromEntries(STATUSES.map((s) => [s.key, 0])) as Record<StatusKey, number>
+export const FORESIGHT_DRAW = 2
 
 export interface Card {
   id: number
@@ -91,6 +133,14 @@ export type Output =
   | { kind: 'ward'; gate: number }
   /** The next card played purifies this many times over. */
   | { kind: 'catalyst'; factor: number; gate: number }
+  /** Draw a card. */
+  | { kind: 'draw'; gate: number }
+  /** Spare an eighth of the moon: the next cards spend it before the dial moves. */
+  | { kind: 'regain'; gate: number }
+  /** Gain 1 quintessence for each collected. */
+  | { kind: 'quintessence'; gate: number }
+  /** Put a status on the commission or on you: N (what was collected), or 1 for a unit status. */
+  | { kind: 'status'; status: StatusKey; gate: number }
 
 export const GROUND_DRAIN = 3
 /** What a principle output needs its stage to collect. */
@@ -98,8 +148,8 @@ export const METAL_GATE = 4
 export const BASE_COST = 2
 /** Most of each part a card can hold. */
 export const CAPS = { channels: 3, gain: 2, outputs: 3, ground: 2 }
-/** Time a card takes on the dial, in ticks. */
-export const costOf = (c: Card) => c.time
+/** Time a card takes on the dial, in ticks: its own, and an eighth more for each moon input. */
+export const costOf = (c: Card) => c.time + EIGHTH * c.channels.filter((ch) => ch.element === 'moon').length
 
 export interface CardResult {
   /** What the card drains from the pool, by element (channels and grounds). */
@@ -116,64 +166,148 @@ export interface CardResult {
   took: number[]
   /** What each ground stage took. */
   grounded: number[]
+  /** What a Condense waiting on it took besides, from whatever was most plentiful. */
+  condensed: number
+  /** Quintessence its inputs pay, and cards they discard. */
+  paid: number
+  discards: number
+  /** Cards it draws, ticks of the moon it spares, quintessence it gains. */
+  draw: number
+  regain: number
+  gain: number
+  /** Statuses it puts on, by how much. */
+  statuses: Partial<Record<StatusKey, number>>
+}
+
+/** What else a card's inputs and multipliers depend on, beyond the pool. */
+export interface Context {
+  /** Your quintessence, for quintessence inputs. */
+  quintessence?: number
+  /** Other cards in hand, for discard inputs. */
+  others?: number
+  /** A Condense waiting for the next card. */
+  condense?: number
+  /** Statuses multiplying what cards purify (Expose, Volatile). */
+  mult?: number
+}
+
+/** Take up to n from the most plentiful elements of a pool (changed in place), one most plentiful at a time. */
+function takeMost(left: Pool, n: number, into?: Pool): number {
+  let need = n
+  while (need > 0 && poolTotal(left) > 0) {
+    const e = ELEMENTS.reduce((a, b) => (left[b] > left[a] ? b : a))
+    const k = Math.min(left[e], need)
+    left[e] -= k
+    if (into) into[e] += k
+    need -= k
+  }
+  return n - need
 }
 
 /**
- * What playing a card does to this pool. Channels for one element take first,
- * up to their capacity; any-element channels then take from whatever is most
- * plentiful; ground stages last. Purification is what the channels took, times
- * (1 + gain), times any boost a catalyst left; a card whose main output is a
- * ground purifies nothing. Each side output whose gate the channels reached fires: a
- * principle output yields 1 of its principle, a Ward output Ward 1 for each
- * taken.
+ * What playing a card does. Everything its inputs collect goes into its
+ * collecting stage: channels for one element take first, up to their
+ * capacity; any-element channels then take from whatever is most plentiful;
+ * the inputs that don't take from the pool each collect their capacity
+ * (quintessence paying it, discard throwing away a card, moon taking an
+ * eighth more); a Condense waiting takes its N besides. Ground stages take
+ * last. Purification is what was collected, times (1 + gain), times a
+ * catalyst's boost and any multiplying statuses; a card whose main output is
+ * a ground purifies nothing. Each side output whose gate the collection
+ * reached fires: a principle output yields 1 of its principle; Ward,
+ * quintessence and the scaling statuses give 1 for each collected; draw,
+ * regain and the unit statuses fire once.
  */
-export function resolveCard(card: Card, pool: Pool, boost = 1): CardResult {
+export function resolveCard(card: Card, pool: Pool, boost = 1, ctx: Context = {}): CardResult {
   const left = { ...pool }
   const drained = emptyPool()
   const principles: Record<Principle, number> = { salt: 0, sulfur: 0, mercury: 0 }
   let processed = 0
-  const takeFrom = (e: Elemental, n: number) => {
-    const k = Math.min(left[e], n)
-    left[e] -= k
-    drained[e] += k
-    return k
-  }
-  const most = () => ELEMENTS.reduce((a, b) => (left[b] > left[a] ? b : a))
+  let paid = 0
+  let discards = 0
   const took_: number[] = card.channels.map(() => 0)
-  const ordered = card.channels.map((ch, i) => ({ ch, i })).sort((a, b) => Number(a.ch.element === 'any') - Number(b.ch.element === 'any'))
+  const order = (s: Source) => (s === 'any' ? 1 : fromPool(s) ? 0 : 2)
+  const ordered = card.channels.map((ch, i) => ({ ch, i })).sort((a, b) => order(a.ch.element) - order(b.ch.element))
   for (const { ch, i } of ordered) {
     let took = 0
-    if (ch.element !== 'any') took = takeFrom(ch.element, ch.capacity)
-    else {
-      let need = ch.capacity
-      while (need > 0 && poolTotal(left) > 0) {
-        const k = takeFrom(most(), need)
-        took += k
-        need -= k
+    const src = ch.element
+    if (src === 'any') took = takeMost(left, ch.capacity, drained)
+    else if (src === 'quintessence') {
+      took = Math.min(ch.capacity, Math.max(0, (ctx.quintessence ?? 0) - 1 - paid))
+      paid += took
+    } else if (src === 'discard') {
+      if ((ctx.others ?? 0) > discards) {
+        took = ch.capacity
+        discards++
       }
+    } else if (src === 'moon') took = ch.capacity
+    else {
+      took = Math.min(left[src], ch.capacity)
+      left[src] -= took
+      drained[src] += took
     }
     processed += took
     took_[i] = took
   }
+  const condensed = ctx.condense ? takeMost(left, ctx.condense, drained) : 0
+  processed += condensed
   let ward = 0
   let catalyst = 1
+  let draw = 0
+  let regain = 0
+  let gain = 0
+  const statuses: Partial<Record<StatusKey, number>> = {}
   for (const o of card.outputs) {
-    if (o.kind === 'catalyst') {
-      if (processed >= o.gate) catalyst *= o.factor
-      continue
+    if (o.gate > 0 && (processed <= 0 || processed < o.gate)) continue
+    switch (o.kind) {
+      case 'catalyst':
+        catalyst *= o.factor
+        break
+      case 'principle':
+        principles[o.principle] += 1
+        break
+      case 'ward':
+        ward += processed
+        break
+      case 'draw':
+        draw += 1
+        break
+      case 'regain':
+        regain += EIGHTH
+        break
+      case 'quintessence':
+        gain += processed
+        break
+      case 'status':
+        statuses[o.status] = (statuses[o.status] ?? 0) + (statusDef(o.status).unit ? 1 : processed)
+        break
     }
-    if (processed <= 0 || processed < o.gate) continue
-    if (o.kind === 'principle') principles[o.principle] += 1
-    else ward += processed
   }
   const grounded: number[] = []
-  for (let g = 0; g < card.ground; g++) {
-    let need = GROUND_DRAIN
-    while (need > 0 && poolTotal(left) > 0) need -= takeFrom(most(), need)
-    grounded.push(GROUND_DRAIN - need)
-  }
-  const purification = card.purifies ? processed * (1 + card.gain) * boost : 0
-  return { drained, processed, purification, principles, ward, catalyst, took: took_, grounded }
+  for (let g = 0; g < card.ground; g++) grounded.push(takeMost(left, GROUND_DRAIN, drained))
+  const purification = card.purifies ? Math.ceil(processed * (1 + card.gain) * boost * (ctx.mult ?? 1)) : 0
+  return { drained, processed, purification, principles, ward, catalyst, took: took_, grounded, condensed, paid, discards, draw, regain, gain, statuses }
+}
+
+/** What playing this card from hand would do in this run as it stands. */
+export function resolveIn(run: Run, card: Card): CardResult {
+  const f = run.fight
+  const inHand = f.hand.some((x) => x.id === card.id)
+  return resolveCard(card, f.pool, f.catalyst, {
+    quintessence: run.quintessence,
+    others: f.hand.length - (inHand ? 1 : 0),
+    condense: f.status.condense,
+    mult: multOf(f),
+  })
+}
+
+/** What cards purify times over from statuses: Expose ×1.5, Volatile ×2. */
+export const multOf = (f: Fight) => (f.status.expose > 0 ? 1.5 : 1) * (f.status.volatile > 0 ? 2 : 1)
+
+/** What would flare now: the pool, less what Thorns purifies first, doubled if Volatile, less Ward. */
+export function threatOf(f: Fight): number {
+  const flare = Math.max(0, poolTotal(f.pool) - f.status.thorns) * (f.status.volatile > 0 ? 2 : 1)
+  return Math.max(0, flare - f.ward)
 }
 
 // ---------------------------------------------------------------------------
@@ -365,6 +499,12 @@ export interface Fight {
   paid: number
   /** Flare at each attack, oldest first. */
   flares: number[]
+  /** Statuses on the commission and on you. */
+  status: Record<StatusKey, number>
+  /** Spare time, in ticks: the next cards spend it before the dial moves. */
+  spare: number
+  /** Flares a Stall has held back, waiting for the next phase. */
+  pending: number
 }
 
 export interface Run {
@@ -373,7 +513,7 @@ export interface Run {
   quintessence: number
   metals: number
   deck: Card[]
-  stage: 'fight' | 'reward' | 'won' | 'lost'
+  stage: 'draft' | 'fight' | 'reward' | 'won' | 'lost'
   fightIndex: number
   fight: Fight
   /** Between fights: the runes on offer, and whether the free one is taken. */
@@ -382,9 +522,25 @@ export interface Run {
   /** What the last fight smelted. */
   smelted: { silver: number; lead: number; value: number } | null
   nextId: number
+  /** Before the first fight: the twelfth rune being drafted. */
+  draft: Draft | null
 }
 
-const channel = (element: Elemental | 'any', capacity: number): Channel => ({ element, capacity })
+/**
+ * The opening draft of a twelfth rune: pick one of three inputs, then one of
+ * three outputs; the rune also yields a principle once it collects 1.
+ */
+export interface Draft {
+  inputs: Channel[]
+  outputs: DraftOutput[]
+  /** The input picked, once it is. */
+  input: Channel | null
+  principle: Principle
+}
+/** An output on offer in the draft: purification or a ground stage, or a side output. */
+export type DraftOutput = { kind: 'purify' } | { kind: 'ground' } | Output
+
+const channel = (element: Source, capacity: number): Channel => ({ element, capacity })
 const yields = (principle: Principle): Output => ({ kind: 'principle', principle, gate: METAL_GATE })
 const card = (id: number, name: string, channels: Channel[], outputs: Output[], purifies = true): Card => ({ id, name, channels, outputs, purifies, gain: 0, time: BASE_COST, ground: 0 })
 
@@ -394,34 +550,99 @@ export function catalystCard(id: number): Card {
 }
 
 /**
- * The opening deck, two kinds of card and a Sieve. The metal makers take up to
- * 5 of their element and ground it, purifying nothing, and yield their
- * principle once they take 4 or more. The purifiers take up to 3 each of two
- * elements and purify 1 for each, yielding nothing: slow to drain, but they
- * cover two elements and hit hard. Every element has both kinds. The Sieve
- * takes 3 of anything, purifies it and raises Ward.
+ * The opening deck: six purifiers, one for each pair of elements, that take up
+ * to 3 of each and purify 1 for each, yielding nothing (slow to drain, but
+ * they cover two elements and hit hard); four metal makers, one for each
+ * element, that take up to 5 of it and ground it, purifying nothing, and yield
+ * their principle once they take 4 or more; and the Sieve, which takes 3 of
+ * anything, purifies it and raises Ward.
  */
 export function startingDeck(): Card[] {
   let id = 1
   const metal = (name: string, e: Elemental, p: Principle) => card(id++, name, [channel(e, 5)], [yields(p)], false)
   const purifier = (name: string, a: Elemental, b: Elemental) => card(id++, name, [channel(a, 3), channel(b, 3)], [])
   return [
-    metal('Wash', 'water', 'mercury'),
+    purifier('Dissolve', 'water', 'earth'),
+    purifier('Circulate', 'water', 'air'),
+    purifier('Digest', 'water', 'fire'),
+    purifier('Sublime', 'earth', 'air'),
+    purifier('Coagulate', 'earth', 'fire'),
+    purifier('Cupel', 'air', 'fire'),
     metal('Wash', 'water', 'mercury'),
     metal('Calcine', 'earth', 'salt'),
     metal('Fan', 'air', 'mercury'),
     metal('Kindle', 'fire', 'sulfur'),
-    purifier('Dissolve', 'water', 'earth'),
-    purifier('Coagulate', 'earth', 'water'),
-    purifier('Sublime', 'earth', 'air'),
-    purifier('Cupel', 'air', 'fire'),
-    purifier('Digest', 'fire', 'water'),
     card(id++, 'Sieve', [channel('any', 3)], [{ kind: 'ward', gate: 1 }]),
   ]
 }
 
-export function newRun(seed = Date.now(), settings: Settings = DEFAULT_SETTINGS): Run {
+/** Inputs the draft offers: the elements as the shop sells them, any, and the three that don't take from the pool. */
+export const DRAFT_INPUTS: Channel[] = [
+  channel('water', 5),
+  channel('earth', 5),
+  channel('air', 4),
+  channel('fire', 4),
+  channel('any', 3),
+  channel('quintessence', 3),
+  channel('discard', 3),
+  channel('moon', 3),
+]
+
+/** Outputs the draft offers, with how often: each of the ten statuses half as often as the rest. */
+export const DRAFT_OUTPUTS: { output: DraftOutput; weight: number }[] = [
+  { output: { kind: 'purify' }, weight: 2 },
+  { output: { kind: 'ground' }, weight: 2 },
+  { output: { kind: 'ward', gate: 1 }, weight: 2 },
+  { output: { kind: 'catalyst', factor: 2, gate: 0 }, weight: 2 },
+  { output: { kind: 'draw', gate: UNIT_GATE }, weight: 2 },
+  { output: { kind: 'regain', gate: UNIT_GATE }, weight: 2 },
+  { output: { kind: 'quintessence', gate: 1 }, weight: 2 },
+  ...STATUSES.map((st) => ({ output: { kind: 'status', status: st.key, gate: st.unit ? UNIT_GATE : 1 } as DraftOutput, weight: 1 })),
+]
+
+/** The drafted rune: its input, its output, and a principle once it collects 1. */
+export function draftCard(id: number, input: Channel, output: DraftOutput, principle: Principle): Card {
+  const metal: Output = { kind: 'principle', principle, gate: 1 }
+  const c = card(id, 'Opus', [{ ...input }], [metal], output.kind === 'purify')
+  if (output.kind === 'ground') return { ...c, ground: 1 }
+  if (output.kind === 'purify') return c
+  return { ...c, outputs: [{ ...output }, metal] }
+}
+
+function rollDraft(rng: ReturnType<typeof makeRng>): Draft {
+  const inputs = rng.shuffle(DRAFT_INPUTS).slice(0, 3)
+  const outputs: DraftOutput[] = []
+  const bag = DRAFT_OUTPUTS.slice()
+  while (outputs.length < 3 && bag.length) {
+    let t = rng.float() * bag.reduce((n, x) => n + x.weight, 0)
+    let k = 0
+    while (k < bag.length - 1 && t >= bag[k].weight) t -= bag[k++].weight
+    outputs.push(bag[k].output)
+    bag.splice(k, 1)
+  }
+  return { inputs, outputs, input: null, principle: PRINCIPLES[rng.int(0, PRINCIPLES.length - 1)] }
+}
+
+/** Pick in the draft: an input first, then an output, which adds the rune to the deck and opens the first fight. */
+export function draftPick(run: Run, i: number): Run {
+  const d = run.draft
+  if (run.stage !== 'draft' || !d) return run
+  if (!d.input) {
+    const input = d.inputs[i]
+    if (!input) throw new Error('No such input on offer.')
+    return { ...run, draft: { ...d, input } }
+  }
+  const output = d.outputs[i]
+  if (!output) throw new Error('No such output on offer.')
+  const opus = draftCard(run.nextId, d.input, output, d.principle)
+  return startFight({ ...run, deck: [...run.deck, opus], nextId: run.nextId + 1, draft: null }, 0)
+}
+
+/** A new run: the draft of a twelfth rune first, unless asked to go straight to the first fight with the eleven. */
+export function newRun(seed = Date.now(), settings: Settings = DEFAULT_SETTINGS, opts: { draft?: boolean } = {}): Run {
   const deck = startingDeck()
+  const rng = makeRng(seed)
+  const draft = opts.draft === false ? null : rollDraft(rng)
   const run: Run = {
     settings,
     seed,
@@ -435,8 +656,9 @@ export function newRun(seed = Date.now(), settings: Settings = DEFAULT_SETTINGS)
     tookFree: false,
     smelted: null,
     nextId: deck.length + 1,
+    draft,
   }
-  return startFight(run, 0)
+  return draft ? { ...run, stage: 'draft', seed: rng.state() } : startFight(run, 0)
 }
 
 function startFight(run: Run, index: number): Run {
@@ -458,6 +680,9 @@ function startFight(run: Run, index: number): Run {
     log: [`${commission.name}: ${commission.blurb}`],
     paid: 0,
     flares: [],
+    status: noStatus(),
+    spare: 0,
+    pending: 0,
   }
   // The new moon that opens the fight: the first feed and the first hand.
   return phaseEvents({ ...run, stage: 'fight', fightIndex: index, seed: rng.state(), fight }, 0, true)
@@ -480,42 +705,61 @@ function drawCards(run: Run, n: number): Run {
 }
 
 /**
- * What happens at a phase: helpers work; the commission attacks, grows and
- * feeds the pool in bulk, each at its own phases; at the first and last
- * quarters you discard your hand; at the new and full moons you draw.
+ * What happens at a phase: helpers and statuses work; the commission attacks,
+ * grows and feeds the pool in bulk, each at its own phases; at the first and
+ * last quarters you discard your hand; at the new and full moons you draw.
  */
 function phaseEvents(run: Run, pos: number, opening = false): Run {
   const phase = phaseAt(pos)!
-  let f = { ...run.fight, pool: { ...run.fight.pool }, log: run.fight.log.slice() }
+  let f: Fight = { ...run.fight, pool: { ...run.fight.pool }, status: { ...run.fight.status }, log: run.fight.log.slice() }
+  const st = f.status
   const c = f.commission
   const notes: string[] = []
+  let quint = run.quintessence
   if (!opening && f.homunculi > 0) {
-    let drained = 0
-    for (let h = 0; h < f.homunculi; h++) {
-      let need = HOMUNCULUS_DRAIN
-      while (need > 0 && poolTotal(f.pool) > 0) {
-        const e = ELEMENTS.reduce((a, b) => (f.pool[b] > f.pool[a] ? b : a))
-        const k = Math.min(f.pool[e], need)
-        f.pool[e] -= k
-        need -= k
-        drained += k
-      }
-    }
+    const drained = takeMost(f.pool, HOMUNCULUS_DRAIN * f.homunculi)
     if (drained) {
       f.purified += drained
       notes.push(`the homunculus purifies ${drained}`)
     }
   }
+  if (!opening && st.settle > 0) {
+    const settled = takeMost(f.pool, st.settle)
+    f.purified += settled
+    st.settle -= 1
+    if (settled) notes.push(`${settled} settles and is purified`)
+  }
+  if (!opening && st.mend > 0) {
+    quint += st.mend
+    notes.push(`you mend ${st.mend}`)
+    st.mend -= 1
+  }
+  if (!opening && st.expose > 0) st.expose -= 1
+  // Flares due now: the rhythm's, and any a Stall held back; a Stall holds each back an eighth more.
   let paid = 0
-  if (!opening && c.attacks.includes(phase)) {
-    const flare = poolTotal(f.pool)
+  const due = opening ? 0 : f.pending + (c.attacks.includes(phase) ? 1 : 0)
+  const held = Math.min(st.stall, due)
+  st.stall -= held
+  f.pending = held
+  if (held) notes.push(`${c.name} is stalled`)
+  for (let k = 0; k < due - held; k++) {
+    if (st.thorns > 0) {
+      const pricked = takeMost(f.pool, st.thorns)
+      f.purified += pricked
+      st.thorns = 0
+      if (pricked) notes.push(`thorns purify ${pricked}`)
+    }
+    const flare = poolTotal(f.pool) * (st.volatile > 0 ? 2 : 1)
+    const doubled = st.volatile > 0
+    st.volatile = 0
     const absorbed = Math.min(f.ward, flare)
-    paid = flare - absorbed
+    const cost = flare - absorbed
+    paid += cost
     f.flares = [...f.flares, flare]
     f.ward -= absorbed
-    f.paid += paid
+    f.paid += cost
     // The pool stays: a flare costs what is in it, but does not empty it.
-    notes.push(flare ? `${c.name} flares ${flare}${absorbed ? `, Ward takes ${absorbed}` : ''}${paid ? `: pay ${paid}` : ''}` : `${c.name} flares, but the pool is empty`)
+    notes.push(flare ? `${c.name} flares ${flare}${doubled ? ' (doubled)' : ''}${absorbed ? `, Ward takes ${absorbed}` : ''}${cost ? `: pay ${cost}` : ''}` : `${c.name} flares, but the pool is empty`)
   }
   if (!opening && c.buffs?.includes(phase)) {
     f.buffs += 1
@@ -523,18 +767,35 @@ function phaseEvents(run: Run, pos: number, opening = false): Run {
   }
   if (opening || c.feedAt.includes(phase)) {
     const feed = feedOf(c, f.buffs)
+    let starved = 0
+    while (st.starve > starved && poolTotal(feed) > 0) {
+      feed[ELEMENTS.reduce((a, b) => (feed[b] > feed[a] ? b : a))] -= 1
+      starved++
+    }
+    st.starve = 0
     for (const e of ELEMENTS) f.pool[e] += feed[e]
-    notes.push(`${c.name} feeds ${ELEMENTS.filter((e) => feed[e]).map((e) => `${feed[e]} ${e}`).join(', ')}`)
+    notes.push(`${c.name} feeds ${ELEMENTS.filter((e) => feed[e]).map((e) => `${feed[e]} ${e}`).join(', ') || 'nothing'}${starved ? ` (${starved} starved)` : ''}`)
   }
-  if (!opening && DISCARD_PHASES.includes(phase) && f.hand.length) {
-    notes.push(`you discard ${f.hand.length}`)
-    f.discard = [...f.discard, ...f.hand]
-    f.hand = []
+  let extra = 0
+  if (!opening && DISCARD_PHASES.includes(phase)) {
+    if (st.retain > 0) {
+      st.retain = 0
+      if (f.hand.length) notes.push(`you keep your hand`)
+    } else if (f.hand.length) {
+      notes.push(`you discard ${f.hand.length}`)
+      f.discard = [...f.discard, ...f.hand]
+      f.hand = []
+    }
+    if (st.foresight > 0) {
+      extra = FORESIGHT_DRAW * st.foresight
+      st.foresight = 0
+      notes.push(`foresight draws ${extra}`)
+    }
   }
-  const draws = opening || DRAW_PHASES.includes(phase)
+  const draws = (opening || DRAW_PHASES.includes(phase) ? run.settings.hand : 0) + extra
   if (notes.length) f.log.unshift(`${PHASE_NAMES[phase]}: ${notes.join('; ')}.`)
-  let next: Run = { ...run, quintessence: Math.max(0, run.quintessence - paid), fight: f }
-  if (draws) next = drawCards(next, run.settings.hand)
+  let next: Run = { ...run, quintessence: Math.max(0, quint - paid), fight: f }
+  if (draws) next = drawCards(next, draws)
   return next
 }
 
@@ -573,30 +834,68 @@ function settle(run: Run): Run {
   return next
 }
 
-/** Play a card from hand: it resolves at once, then the dial moves on by its cost. */
-export function playCard(run: Run, id: number): Run {
+/**
+ * Play a card from hand: it resolves at once, then the dial moves on by its
+ * cost, less any spare time, which it spends first. A card with a discard
+ * input throws away another card from hand: the one named, else the first.
+ */
+export function playCard(run: Run, id: number, discardId?: number): Run {
   if (run.stage !== 'fight') return run
   const c = run.fight.hand.find((x) => x.id === id)
   if (!c) throw new Error('That card is not in hand.')
-  const r = resolveCard(c, run.fight.pool, run.fight.catalyst)
-  const pool = { ...run.fight.pool }
+  const f0 = run.fight
+  const r = resolveIn(run, c)
+  const pool = { ...f0.pool }
   for (const e of ELEMENTS) pool[e] -= r.drained[e]
-  const principles = { ...run.fight.principles }
+  const principles = { ...f0.principles }
   for (const p of PRINCIPLES) principles[p] += r.principles[p]
+  let hand = f0.hand.filter((x) => x.id !== id)
+  const thrown: Card[] = []
+  for (let k = 0; k < r.discards; k++) {
+    const t = hand.find((x) => x.id === discardId) ?? hand[0]
+    if (!t) break
+    thrown.push(t)
+    hand = hand.filter((x) => x !== t)
+    discardId = undefined
+  }
+  const status = { ...f0.status, condense: 0 }
+  const put: string[] = []
+  for (const [k, n] of Object.entries(r.statuses) as [StatusKey, number][]) {
+    const def = statusDef(k)
+    status[k] = Math.min(def.cap ?? Infinity, status[k] + n)
+    put.push(def.unit ? def.name : `${def.name} ${n}`)
+  }
+  const cost = costOf(c)
+  const spent = Math.min(f0.spare, cost)
   const got = PRINCIPLES.filter((p) => r.principles[p]).map((p) => `${r.principles[p]} ${p}`)
+  const what = [
+    c.purifies ? `purifies ${r.purification}${f0.catalyst > 1 ? ` (×${f0.catalyst} from a catalyst)` : ''}` : poolTotal(r.drained) ? 'grounds it' : '',
+    got.length ? `leaves ${got.join(' and ')}` : '',
+    r.ward ? `raises Ward ${r.ward}` : '',
+    r.gain ? `gains ${r.gain} quintessence` : '',
+    r.draw ? `draws ${r.draw}` : '',
+    r.regain ? 'spares an eighth' : '',
+    put.length ? `puts on ${put.join(', ')}` : '',
+    r.catalyst > 1 ? `the next card purifies ×${r.catalyst}` : '',
+  ].filter(Boolean)
+  const paidWords = [r.paid ? `pays ${r.paid} quintessence` : '', thrown.length ? `discards ${thrown.map((t) => t.name).join(', ')}` : ''].filter(Boolean)
   const fight: Fight = {
-    ...run.fight,
+    ...f0,
     pool,
     principles,
-    ward: run.fight.ward + r.ward,
+    status,
+    ward: f0.ward + r.ward,
     catalyst: r.catalyst,
-    purified: run.fight.purified + r.purification,
-    hand: run.fight.hand.filter((x) => x.id !== id),
-    discard: [...run.fight.discard, c],
-    log: [`${c.name}: takes ${poolTotal(r.drained)}, ${c.purifies ? `purifies ${r.purification}${run.fight.catalyst > 1 ? ` (×${run.fight.catalyst} from a catalyst)` : ''}` : 'grounds it'}${got.length ? `, leaves ${got.join(' and ')}` : ''}${r.ward ? `, raises Ward ${r.ward}` : ''}${r.catalyst > 1 ? `; the next card purifies ×${r.catalyst}` : ''}.`, ...run.fight.log],
+    purified: f0.purified + r.purification,
+    hand,
+    discard: [...f0.discard, ...thrown, c],
+    spare: f0.spare - spent + r.regain,
+    log: [`${c.name}: ${[...paidWords, `takes ${poolTotal(r.drained)}`, ...what].join(', ')}.`, ...f0.log],
   }
-  const played = after({ ...run, fight })
-  return played.stage === 'fight' ? settle(advance(played, costOf(c))) : played
+  let played: Run = { ...run, quintessence: run.quintessence - r.paid + r.gain, fight }
+  if (r.draw) played = drawCards(played, r.draw)
+  played = after(played)
+  return played.stage === 'fight' ? settle(advance(played, cost - spent)) : played
 }
 
 export const canAfford = (f: Fight, r: Recipe) => PRINCIPLES.every((p) => f.principles[p] >= (r.cost[p] ?? 0))
@@ -621,22 +920,36 @@ export function wait(run: Run): Run {
   return settle(advance({ ...run, fight: { ...run.fight, log: ['Waits an eighth.', ...run.fight.log] } }, 2))
 }
 
-/** The next phases and what they bring, for the dial. */
-export function upcoming(f: Fight, count = 4): { pos: number; phase: Phase; attack: boolean; buff: boolean; feed: boolean; draw: boolean; discard: boolean }[] {
+/**
+ * The next phases and what they bring, for the dial: attack is whether a flare
+ * comes there (after any Stall), rhythm whether the commission's rhythm puts
+ * one there, held whether a Stall holds one back there.
+ */
+export function upcoming(f: Fight, count = 4): { pos: number; phase: Phase; attack: boolean; rhythm: boolean; held: boolean; buff: boolean; feed: boolean; draw: boolean; discard: boolean }[] {
   const out = []
   let pos = f.dial + 1
+  let carry = f.pending
+  let stall = f.status.stall
   while (out.length < count) {
     const phase = phaseAt(pos)
-    if (phase)
+    if (phase) {
+      const rhythm = f.commission.attacks.includes(phase)
+      const due = carry + (rhythm ? 1 : 0)
+      const held = Math.min(stall, due)
+      stall -= held
+      carry = held
       out.push({
         pos,
         phase,
-        attack: f.commission.attacks.includes(phase),
+        attack: due - held > 0,
+        rhythm,
+        held: held > 0,
         buff: !!f.commission.buffs?.includes(phase),
         feed: f.commission.feedAt.includes(phase),
         draw: DRAW_PHASES.includes(phase),
         discard: DISCARD_PHASES.includes(phase),
       })
+    }
     pos++
   }
   return out
@@ -694,11 +1007,49 @@ export function runeWords(r: RewardRune): string {
   }
 }
 
+/** An output in a few words. */
+export function outputWords(o: Output): string {
+  switch (o.kind) {
+    case 'ward':
+      return 'Ward 1 for each'
+    case 'catalyst':
+      return `the next card ×${o.factor}`
+    case 'principle':
+      return `${o.principle} from ${o.gate}`
+    case 'draw':
+      return `draw 1 from ${o.gate}`
+    case 'regain':
+      return `spare an eighth from ${o.gate}`
+    case 'quintessence':
+      return 'quintessence 1 for each'
+    case 'status': {
+      const d = statusDef(o.status)
+      return d.unit ? `${d.name} from ${o.gate}` : `${d.name} 1 for each`
+    }
+  }
+}
+
+/** An input in a few words. */
+export function inputWords(ch: Channel): string {
+  switch (ch.element) {
+    case 'any':
+      return `${ch.capacity} any`
+    case 'quintessence':
+      return `${ch.capacity} for ${ch.capacity} quintessence`
+    case 'discard':
+      return `${ch.capacity} for a discard`
+    case 'moon':
+      return `${ch.capacity} for an eighth`
+    default:
+      return `${ch.capacity} ${ch.element}`
+  }
+}
+
 /** A card's equation in words. */
 export function cardWords(c: Card): string {
-  const ins = c.channels.map((ch) => `${ch.capacity} ${ch.element === 'any' ? 'any' : ch.element}`).join(' + ')
+  const ins = c.channels.map(inputWords).join(' + ')
   const g = c.gain ? ` ×${1 + c.gain}` : ''
-  const d = c.outputs.map((o) => (o.kind === 'ward' ? ', Ward 1 for each' : o.kind === 'catalyst' ? `, the next card ×${o.factor}` : `, ${o.principle} from ${o.gate}`)).join('')
+  const d = c.outputs.map((o) => `, ${outputWords(o)}`).join('')
   const gr = c.ground ? `, ground ${c.ground * GROUND_DRAIN}` : ''
   return `Takes up to ${ins}${g}${d}${gr}`
 }

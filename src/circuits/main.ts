@@ -7,34 +7,44 @@ import '../ui/style.css'
 import './circuits.css'
 import { sound } from '../ui/sound'
 import { elementMote, makeRune } from '../sim/deck'
-import { circuitSvg, offerSvg, recipeSvg } from './circuit'
+import { circuitSvg, draftSvg, offerSvg, recipeSvg } from './circuit'
 import { dialSvg, waitIcon, type DialPreview } from './dial'
 import {
   COMMISSIONS,
   DEFAULT_SETTINGS,
   ELEMENTS,
   EXTRA_RUNE_PRICE,
+  FORESIGHT_DRAW,
   GROUND_DRAIN,
   METAL_GATE,
   PHASE_NAMES,
   PRINCIPLES,
   RECIPES,
+  STATUSES,
+  UNIT_GATE,
   addRune,
   canAfford,
   catalystCard,
   costOf,
   craft,
+  draftCard,
+  draftPick,
   feedOf,
   fits,
+  fromPool,
   newRun,
   nextFight,
   playCard,
   poolTotal,
-  resolveCard,
+  resolveIn,
+  statusDef,
   takeRune,
+  threatOf,
   upcoming,
   wait,
   type Card,
+  type Channel,
+  type DraftOutput,
   type Output,
   type Pool,
   type Principle,
@@ -43,7 +53,7 @@ import {
   type Run,
   type Settings,
 } from './engine'
-import { ELEMENT_COLOR, card as cardSig, element, ground, homunculus, icon, lead as leadSig, metal, moon, principle, quintessence, silver as silverSig, square, ward } from './sigils'
+import { ELEMENT_COLOR, card as cardSig, discard as discardSig, element, ground, homunculus, icon, lead as leadSig, metal, moon, principle, quintessence, regain as regainSig, silver as silverSig, square, status as statusSig, ward } from './sigils'
 
 // ---------------------------------------------------------------------------
 // State
@@ -66,6 +76,10 @@ const ui = {
   flash: '',
   /** What the last action did, played once by the next render. */
   fx: null as { paid: number; flared: boolean } | null,
+  /** In the draft: the option picked to read before taking it. */
+  draft: null as number | null,
+  /** In a fight: the card picked to discard for a card with a discard input. */
+  discard: null as number | null,
 }
 
 const root = document.getElementById('app')!
@@ -81,8 +95,8 @@ function start() {
   ui.focus = null
   ui.popup = null
   ui.offer = ui.target = ui.look = null
+  ui.draft = ui.discard = null
   ui.flash = ''
-  sound.deal(ui.run.fight.hand.length)
 }
 
 // ---------------------------------------------------------------------------
@@ -95,19 +109,57 @@ const PRINCIPLE_USE: Record<Principle, string> = {
 }
 const sumCap = (c: Card) => c.channels.reduce((n, ch) => n + ch.capacity, 0)
 const maxPurify = (c: Card) => sumCap(c) * (1 + c.gain)
+const arcsWord = (n: number) => `${n} ${n === 1 ? 'arc' : 'arcs'}`
+
+function inputWords(ch: Channel): string {
+  switch (ch.element) {
+    case 'any':
+      return `up to ${ch.capacity} of whatever is most plentiful`
+    case 'quintessence':
+      return `${ch.capacity} for as much of your quintessence (the star; never your last)`
+    case 'discard':
+      return `${ch.capacity} for a card you discard from your hand (the struck card)`
+    case 'moon':
+      return `${ch.capacity} for an eighth more of the moon (the crescent inside)`
+    default:
+      return `up to ${ch.capacity} ${ch.element}`
+  }
+}
+
+function statusWords(k: Output & { kind: 'status' }): string {
+  const d = statusDef(k.status)
+  return d.unit ? `${d.name} once it collects ${k.gate} or more (${arcsWord(k.gate)}): ${d.text}` : `${d.name} N, N for what it collects: ${d.text}`
+}
 
 function outputWords(o: Output): string {
-  if (o.kind === 'ward') return 'Ward 1 for each it takes (the shield)'
-  if (o.kind === 'catalyst') return `the next card you play purifies ×${o.factor} (the card sign)`
-  return `1 ${o.principle} once it takes ${o.gate} or more (${o.gate} arcs)`
+  switch (o.kind) {
+    case 'ward':
+      return 'Ward 1 for each it collects (the shield)'
+    case 'catalyst':
+      return `the next card you play purifies ×${o.factor} (the card sign)`
+    case 'principle':
+      return `1 ${o.principle} once it collects ${o.gate} or more (${arcsWord(o.gate)})`
+    case 'draw':
+      return `draw a card once it collects ${o.gate} or more (the card with +1, ${arcsWord(o.gate)})`
+    case 'regain':
+      return `spare an eighth of the moon once it collects ${o.gate} or more (the turning arrow): your next cards spend it before the moon moves`
+    case 'quintessence':
+      return '1 quintessence for each it collects (the star)'
+    case 'status':
+      return statusWords(o)
+  }
 }
 
 function cardLines(c: Card): string[] {
-  const ins = c.channels.map((ch) => (ch.element === 'any' ? `up to ${ch.capacity} of whatever is most plentiful` : `up to ${ch.capacity} ${ch.element}`)).join(' and ')
+  const ins = c.channels.map(inputWords).join(' and ')
+  const pool = c.channels.every((ch) => fromPool(ch.element))
+  const verb = pool ? 'Takes' : 'Collects'
   return [
     c.purifies
-      ? `Takes ${ins} and purifies 1 for each${c.gain ? `, ×${1 + c.gain} through the ${c.gain === 1 ? 'square' : 'squares'} drawn around its square` : ''}.`
-      : `Takes ${ins} and grounds it (the ground sign below), purifying nothing.`,
+      ? `${verb} ${ins} and purifies 1 for each${c.gain ? `, ×${1 + c.gain} through the ${c.gain === 1 ? 'square' : 'squares'} drawn around its square` : ''}.`
+      : c.channels.some((ch) => fromPool(ch.element))
+        ? `${verb} ${ins}, and grounds what it takes from the pool (the ground sign below), purifying nothing.`
+        : `${verb} ${ins}.`,
     c.outputs.length ? `${cap(c.outputs.map(outputWords).join('; '))}.` : '',
     c.ground ? `${c.ground === 1 ? 'Its ground stage takes' : `Each of its ${c.ground} ground stages takes`} up to ${GROUND_DRAIN} of whatever is most plentiful (the star in the small circle below) and grounds it (the ground sign), purifying nothing.` : '',
   ].filter(Boolean)
@@ -115,12 +167,25 @@ function cardLines(c: Card): string[] {
 
 function nowLine(run: Run, c: Card): string {
   const boost = run.fight.catalyst
-  const r = resolveCard(c, run.fight.pool, boost)
-  if (!r.processed && !Object.values(r.drained).some(Boolean)) return `Now: nothing in the pool for it${r.catalyst > 1 ? `, but the next card would purify ×${r.catalyst}` : ''}.`
+  const r = resolveIn(run, c)
+  if (!r.processed && !Object.values(r.drained).some(Boolean)) return `Now: nothing for it to collect${r.catalyst > 1 ? `, but the next card would purify ×${r.catalyst}` : ''}.`
   const got = PRINCIPLES.filter((p) => r.principles[p]).map((p) => `${r.principles[p]} ${p}`)
-  const short = c.outputs.filter((o) => o.kind === 'principle' && r.processed > 0 && r.processed < o.gate).map((o) => `${o.gate - r.processed} short of ${(o as { principle: Principle }).principle}`)
-  const what = c.purifies ? `purifies ${r.purification}${boost > 1 ? ` (×${boost} from the catalyst)` : ''}` : 'grounds it'
-  return `Now: takes ${poolTotal(r.drained)}, ${what}${r.catalyst > 1 ? `, the next card ×${r.catalyst}` : ''}${got.length ? `, yields ${got.join(' and ')}` : ''}${r.ward ? `, Ward ${r.ward}` : ''}${short.length ? `; ${short.join(', ')}` : ''}.`
+  const short = c.outputs.filter((o) => o.gate > 1 && r.processed > 0 && r.processed < o.gate).map((o) => `${o.gate - r.processed} short of ${o.kind === 'principle' ? o.principle : o.kind === 'status' ? statusDef(o.status).name : o.kind === 'regain' ? 'the spare eighth' : o.kind === 'draw' ? 'the draw' : o.kind}`)
+  const mult = boost > 1 || (run.fight.status.expose || run.fight.status.volatile) ? ` (×${boost * (run.fight.status.expose ? 1.5 : 1) * (run.fight.status.volatile ? 2 : 1)} from ${[boost > 1 ? 'the catalyst' : '', run.fight.status.expose ? 'Expose' : '', run.fight.status.volatile ? 'Volatile' : ''].filter(Boolean).join(' and ')})` : ''
+  const what = [
+    r.paid ? `pays ${r.paid} quintessence` : '',
+    r.discards ? `discards ${r.discards === 1 ? 'a card' : `${r.discards} cards`}` : '',
+    `collects ${r.processed}${r.condensed ? ` (${r.condensed} from Condense)` : ''}`,
+    c.purifies ? `purifies ${r.purification}${mult}` : poolTotal(r.drained) ? 'grounds what it takes' : '',
+    r.catalyst > 1 ? `the next card ×${r.catalyst}` : '',
+    got.length ? `yields ${got.join(' and ')}` : '',
+    r.ward ? `Ward ${r.ward}` : '',
+    r.gain ? `gains ${r.gain} quintessence` : '',
+    r.draw ? `draws ${r.draw}` : '',
+    r.regain ? 'spares an eighth' : '',
+    ...Object.entries(r.statuses).map(([k, n]) => (statusDef(k as never).unit ? statusDef(k as never).name : `${statusDef(k as never).name} ${n}`)),
+  ].filter(Boolean)
+  return `Now: ${what.join(', ')}${short.length ? `; ${short.join(', ')}` : ''}.`
 }
 
 function runeTitle(r: RewardRune): string {
@@ -186,13 +251,16 @@ function situationNote(run: Run): [string, string] {
   const dis = up.find((x) => x.discard)
   const drw = up.find((x) => x.draw)
   const nf = nextFeed(run)
-  const threat = Math.max(0, poolTotal(f.pool) - f.ward)
+  const threat = threatOf(f)
   const title = atk ? `${PHASE_NAMES[atk.phase]} in ${ticks(atk.pos - f.dial)}` : 'The moon'
+  const on = STATUSES.filter((d) => f.status[d.key] > 0)
   const lines = [
-    atk ? `${f.commission.name} flares there: whatever is in the pool, less Ward (${threat} now, the red badge). The pool stays.` : '',
+    atk ? `${f.commission.name} flares there${atk.rhythm ? '' : ', held back by a Stall'}: whatever is in the pool, less Ward (${threat} now, the red badge). The pool stays.` : '',
     dis && (!atk || dis.pos < atk.pos) ? `You discard your hand at the ${PHASE_NAMES[dis.phase].toLowerCase()}, before it.` : '',
     drw ? `You draw ${run.settings.hand} at the ${PHASE_NAMES[drw.phase].toLowerCase()}${nf ? `, when ${f.commission.name.toLowerCase()} feeds ${feedWords(nf.feed)}` : ''}.` : '',
     f.catalyst > 1 ? `The next card you play purifies ×${f.catalyst}.` : '',
+    f.spare ? `You have ${ticks(f.spare)} of the moon spare: your next cards spend it before the moon moves.` : '',
+    on.length ? `On: ${on.map((d) => (d.unit && d.cap === 1 ? d.name : `${d.name} ${f.status[d.key]}`)).join(', ')} (tap the materials to read them).` : '',
     'Pick a card to see what it would do.',
   ]
   return [title, lines.filter(Boolean).join(' ')]
@@ -202,7 +270,7 @@ function dialNote(run: Run): [string, string] {
   const f = run.fight
   const items = upcoming(f, 4).map((x) => {
     const fd = feedOf(f.commission, f.buffs + (x.buff ? 1 : 0))
-    const what = [x.attack ? 'flare' : '', x.buff ? 'it grows' : '', x.feed ? `it feeds ${feedWords(fd)}` : '', x.discard ? 'you discard' : '', x.draw ? `you draw ${run.settings.hand}` : ''].filter(Boolean)
+    const what = [x.attack ? 'flare' : x.held ? 'its flare is held back' : '', x.buff ? 'it grows' : '', x.feed ? `it feeds ${feedWords(fd)}` : '', x.discard ? 'you discard' : '', x.draw ? `you draw ${run.settings.hand}` : ''].filter(Boolean)
     return `<b>${PHASE_NAMES[x.phase]}</b> (${ticks(x.pos - f.dial)}): ${what.length ? what.join(', ') : 'nothing'}`
   })
   return ['The moon', `${items.join('. ')}. Purified ${f.purified} of ${f.commission.require} (the inner ring).`]
@@ -212,7 +280,7 @@ function materialsNote(run: Run): [string, string] {
   const f = run.fight
   return [
     'Materials',
-    `Cards yield principles from their outputs. ${PRINCIPLE_USE.salt} ${PRINCIPLE_USE.mercury} After a commission what is left smelts into metal: silver from 2 mercury and a salt (worth 3), lead from any two (worth 1). Metal buys extra runes.${f.ward ? ` Ward ${f.ward} catches the next flare first.` : ''}${f.homunculi ? ` Your homunculus purifies ${2 * f.homunculi} at every phase.` : ''}`,
+    `${STATUSES.filter((d) => f.status[d.key] > 0).map((d) => `<b>${d.name}${d.unit && d.cap === 1 ? '' : ` ${f.status[d.key]}`}</b>${d.on === 'commission' ? ` on ${esc(f.commission.name.toLowerCase())}` : ''}: ${d.text.replace(/\bN\b/g, String(f.status[d.key])).replace('you draw 2', `you draw ${FORESIGHT_DRAW * f.status[d.key]}`).replace('an eighth later', f.status[d.key] > 1 ? `${ticks(2 * f.status[d.key])} later` : 'an eighth later')}. `).join('')}${f.spare ? `<b>Spare time</b>: ${ticks(f.spare)}, spent by your next cards before the moon moves. ` : ''}Cards yield principles from their outputs. ${PRINCIPLE_USE.salt} ${PRINCIPLE_USE.mercury} After a commission what is left smelts into metal: silver from 2 mercury and a salt (worth 3), lead from any two (worth 1). Metal buys extra runes.${f.ward ? ` Ward ${f.ward} catches the next flare first.` : ''}${f.homunculi ? ` Your homunculus purifies ${2 * f.homunculi} at every phase.` : ''}`,
   ]
 }
 
@@ -231,7 +299,11 @@ function fightNote(run: Run): string {
   if (ui.focus === 'materials') return noteView(...materialsNote(run))
   if (p?.kind === 'recipe') return noteView(...recipeNote(run, RECIPES.find((x) => x.key === p.key)!))
   const c = p?.kind === 'card' ? run.fight.hand.find((x) => x.id === p.id) : null
-  if (c) return noteView(`${c.name}, ${ticks(costOf(c))}`, `${cardLines(c).join(' ')} <span class="now">${esc(nowLine(run, c))}</span>`)
+  if (c) {
+    const target = ui.discard !== null ? run.fight.hand.find((x) => x.id === ui.discard) : null
+    const ask = needsTarget(run, c) ? (target ? ` It will discard ${esc(target.name)}; tap another card to change that.` : ' Tap another card in your hand to discard it for this one.') : ''
+    return noteView(`${c.name}, ${ticks(costOf(c))}`, `${cardLines(c).join(' ')} <span class="now">${esc(nowLine(run, c))}${ask}</span>`)
+  }
   return noteView(...situationNote(run))
 }
 
@@ -252,7 +324,10 @@ function legendText(): string {
     ${legendRow(I(ground(0, -1, 8, { stroke: 'var(--lit)' })), `A ground sign is an output that grounds what its stage took, purifying nothing. A ground stage takes ${GROUND_DRAIN} of whatever is most plentiful.`)}
     ${legendRow(I(metal(0, 0, 8, { stroke: 'var(--lit)' })), 'Metal, counted by worth: what is left after a commission smelts into silver and lead. It buys extra runes.')}
     ${legendRow(I(homunculus(0, 0, 9, { stroke: 'var(--lit)' })), 'A homunculus purifies on its own at every phase.')}
-    ${legendRow(I(cardSig(-3, 0, 7, { stroke: 'var(--lit)' }) + '<text x="6" y="5" font-size="9" fill="var(--ink)" class="sig-num">×2</text>'), 'A card sign with ×2 is a catalyst: when this card is played, the next card you play purifies twice over.')}
+    ${legendRow(I(cardSig(-3, 0, 7, { stroke: 'var(--lit)' }) + '<text x="6" y="5" font-size="9" fill="var(--ink)" class="sig-num">×2</text>'), 'A card sign with ×2 is a catalyst: when this card is played, the next card you play purifies twice over. With +1 it draws a card.')}
+    ${legendRow(I(quintessence(-5, 0, 6, { stroke: 'var(--glass)' }) + discardSig(6, 0, 6, { stroke: 'var(--ink-soft)' })), 'Inputs that feed a stage from elsewhere: a star pays your quintessence, a struck card discards one from your hand, a crescent inside takes an eighth more of the moon. Each collects its number.')}
+    ${legendRow(I(regainSig(0, 0, 8, { stroke: 'var(--lit)' })), 'A turning arrow round a crescent spares an eighth of the moon: your next cards spend it before the moon moves. A star outside a stage gains quintessence.')}
+    ${legendRow(I(statusSig('settle', -5, 0, 5.5, { stroke: 'var(--lit)' }) + statusSig('stall', 6, 0, 5.5, { stroke: 'var(--lit)' })), `Status signs put a status on the commission or on you: ${STATUSES.map((d) => d.name).join(', ')}. Most take N from what the stage collects; the rest need ${UNIT_GATE}.`)}
   </ul>`
 }
 
@@ -278,6 +353,8 @@ function materials(run: Run): string {
     ${chip(icon(ward(0, 0, 9, { stroke: 'var(--glass)', width: 1.6 }), 20), f.ward, 'Ward', !f.ward)}
     ${chip(icon(homunculus(0, 0, 10, { stroke: 'var(--good)', width: 1.5 }), 20), f.homunculi, 'homunculi', !f.homunculi)}
     ${f.catalyst > 1 ? `<span class="chip" aria-label="Next card purifies times ${f.catalyst}">${icon(cardSig(0, 0, 8, { stroke: 'var(--lit)', width: 1.5 }), 20)}<b class="num">×${f.catalyst}</b></span>` : ''}
+    ${f.spare ? `<span class="chip" aria-label="Spare time ${f.spare} sixteenths">${icon(regainSig(0, 0, 8, { stroke: 'var(--moon)', width: 1.5 }), 20)}<b class="num">${f.spare / 2}</b></span>` : ''}
+    ${STATUSES.filter((d) => f.status[d.key] > 0).map((d) => `<span class="chip status ${d.on}" aria-label="${d.name} ${f.status[d.key]}">${icon(statusSig(d.key, 0, 0, 8, { stroke: d.on === 'commission' ? 'var(--fire)' : 'var(--good)', width: 1.5 }), 20)}${d.unit && d.cap === 1 ? '' : `<b class="num">${f.status[d.key]}</b>`}</span>`).join('')}
   </button>`
 }
 
@@ -294,20 +371,28 @@ function hand(run: Run): string {
   if (!f.hand.length) return `<section class="hand-row empty"><p>No cards in hand until the next new or full moon.</p></section>`
   return `<section class="hand-row" aria-label="Hand">${f.hand
     .map((c) => {
-      const live = resolveCard(c, f.pool, f.catalyst)
+      const live = resolveIn(run, c)
       const on = ui.pick?.kind === 'card' && ui.pick.id === c.id
+      const thrown = ui.discard === c.id && !on
       const idle = !live.processed && !Object.values(live.drained).some(Boolean)
-      return `<button class="ccard ${on ? 'is-on' : ''} ${idle ? 'idle' : ''}" data-act="pick-card" data-id="${c.id}" aria-pressed="${on}" aria-label="${esc(c.name)}: would purify ${live.purification}">${circuitSvg(c, { live, size: 120 })}<span class="cname">${esc(c.name)}</span></button>`
+      return `<button class="ccard ${on ? 'is-on' : ''} ${idle ? 'idle' : ''} ${thrown ? 'thrown' : ''}" data-act="pick-card" data-id="${c.id}" aria-pressed="${on}" aria-label="${esc(c.name)}${thrown ? ', to be discarded' : ''}: would purify ${live.purification}">${circuitSvg(c, { live, size: 120 })}<span class="cname">${thrown ? `${icon(discardSig(0, 0, 7, { stroke: 'var(--warn)', width: 1.5 }), 13)} ` : ''}${esc(c.name)}</span></button>`
     })
     .join('')}</section>`
 }
+
+/** Whether this card, picked, waits for a card to discard: it has a discard input and there is another card to throw. */
+const needsTarget = (run: Run, c: Card) => c.channels.some((ch) => ch.element === 'discard') && run.fight.hand.length > 1
 
 /** The picked move, run through the engine for the dial's ghost. */
 function pickedResult(run: Run): Run | null {
   const p = ui.pick
   if (!p) return null
   try {
-    if (p.kind === 'card') return run.fight.hand.some((c) => c.id === p.id) ? playCard(run, p.id) : null
+    if (p.kind === 'card') {
+      const c = run.fight.hand.find((x) => x.id === p.id)
+      if (!c || (needsTarget(run, c) && ui.discard === null)) return null
+      return playCard(run, p.id, ui.discard ?? undefined)
+    }
     const r = RECIPES.find((x) => x.key === p.key)!
     return canAfford(run.fight, r) ? craft(run, p.key) : null
   } catch {
@@ -319,7 +404,7 @@ function previewOf(run: Run, after: Run | null): DialPreview | null {
   if (!after) return null
   const p = ui.pick
   const c = p?.kind === 'card' ? run.fight.hand.find((x) => x.id === p.id) : null
-  const drain = c ? resolveCard(c, run.fight.pool).drained : { water: 0, earth: 0, air: 0, fire: 0 }
+  const drain = c ? resolveIn(run, c).drained : { water: 0, earth: 0, air: 0, fire: 0 }
   if (after.fightIndex !== run.fightIndex || after.stage === 'reward' || after.stage === 'won') {
     return { dial: run.fight.dial, purified: run.fight.commission.require, drain, flares: [] }
   }
@@ -330,7 +415,7 @@ function actions(run: Run, after: Run | null): string {
   const p = ui.pick
   const r = p?.kind === 'recipe' ? RECIPES.find((x) => x.key === p.key)! : null
   const c = p?.kind === 'card' ? run.fight.hand.find((x) => x.id === p.id) : null
-  const label = r ? 'Brew' : c ? 'Play' : 'Pick a card'
+  const label = r ? 'Brew' : c ? (needsTarget(run, c) && ui.discard === null ? 'Pick a card to discard' : 'Play') : 'Pick a card'
   const finishes = after && (after.stage === 'reward' || after.stage === 'won')
   const flares = after && after.fightIndex === run.fightIndex ? after.fight.flares.length - run.fight.flares.length : 0
   const cost = after && after.fightIndex === run.fightIndex ? run.quintessence - after.quintessence : 0
@@ -461,9 +546,87 @@ function startView(): string {
   </div>${popupView(null)}`
 }
 
+function draftOutputTitle(o: DraftOutput): string {
+  switch (o.kind) {
+    case 'purify':
+      return 'Output: purify'
+    case 'ground':
+      return 'Output: a ground stage'
+    case 'ward':
+      return 'Output: Ward'
+    case 'catalyst':
+      return 'Output: catalyst'
+    case 'draw':
+      return 'Output: draw a card'
+    case 'regain':
+      return 'Output: spare an eighth'
+    case 'quintessence':
+      return 'Output: quintessence'
+    case 'status':
+      return `Output: ${statusDef(o.status).name}`
+    case 'principle':
+      return `Output: ${o.principle}`
+  }
+}
+
+function draftOutputText(o: DraftOutput): string {
+  if (o.kind === 'purify') return 'A square below the stage: it purifies 1 for each it collects. Gain runes in the shop multiply it.'
+  if (o.kind === 'ground') return `A ground stage hanging from the card: it takes up to ${GROUND_DRAIN} of whatever is most plentiful and grounds it, purifying nothing. What the input takes from the pool is grounded too.`
+  return `${cap(outputWords(o))}.`
+}
+
+function inputTitle(ch: Channel): string {
+  return ch.element === 'any' ? `Input: ${ch.capacity} of any` : ch.element === 'quintessence' ? `Input: ${ch.capacity} quintessence` : ch.element === 'discard' ? 'Input: a discard' : ch.element === 'moon' ? 'Input: an eighth of the moon' : `Input: ${ch.capacity} ${ch.element}`
+}
+
+function inputText(ch: Channel): string {
+  if (fromPool(ch.element)) return `It takes ${inputWords(ch)} from the pool: whatever it takes counts toward its outputs, and is gone from what flares.`
+  if (ch.element === 'quintessence') return `It pays ${ch.capacity} of your quintessence (never your last) and collects ${ch.capacity}, whatever is in the pool.`
+  if (ch.element === 'discard') return `It discards another card from your hand, your choice, and collects ${ch.capacity}. Cheap at a quarter moon, when you would discard anyway.`
+  return `The card takes an eighth more of the moon, a quarter in all, and collects ${ch.capacity}.`
+}
+
+/** The drafted rune so far, without a main output until one is picked. */
+function draftSoFar(input: Channel, output: DraftOutput | null, p: Principle): Card {
+  return output ? draftCard(0, input, output, p) : { id: 0, name: 'Opus', channels: [input], outputs: [{ kind: 'principle', principle: p, gate: 1 }], purifies: false, gain: 0, time: 2, ground: 0 }
+}
+
+function draftView(run: Run): string {
+  const d = run.draft!
+  const step = d.input ? 'output' : 'input'
+  const sel = ui.draft
+  const tile = (i: number) => {
+    const art = step === 'input' ? draftSvg({ input: d.inputs[i] }, 52) : draftSvg({ output: d.outputs[i] }, 52)
+    const title = step === 'input' ? inputTitle(d.inputs[i]) : draftOutputTitle(d.outputs[i])
+    return `<button class="offer ${sel === i ? 'is-on' : ''}" data-act="draft-opt" data-i="${i}" aria-pressed="${sel === i}" aria-label="${esc(title)}">${art}<span class="price">${esc(title.replace(/^(Input|Output): /, ''))}</span></button>`
+  }
+  const input = d.input ?? (sel !== null ? d.inputs[sel] : null)
+  const output = d.input && sel !== null ? d.outputs[sel] : null
+  const opus = input ? draftSoFar(input, output, d.principle) : null
+  const note =
+    sel === null
+      ? noteView(
+          step === 'input' ? 'Your twelfth rune' : 'Now its output',
+          step === 'input'
+            ? `Draft one more rune for your deck. First pick one of three inputs, what it collects; then one of three outputs. It also yields ${d.principle} once it collects 1 (the single arc).`
+            : `It collects through ${esc(inputWords(d.input!))}. Pick one of three outputs.`,
+        )
+      : step === 'input'
+        ? noteView(inputTitle(d.inputs[sel]), esc(inputText(d.inputs[sel])))
+        : noteView(draftOutputTitle(d.outputs[sel]), esc(draftOutputText(d.outputs[sel])))
+  return `<div class="cx reward draft">
+    ${header(run, 'Draft')}
+    <section class="offers" aria-label="${step === 'input' ? 'Inputs' : 'Outputs'} on offer">${[0, 1, 2].map(tile).join('')}</section>
+    ${note}
+    ${opus ? `<section class="opus" aria-label="Your twelfth rune">${circuitSvg(opus, { size: 150, noMain: !output })}<span class="cname">Opus</span></section>` : ''}
+    <section class="deck" aria-label="Your deck">${run.deck.map((c) => `<div class="ccard">${circuitSvg(c, { size: 80 })}<span class="cname">${esc(c.name)}</span></div>`).join('')}</section>
+    <div class="cx-actions one"><button class="primary go" data-act="draft-take" ${sel === null ? 'disabled' : ''}>${sel === null ? `Pick an ${step}` : step === 'input' ? 'Take this input' : 'Take this output · begin'}</button></div>
+  </div>${popupView(run)}`
+}
+
 function render() {
   const run = ui.run
-  root.innerHTML = !run ? startView() : run.stage === 'fight' ? fightView(run) : run.stage === 'reward' ? rewardView(run) : endView(run)
+  root.innerHTML = !run ? startView() : run.stage === 'draft' ? draftView(run) : run.stage === 'fight' ? fightView(run) : run.stage === 'reward' ? rewardView(run) : endView(run)
   ui.fx = null
 }
 
@@ -482,6 +645,7 @@ function apply(next: Run) {
   const flaresBefore = before.fight.flares.length
   ui.run = next
   ui.pick = null
+  ui.discard = null
   ui.focus = null
   const same = next.fightIndex === before.fightIndex
   const paid = same ? before.quintessence - next.quintessence : 0
@@ -528,19 +692,41 @@ root.addEventListener('click', (ev) => {
       case 'pick-card': {
         const id = Number(el.dataset.id)
         ui.focus = null
+        const picked = ui.pick?.kind === 'card' && run ? run.fight.hand.find((x) => x.id === (ui.pick as { id: number }).id) : null
+        // With a card that discards picked, tapping another card marks it to throw away.
+        if (run && picked && picked.id !== id && needsTarget(run, picked)) {
+          ui.discard = ui.discard === id ? null : id
+          break
+        }
         ui.pick = ui.pick?.kind === 'card' && ui.pick.id === id ? null : { kind: 'card', id }
+        ui.discard = null
         const c = run?.fight.hand.find((x) => x.id === id)
-        if (c && ui.pick) sound.tap(makeRune(4_000_000 + id, { body: 'triangle', motes: c.channels[0].element === 'any' ? [] : [elementMote(c.channels[0].element)] }))
+        const src = c?.channels[0].element
+        if (c && ui.pick) sound.tap(makeRune(4_000_000 + id, { body: 'triangle', motes: src && fromPool(src) && src !== 'any' ? [elementMote(src)] : [] }))
         break
       }
+      case 'draft-opt': {
+        const i = Number(el.dataset.i)
+        ui.draft = ui.draft === i ? null : i
+        break
+      }
+      case 'draft-take':
+        if (run && ui.draft !== null) {
+          ui.run = draftPick(run, ui.draft)
+          ui.draft = null
+          sound.tap(makeRune(3_000_000, { body: 'circle', motes: [elementMote('earth')] }))
+          if (ui.run.stage === 'fight') setTimeout(() => sound.deal(ui.run!.fight.hand.length), 300)
+        }
+        break
       case 'pick-recipe': {
         const key = el.dataset.key as Recipe['key']
         ui.focus = null
+        ui.discard = null
         ui.pick = ui.pick?.kind === 'recipe' && ui.pick.key === key ? null : { kind: 'recipe', key }
         break
       }
       case 'go':
-        if (run && ui.pick) apply(ui.pick.kind === 'card' ? playCard(run, ui.pick.id) : craft(run, ui.pick.key))
+        if (run && ui.pick) apply(ui.pick.kind === 'card' ? playCard(run, ui.pick.id, ui.discard ?? undefined) : craft(run, ui.pick.key))
         break
       case 'wait':
         if (run) apply(wait(run))

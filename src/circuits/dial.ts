@@ -9,7 +9,7 @@
 // where the needle would land, how far purification would reach, what the
 // pool would lose.
 
-import { DISCARD_PHASES, DRAW_PHASES, ELEMENTS, PHASES, PHASE_CYCLE, TICKS, phaseAt, poolTotal, type Fight, type Phase, type Pool } from './engine'
+import { DISCARD_PHASES, DRAW_PHASES, ELEMENTS, PHASES, PHASE_CYCLE, TICKS, threatOf, upcoming, type Fight, type Phase, type Pool } from './engine'
 import { ELEMENT_COLOR, card as cardSig, element, moon, numeral, quintessence } from './sigils'
 
 const rad = (deg: number) => (deg * Math.PI) / 180
@@ -63,20 +63,19 @@ export function dialSvg(f: Fight, feed: Pool, preview?: DialPreview | null, flar
     parts.push(`<line x1="${r2(Math.cos(a) * r1)}" y1="${r2(Math.sin(a) * r1)}" x2="${r2(Math.cos(a) * R)}" y2="${r2(Math.sin(a) * R)}" stroke="var(--line)" stroke-opacity="${major ? 0.7 : 0.3}" stroke-width="${major ? 1.3 : 0.8}"/>`)
   }
   // What each phase brings, outside the ring; the next flare carries what would flare now.
-  const nextAttack = (() => {
-    for (let pos = f.dial + 1; pos <= f.dial + TICKS; pos++) {
-      const ph = phaseAt(pos)
-      if (ph && c.attacks.includes(ph)) return pos % TICKS
-    }
-    return -1
-  })()
+  // A Stall moves it: its star goes hollow where it is held back, and a star stands where it comes.
+  const coming = upcoming(f, 8)
+  const next = coming.find((x) => x.attack)
+  const nextAttack = next ? next.pos % TICKS : -1
+  const heldAt = new Set(coming.filter((x) => x.held && x.rhythm).map((x) => x.pos % TICKS))
+  const movedTo = next && !next.rhythm ? next.pos % TICKS : -1
   PHASES.forEach((phase, i) => {
     const pos = i * 2
     const [x, y] = at(pos, R)
     const quarter = PHASE_CYCLE[phase] * 4 === Math.round(PHASE_CYCLE[phase] * 4)
     parts.push(moonAt(phase, x, y, quarter ? 12 : 9))
     const marks: string[] = []
-    if (c.attacks.includes(phase)) marks.push('attack')
+    if (c.attacks.includes(phase) || pos === movedTo) marks.push(heldAt.has(pos) ? 'held' : 'attack')
     if (c.buffs?.includes(phase)) marks.push('buff')
     if (c.feedAt.includes(phase)) marks.push('feed')
     if (DRAW_PHASES.includes(phase)) marks.push('draw')
@@ -89,13 +88,14 @@ export function dialSvg(f: Fight, feed: Pool, preview?: DialPreview | null, flar
       const mx = cx0 - Math.sin(ta) * off
       const my = cy0 + Math.cos(ta) * off
       if (m === 'attack') parts.push(quintessence(mx, my, 8, { stroke: 'var(--fire)', fill: 'var(--fire)', width: 1 }))
+      if (m === 'held') parts.push(quintessence(mx, my, 8, { stroke: 'var(--fire)', fill: 'none', width: 1.2, opacity: 0.7 }))
       if (m === 'buff') parts.push(`<path d="M${r2(mx)} ${r2(my - 6)}L${r2(mx + 5.5)} ${r2(my + 4)}H${r2(mx - 5.5)}Z" fill="none" stroke="var(--warn)" stroke-width="1.6"/>`)
       if (m === 'draw') parts.push(cardSig(mx, my, 6, { stroke: 'var(--ink-soft)', width: 1.3 }))
       if (m === 'discard') parts.push(`${cardSig(mx, my, 6, { stroke: 'var(--ink-faint)', width: 1.2 })}<path d="M${r2(mx - 5.5)} ${r2(my + 6.5)}L${r2(mx + 5.5)} ${r2(my - 6.5)}" stroke="var(--ink-soft)" stroke-width="1.3" stroke-linecap="round"/>`)
       if (m === 'feed') parts.push(element('any', mx, my, 7, { stroke: 'var(--ink-soft)', width: 1.2 }))
     })
     if (pos === nextAttack) {
-      const threat = Math.max(0, poolTotal(f.pool) - f.ward)
+      const threat = threatOf(f)
       const [bx, by] = at(pos, R + 23)
       // Beside the star, a little way clockwise along the ring.
       const a = rad(angleOf(pos))

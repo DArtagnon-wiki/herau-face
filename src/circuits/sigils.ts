@@ -103,6 +103,60 @@ export function quintessence(x: number, y: number, s: number, p: Paint = {}): st
   return `<path d="M${pts.join('L')}Z" ${paint(p)}/>`
 }
 
+/** A card struck through: a card thrown away. */
+export function discard(x: number, y: number, s: number, p: Paint = {}): string {
+  return `${card(x, y, s, p)}<path d="M${f(x - 0.9 * s)} ${f(y + 1.05 * s)}L${f(x + 0.9 * s)} ${f(y - 1.05 * s)}" ${paint({ ...p, fill: 'none' })}/>`
+}
+
+/** A crescent inside a turning arrow: an eighth of the moon given back. */
+export function regain(x: number, y: number, s: number, p: Paint = {}): string {
+  const r = s
+  const a0 = (-60 * Math.PI) / 180
+  const a1 = (210 * Math.PI) / 180
+  const [x0, y0] = [x + Math.cos(a0) * r, y + Math.sin(a0) * r]
+  const [x1, y1] = [x + Math.cos(a1) * r, y + Math.sin(a1) * r]
+  const P = paint({ ...p, fill: 'none' })
+  // The arrow turns back, against the moon's way round the dial, its head at the end.
+  return `<path d="M${f(x0)} ${f(y0)}A${f(r)} ${f(r)} 0 1 0 ${f(x1)} ${f(y1)}" ${P}/><path d="M${f(x1 - 0.42 * s)} ${f(y1 - 0.05 * s)}L${f(x1)} ${f(y1)}L${f(x1 + 0.12 * s)} ${f(y1 - 0.45 * s)}" ${P}/>${moon(x - 0.05 * s, y, s * 0.5, { stroke: p.stroke })}`
+}
+
+/**
+ * The statuses' signs: settle a chevron sinking onto its sediment, starve the
+ * feed's six-pointed star struck through, expose an eye, thorns a barbed stem,
+ * stall an hourglass, volatile a bolt, condense two arrows pressing in, mend
+ * a cross in a ring, retain a card held by a clip, foresight a card beside the
+ * half moon of the quarter.
+ */
+export function status(key: string, x: number, y: number, s: number, p: Paint = {}): string {
+  const P = paint({ ...p, fill: 'none' })
+  const d = (path: string) => `<path d="${path}" ${P}/>`
+  const X = (k: number) => f(x + k * s)
+  const Y = (k: number) => f(y + k * s)
+  switch (key) {
+    case 'settle':
+      return d(`M${X(-0.65)} ${Y(-0.85)}L${X(0)} ${Y(-0.2)}L${X(0.65)} ${Y(-0.85)}M${X(-0.9)} ${Y(0.35)}H${X(0.9)}M${X(-0.6)} ${Y(0.7)}H${X(0.6)}M${X(-0.3)} ${Y(1.02)}H${X(0.3)}`)
+    case 'starve':
+      return `${element('any', x, y, s * 0.85, { ...p, fill: 'none' })}${d(`M${X(-0.95)} ${Y(0.95)}L${X(0.95)} ${Y(-0.95)}`)}`
+    case 'expose':
+      return `${d(`M${X(-1)} ${Y(0)}Q${X(0)} ${Y(-0.85)} ${X(1)} ${Y(0)}Q${X(0)} ${Y(0.85)} ${X(-1)} ${Y(0)}Z`)}<circle cx="${f(x)}" cy="${f(y)}" r="${f(0.28 * s)}" ${paint({ ...p, fill: p.stroke ?? 'currentColor' })}/>`
+    case 'thorns':
+      return d(`M${X(0)} ${Y(-1)}V${Y(1)}M${X(0)} ${Y(-0.45)}L${X(0.55)} ${Y(-0.8)}M${X(0)} ${Y(0.05)}L${X(-0.55)} ${Y(-0.3)}M${X(0)} ${Y(0.55)}L${X(0.55)} ${Y(0.2)}`)
+    case 'stall':
+      return d(`M${X(-0.62)} ${Y(-1)}H${X(0.62)}L${X(-0.62)} ${Y(1)}H${X(0.62)}Z`)
+    case 'volatile':
+      return d(`M${X(0.3)} ${Y(-1)}L${X(-0.5)} ${Y(0.12)}H${X(0.08)}L${X(-0.3)} ${Y(1)}L${X(0.55)} ${Y(-0.18)}H${X(-0.04)}Z`)
+    case 'condense':
+      return `${d(`M${X(-1)} ${Y(-0.62)}L${X(-0.38)} ${Y(0)}L${X(-1)} ${Y(0.62)}M${X(1)} ${Y(-0.62)}L${X(0.38)} ${Y(0)}L${X(1)} ${Y(0.62)}`)}<circle cx="${f(x)}" cy="${f(y)}" r="${f(0.16 * s)}" ${paint({ ...p, fill: p.stroke ?? 'currentColor' })}/>`
+    case 'mend':
+      return `<circle cx="${f(x)}" cy="${f(y)}" r="${f(s)}" ${P}/>${d(`M${X(0)} ${Y(-0.55)}V${Y(0.55)}M${X(-0.55)} ${Y(0)}H${X(0.55)}`)}`
+    case 'retain':
+      return `${card(x, y + 0.1 * s, s * 0.88, p)}${d(`M${X(-0.28)} ${Y(-0.55)}V${Y(-1.08)}H${X(0.28)}V${Y(-0.35)}`)}`
+    case 'foresight':
+      return `${card(x - 0.32 * s, y + 0.1 * s, s * 0.82, p)}<path d="M${X(0.62)} ${Y(-1.02)}A${f(0.5 * s)} ${f(0.5 * s)} 0 0 1 ${X(0.62)} ${Y(-0.02)}Z" ${paint({ ...p, fill: p.stroke ?? 'currentColor' })}/>`
+  }
+  return ''
+}
+
 /** A small number, legible over lines. */
 export function numeral(n: number | string, x: number, y: number, size: number, color = 'var(--ink)'): string {
   return `<text x="${f(x)}" y="${f(y)}" font-size="${f(size)}" text-anchor="middle" dominant-baseline="central" class="sig-num" fill="${color}">${n}</text>`

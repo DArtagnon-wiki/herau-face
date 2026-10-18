@@ -19,7 +19,11 @@
 //
 //   npx tsx scripts/circuits-sim.ts [--strategy greedy|random|delay] [--reserve 1] [--delay-in 0,1,2] [--runs 300]
 //   npx tsx scripts/circuits-sim.ts --compare [--runs 300]   every strategy side by side
-//   (also --picks need|wet: inputs for what the coming commissions feed, or only water and earth;
+//   npx tsx scripts/circuits-sim.ts --drafts [--runs 100]     greedy's runs won with each drafted input and output
+//
+// Every run opens with the draft of a twelfth rune. Greedy and delay draft by
+// the ranks below (from a --drafts table); random drafts at random.
+//   (also --no-draft: the eleven opening cards, no twelfth rune; --picks need|wet: inputs for what the coming commissions feed, or only water and earth;
 //    --hand 4, --stock 80)
 
 import { makeRng, type Rng } from '../src/sim/rng'
@@ -27,12 +31,15 @@ import type { Elemental } from '../src/sim/types'
 import {
   COMMISSIONS,
   DEFAULT_SETTINGS,
+  DRAFT_INPUTS,
+  DRAFT_OUTPUTS,
   EXTRA_RUNE_PRICE,
   PRINCIPLES,
   RECIPES,
   TICKS,
   canAfford,
   craft,
+  draftPick,
   fits,
   newRun,
   nextFight,
@@ -40,6 +47,8 @@ import {
   poolTotal,
   takeRune,
   wait,
+  type Channel,
+  type DraftOutput,
   type Recipe,
   type Run,
   type Settings,
@@ -50,6 +59,8 @@ const arg = (n: string) => (args.includes(n) ? args[args.indexOf(n) + 1] : undef
 const runs = Number(arg('--runs') ?? 300)
 /** Which inputs the rune picks favour: what the coming commissions feed, or only water and earth. */
 const picks = (arg('--picks') ?? 'need') as 'need' | 'wet'
+/** Skip the opening draft: the eleven opening cards only. */
+const noDraft = args.includes('--no-draft')
 const settings: Settings = {
   ...DEFAULT_SETTINGS,
   hand: Number(arg('--hand') ?? DEFAULT_SETTINGS.hand),
@@ -59,16 +70,22 @@ const settings: Settings = {
 // ---------------------------------------------------------------------------
 // Moves
 
-type Move = { kind: 'card'; id: number } | { kind: 'brew'; key: Recipe['key'] } | { kind: 'wait' }
+type Move = { kind: 'card'; id: number; discard?: number } | { kind: 'brew'; key: Recipe['key'] } | { kind: 'wait' }
 
 function moves(r: Run): Move[] {
-  const out: Move[] = r.fight.hand.map((c) => ({ kind: 'card', id: c.id }))
+  const out: Move[] = []
+  for (const c of r.fight.hand) {
+    const others = r.fight.hand.filter((x) => x.id !== c.id)
+    // A card that discards: one move for each card it could throw away.
+    if (c.channels.some((ch) => ch.element === 'discard') && others.length) for (const o of others) out.push({ kind: 'card', id: c.id, discard: o.id })
+    else out.push({ kind: 'card', id: c.id })
+  }
   for (const rec of RECIPES) if (canAfford(r.fight, rec)) out.push({ kind: 'brew', key: rec.key })
   out.push({ kind: 'wait' })
   return out
 }
 
-const apply = (r: Run, m: Move): Run => (m.kind === 'card' ? playCard(r, m.id) : m.kind === 'brew' ? craft(r, m.key) : wait(r))
+const apply = (r: Run, m: Move): Run => (m.kind === 'card' ? playCard(r, m.id, m.discard) : m.kind === 'brew' ? craft(r, m.key) : wait(r))
 const principleCount = (r: Run) => PRINCIPLES.reduce((n, p) => n + r.fight.principles[p], 0)
 /** The fight that `before` was in has ended in `after`. */
 const ended = (before: Run, after: Run) => after.stage !== 'fight' || after.fightIndex !== before.fightIndex
@@ -83,14 +100,52 @@ interface Strategy {
   name: string
   move(r: Run, rng: Rng): Move
   reward(r: Run, rng: Rng): Run
+  draft(r: Run, rng: Rng): Run
+}
+
+/** What greedy makes of the statuses and spare time it would have: rough worth in purification. */
+function statusValue(r: Run): number {
+  const f = r.fight
+  const s = f.status
+  const pool = poolTotal(f.pool)
+  return (
+    (s.settle * (s.settle + 1)) / 2 +
+    1.5 * s.expose +
+    2 * s.thorns +
+    1.5 * s.starve +
+    3 * (s.stall + f.pending) +
+    (s.volatile ? 4 - 0.6 * pool : 0) +
+    s.condense +
+    s.mend * (s.mend + 1) +
+    1.5 * s.retain +
+    1.6 * s.foresight +
+    2 * f.spare
+  )
 }
 
 function greedyValue(r: Run, start: Run): number {
   if (r.stage === 'lost') return -1e6
   if (r.stage !== 'fight') return 1e6 + r.quintessence
   const f = r.fight
-  return f.purified - 3 * (start.quintessence - r.quintessence) - 0.6 * poolTotal(f.pool) + 10 * f.homunculi + 0.5 * f.ward + 0.8 * f.hand.length + 4 * (f.catalyst - 1)
+  return f.purified - 3 * (start.quintessence - r.quintessence) - 0.6 * poolTotal(f.pool) + 10 * f.homunculi + 0.5 * f.ward + 0.8 * f.hand.length + 4 * (f.catalyst - 1) + statusValue(r)
 }
+
+const inputKey = (ch: Channel) => ch.element
+const outputKey = (o: DraftOutput) => (o.kind === 'status' ? o.status : o.kind)
+/** Greedy's draft ranks, best first (from a --drafts table). */
+const INPUT_RANK: string[] = ['water', 'any', 'earth', 'fire', 'air', 'moon', 'discard', 'quintessence']
+const OUTPUT_RANK: string[] = ['settle', 'thorns', 'mend', 'foresight', 'ground', 'condense', 'ward', 'quintessence', 'purify', 'catalyst', 'retain', 'starve', 'regain', 'draw', 'expose', 'stall', 'volatile']
+const rankOf = (list: string[], k: string) => (list.includes(k) ? list.indexOf(k) : list.length)
+
+function greedyDraft(r: Run): Run {
+  const d = r.draft!
+  const i = d.inputs.map((ch, k) => ({ k, v: rankOf(INPUT_RANK, inputKey(ch)) })).sort((a, b) => a.v - b.v)[0].k
+  const after = draftPick(r, i)
+  const o = d.outputs.map((x, k) => ({ k, v: rankOf(OUTPUT_RANK, outputKey(x)) })).sort((a, b) => a.v - b.v)[0].k
+  return draftPick(after, o)
+}
+
+const randomDraft = (r: Run, rng: Rng) => draftPick(draftPick(r, rng.int(0, 2)), rng.int(0, 2))
 
 function greedyMove(r: Run): Move {
   let best: Move = { kind: 'wait' }
@@ -154,10 +209,11 @@ function greedyReward(r: Run): Run {
   return nextFight(run)
 }
 
-const greedy: Strategy = { name: 'greedy', move: greedyMove, reward: greedyReward }
+const greedy: Strategy = { name: 'greedy', move: greedyMove, reward: greedyReward, draft: greedyDraft }
 
 const random: Strategy = {
   name: 'random',
+  draft: randomDraft,
   move: (r, rng) => {
     const ms = moves(r)
     return ms[rng.int(0, ms.length - 1)]
@@ -179,6 +235,7 @@ function delay(reserve: number, delayIn: number[]): Strategy {
   return {
     name: `delay, keep ${reserve}`,
     reward: greedyReward,
+    draft: greedyDraft,
     move: (r) => {
       if (!delayIn.includes(r.fightIndex)) return greedyMove(r)
       const have = principleCount(r)
@@ -232,16 +289,17 @@ interface Result {
   fights: FightStat[][]
 }
 
-function play(strategy: Strategy): Result {
+function play(strategy: Strategy, n = runs): Result {
   const fights: FightStat[][] = COMMISSIONS.map(() => [])
   const quintLeft: number[] = []
   let runsWon = 0
-  for (let i = 0; i < runs; i++) {
+  for (let i = 0; i < n; i++) {
     const rng = makeRng(90000 + i)
-    let r = newRun(7000 + i, settings)
+    let r = newRun(7000 + i, settings, { draft: !noDraft })
     let stat = freshStat(r.quintessence)
     for (let guard = 0; guard < 3000; guard++) {
-      if (r.stage === 'fight') {
+      if (r.stage === 'draft') r = strategy.draft(r, rng)
+      else if (r.stage === 'fight') {
         const m = strategy.move(r, rng)
         const next = apply(r, m)
         if (m.kind === 'card') stat.plays++
@@ -316,8 +374,27 @@ function header(): string {
 const delayIn = (arg('--delay-in') ?? COMMISSIONS.slice(0, -1).map((_, i) => i).join(',')).split(',').map(Number)
 const reserve = Number(arg('--reserve') ?? 1)
 
+/** Greedy with this input and output forced in the draft. */
+function forced(input: Channel, output: DraftOutput): Strategy {
+  return { ...greedy, name: `${inputKey(input)} → ${outputKey(output)}`, draft: (r) => draftPick(draftPick({ ...r, draft: { ...r.draft!, inputs: [input], outputs: [output] } }, 0), 0) }
+}
+
 console.log(`${runs} runs · draw ${settings.hand} at new and full moons, discard at the quarters · stock ${settings.stock}`)
-if (args.includes('--compare')) {
+if (args.includes('--drafts')) {
+  const outs = DRAFT_OUTPUTS.map((x) => x.output)
+  const table = DRAFT_INPUTS.map((ch) => outs.map((o) => play(forced(ch, o)).runsWon / runs))
+  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length
+  const p = (x: number) => `${Math.round(100 * x)}%`
+  console.log(`\nRuns won by greedy with each drafted rune (inputs down, outputs across)\n`)
+  console.log(['', ...outs.map(outputKey), 'mean'].join(' | '))
+  console.log(['---', ...outs.map(() => '---'), '---'].join(' | '))
+  DRAFT_INPUTS.forEach((ch, i) => console.log([inputKey(ch), ...table[i].map(p), p(avg(table[i]))].join(' | ')))
+  console.log(['mean', ...outs.map((_, j) => p(avg(table.map((row) => row[j])))), p(avg(table.flat()))].join(' | '))
+  const byIn = DRAFT_INPUTS.map((ch, i) => ({ k: inputKey(ch), v: avg(table[i]) })).sort((a, b) => b.v - a.v)
+  const byOut = outs.map((o, j) => ({ k: outputKey(o), v: avg(table.map((row) => row[j])) })).sort((a, b) => b.v - a.v)
+  console.log(`\ninputs, best first: ${byIn.map((x) => `${x.k} ${p(x.v)}`).join(', ')}`)
+  console.log(`outputs, best first: ${byOut.map((x) => `${x.k} ${p(x.v)}`).join(', ')}`)
+} else if (args.includes('--compare')) {
   const early = COMMISSIONS.slice(0, -1).map((_, i) => i)
   const list: Strategy[] = [
     random,
