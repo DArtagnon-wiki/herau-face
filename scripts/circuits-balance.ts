@@ -29,7 +29,11 @@
 //   npx tsx scripts/circuits-balance.ts --anatomy           what a purifier's worth is made of: offense, breadth, consistency, metal
 //   npx tsx scripts/circuits-balance.ts --dilution [--without Sieve]
 //                                                        what an extra card is worth against a blank and against no extra card at all
-//   (--without Sieve: leave opening cards out of every deck; --seeds 300: fights per enemy for each build; --fights mud,peat,...: which enemies; --base 5000: the first seed)
+//   npx tsx scripts/circuits-balance.ts --upgrades [--steps 5] [--out path.json]
+//                                                        the upgrade path: every shop rune on every card, the best taken, again and again
+//   npx tsx scripts/circuits-balance.ts --upgrades --replay path.json [--prices 0,1.6,3]
+//                                                        that path again, each rune split into quintessence saved and metal added
+//   (--metal 3: quintessence a metal is worth; --without Sieve: leave opening cards out of every deck; --seeds 300: fights per enemy for each build; --fights mud,peat,...: which enemies; --base 5000: the first seed)
 
 import { writeFileSync, readFileSync } from 'node:fs'
 import {
@@ -38,8 +42,11 @@ import {
   GALLERY,
   METAL_GATE,
   UNIT_GATE,
+  REWARD_POOL,
+  addRune,
   catalystCard,
   draftCard,
+  fits,
   fromPool,
   statusDef,
   STATUSES,
@@ -49,9 +56,10 @@ import {
   type DraftOutput,
   type Output,
   type Principle,
+  type RewardRune,
   type Source,
 } from '../src/circuits/engine'
-import { ID, METAL_WORTH, baseDeck, blankCard, byName, leaveOut, measureDeck, changed, opening, scorer, sum, twelfth, withPrinciple, type DeckOf } from './circuits-bench'
+import { ID, METAL_WORTH, setMetalWorth, baseDeck, blankCard, byName, leaveOut, measureDeck, changed, opening, scorer, sum, twelfth, withPrinciple, type DeckOf } from './circuits-bench'
 
 const args = process.argv.slice(2)
 const arg = (n: string) => (args.includes(n) ? args[args.indexOf(n) + 1] : undefined)
@@ -60,6 +68,7 @@ const TARGET = Number(arg('--target') ?? 2)
 const TOLERANCE = Number(arg('--tolerance') ?? 0.3)
 const FIGHTS: Commission[] = (arg('--fights')?.split(',') ?? GALLERY.filter((c) => c.key !== 'mire').map((c) => c.key)).map((k) => GALLERY.find((c) => c.key === k)!)
 if (arg('--without')) leaveOut(arg('--without')!.split(','))
+if (arg('--metal')) setMetalWorth(Number(arg('--metal')))
 const S = scorer(FIGHTS, SEEDS, Number(arg('--base') ?? 5000))
 
 // ---------------------------------------------------------------------------
@@ -175,7 +184,7 @@ const names = FIGHTS.map((c) => c.name)
 function header(): void {
   console.log(`${SEEDS} fights per enemy for each build, ${FIGHTS.length} enemies; metal is worth ${METAL_WORTH}.`)
   console.log(`A blank twelfth card costs ${S.blank.costs.map(f1).join(', ')} (${names.join(', ')}).`)
-  console.log(`A Wash saves ${S.saves(S.wash).map(f1).join(', ')}: ${f1(S.unit)} in all.`)
+  console.log(`A Wash saves ${S.saves(S.wash).map(f1).join(', ')}: ${f1(S.unit)} in all. The deck smelts ${f2(S.blank.metal)} metal a fight with a blank twelfth, ${f2(S.wash.metal)} with a Wash.`)
 }
 
 const SYMMETRIC = [
@@ -252,6 +261,103 @@ if (args.includes('--write')) {
   rows.push({ name: 'Catalyst', w: S.worth(cat), e: S.error(cat), n: vsNone(cat) })
   rows.sort((a, b) => b.w - a.w)
   for (const r of rows) console.log(`${r.name} | ${f2(r.w)} ± ${f2(r.e)} | ${f2(r.n)}`)
+} else if (args.includes('--upgrades')) {
+  // The upgrade path. From the opening eleven, every rune the shop sells, on every card it fits (the Catalyst as
+  // a new card), each measured against the deck as it stands; the best is taken and the search goes again. At
+  // each step: the best each kind of rune can do, what the shop's free pick (the best of three offered at
+  // random) and a bought pick (the second best) are worth on average, and how often the upgraded card is played.
+  header()
+  const steps = Number(arg('--steps') ?? 5)
+  const base = Number(arg('--base') ?? 5000)
+  type Up = { rune: RewardRune; cardId?: number }
+  const applyUps = (deck: Card[], ups: Up[]) =>
+    ups.reduce<Card[]>((d, u) => (u.rune.kind === 'card' ? [...d, catalystCard(200 + d.length)] : d.map((c) => (c.id === u.cardId ? addRune(c, u.rune) : c))), deck)
+  const runeName = (r: RewardRune) => (r.kind === 'channel' ? `input ${r.capacity} ${r.element}` : r.kind === 'distill' ? `distil ${r.principle}` : r.kind === 'card' ? 'Catalyst (a new card)' : r.kind === 'ground' ? 'ground stage' : 'gain')
+  const kinds = REWARD_POOL.filter((r, i) => REWARD_POOL.findIndex((x) => JSON.stringify(x) === JSON.stringify(r)) === i)
+  const kindOf = (r: RewardRune) => kinds.findIndex((x) => JSON.stringify(x) === JSON.stringify(r))
+  // Every way the shop can offer three of its pool, for the expected picks.
+  const offers: number[][] = []
+  for (let a = 0; a < REWARD_POOL.length; a++) for (let b = a + 1; b < REWARD_POOL.length; b++) for (let c = b + 1; c < REWARD_POOL.length; c++) offers.push([a, b, c].map((i) => kindOf(REWARD_POOL[i])))
+  const perFight = (dq: number) => dq / FIGHTS.length
+  type Log = { step: number; values: { rune: string; card: string; perFight: number; washes: number }[]; free: number; bought: number; chosen: string; gain: number; plays: [number, number]; draws: [number, number] }
+  const expected = (val: number[]) => {
+    const picks = offers.map((o) => o.map((k) => val[k]).sort((x, y) => y - x))
+    return { free: sum(picks.map((p) => p[0])) / picks.length, bought: sum(picks.map((p) => p[1])) / picks.length }
+  }
+  let ups: Up[] = []
+  if (arg('--replay')) {
+    // The path from an --upgrades log, replayed: at each step, the deck's quintessence lost and metal smelted a
+    // fight, and each rune at the place the log found best, split into the quintessence it saves and the metal it
+    // adds. Greedy plays without regard to metal, so a rune's worth at any price of metal is saved + price × metal.
+    const path = JSON.parse(readFileSync(arg('--replay')!, 'utf8')) as Log[]
+    const prices = (arg('--prices') ?? '0,1.6,3').split(',').map(Number)
+    const lostOf = (m: ReturnType<typeof S.measure>) => sum(m.costs) / FIGHTS.length + METAL_WORTH * m.metal
+    const place = (deck: Card[], card: string) => (card === 'the deck' ? undefined : deck.find((c) => c.id < 200 && c.name === card)?.id)
+    const parse = (deck: Card[], text: string): Up => {
+      const [rune, card] = text.split(' on ')
+      return { rune: kinds.find((r) => runeName(r) === rune)!, cardId: place(deck, card) }
+    }
+    const out: unknown[] = []
+    for (const [s, entry] of path.entries()) {
+      const deck = applyUps(baseDeck(0), ups)
+      const cur = S.measure((i) => applyUps(baseDeck(i), ups))
+      const rows = entry.values.map((v, k) => {
+        const cardId = place(deck, v.card)
+        if (kinds[k].kind !== 'card' && cardId === undefined) return { rune: v.rune, card: v.card, saved: 0, metal: 0 }
+        const m = S.measure((i) => applyUps(baseDeck(i), [...ups, { rune: kinds[k], cardId }]))
+        return { rune: v.rune, card: v.card, saved: lostOf(cur) - lostOf(m), metal: m.metal - cur.metal }
+      })
+      console.log(`\nStep ${s + 1} (before it: loses ${f2(lostOf(cur))} quintessence and smelts ${f2(cur.metal)} metal a fight)`)
+      console.log(`Rune at its place | quintessence saved a fight | metal added a fight | ${prices.map((p) => `worth at ${p}`).join(' | ')}`)
+      for (const r of rows) console.log(`${r.rune} on ${r.card} | ${f2(r.saved)} | ${r.metal.toFixed(3)} | ${prices.map((p) => f2(r.saved + p * r.metal)).join(' | ')}`)
+      for (const p of prices) {
+        const val = rows.map((r) => Math.max(0, r.saved + p * r.metal))
+        const e = expected(val)
+        const top = val.indexOf(Math.max(...val))
+        console.log(`  At ${p} a metal: free pick ${f2(e.free)}, bought pick ${f2(e.bought)}, best ${rows[top].rune} on ${rows[top].card} (${f2(val[top])})`)
+      }
+      out.push({ step: s + 1, lost: lostOf(cur), metal: cur.metal, rows })
+      ups = [...ups, parse(deck, entry.chosen)]
+      if (arg('--out')) writeFileSync(arg('--out')!, JSON.stringify(out, null, 1))
+    }
+    const end = S.measure((i) => applyUps(baseDeck(i), ups))
+    console.log(`\nAfter the path: loses ${f2(lostOf(end))} quintessence and smelts ${f2(end.metal)} metal a fight`)
+    out.push({ step: path.length + 1, lost: lostOf(end), metal: end.metal, rows: [] })
+    if (arg('--out')) writeFileSync(arg('--out')!, JSON.stringify(out, null, 1))
+    process.exit(0)
+  }
+  let cur = S.measure((i) => applyUps(baseDeck(i), ups))
+  const log: Log[] = []
+  for (let step = 1; step <= steps; step++) {
+    const deck = applyUps(baseDeck(0), ups)
+    const best = kinds.map(() => ({ v: -Infinity, card: '', cardId: undefined as number | undefined, m: null as null | ReturnType<typeof S.measure> }))
+    for (const [k, r] of kinds.entries()) {
+      const places = r.kind === 'card' ? [undefined] : deck.filter((c) => c.id < 200 && fits(r, c)).map((c) => c.id)
+      for (const cardId of places) {
+        const next = [...ups, { rune: r, cardId }]
+        const watch = cardId ?? 200 + deck.length
+        const m = S.measure((i) => applyUps(baseDeck(i), next), watch)
+        const v = sum(cur.costs) - sum(m.costs)
+        if (v > best[k].v) best[k] = { v, card: cardId ? deck.find((c) => c.id === cardId)!.name : 'the deck', cardId, m }
+      }
+    }
+    const val = best.map((b) => Math.max(0, perFight(b.v)))
+    const picks = offers.map((o) => o.map((k) => val[k]).sort((x, y) => y - x))
+    const free = sum(picks.map((p) => p[0])) / picks.length
+    const bought = sum(picks.map((p) => p[1])) / picks.length
+    const top = best.reduce((a, b, k) => (b.v > best[a].v ? k : a), 0)
+    const chosen = best[top]
+    const before = chosen.cardId ? S.measure((i) => applyUps(baseDeck(i), ups), chosen.cardId) : { plays: 0, draws: 0 }
+    console.log(`\nStep ${step}: what each rune is worth at its best place, in quintessence a fight (Washes over the ${FIGHTS.length} fights)`)
+    best.forEach((b, k) => console.log(`  ${runeName(kinds[k])} on ${b.card}: ${f2(perFight(b.v))} (${f2(b.v / S.unit)})`))
+    console.log(`  The free pick, best of three offered: ${f2(free)} a fight; a bought pick, the second best: ${f2(bought)} a fight.`)
+    console.log(`  Taken: ${runeName(kinds[top])} on ${chosen.card}, +${f2(perFight(chosen.v))} a fight; that card played ${f2(before.plays)} → ${f2(chosen.m!.plays)} a fight (drawn ${f2(before.draws)} → ${f2(chosen.m!.draws)}).`)
+    log.push({ step, values: best.map((b, k) => ({ rune: runeName(kinds[k]), card: b.card, perFight: perFight(b.v), washes: b.v / S.unit })), free, bought, chosen: `${runeName(kinds[top])} on ${chosen.card}`, gain: perFight(chosen.v), plays: [before.plays, chosen.m!.plays], draws: [before.draws, chosen.m!.draws] })
+    ups = [...ups, { rune: kinds[top], cardId: chosen.cardId }]
+    cur = chosen.m!
+    if (arg('--out')) writeFileSync(arg('--out')!, JSON.stringify(log, null, 1))
+  }
+  void base
 } else if (args.includes('--anatomy')) {
   // What a purifier's worth is made of: variants that pull apart offense (purify or ground), breadth
   // (two elements or one), and the metal makers' metal, each averaged over every element or pair.
@@ -270,13 +376,13 @@ if (args.includes('--write')) {
     { name: 'One element, 5, ground, no metal', builds: E.map((a) => () => mk([{ element: a, capacity: 5 }], false)) },
     { name: 'One element, 5, purify, metal from 4', builds: E.map((a) => (p) => mk([{ element: a, capacity: 5 }], true, [metal(p)])) },
   ]
-  console.log(`\nVariant | Washes (mean over its elements) | range | played a fight | played when drawn`)
-  console.log(`--- | --- | --- | --- | ---`)
+  console.log(`\nVariant | Washes (mean over its elements) | range | played a fight | played when drawn | metal a fight (deck)`)
+  console.log(`--- | --- | --- | --- | --- | ---`)
   for (const fam of families) {
     const ms = fam.builds.map((b) => S.measure(twelfth(b)))
     const ws = ms.map((m) => S.worth(m))
     const mean = (xs: number[]) => sum(xs) / xs.length
-    console.log(`${fam.name} | ${f2(mean(ws))} | ${f2(Math.min(...ws))} to ${f2(Math.max(...ws))} | ${f2(mean(ms.map((m) => m.plays)))} | ${Math.round((100 * mean(ms.map((m) => m.plays))) / mean(ms.map((m) => m.draws)))}%`)
+    console.log(`${fam.name} | ${f2(mean(ws))} | ${f2(Math.min(...ws))} to ${f2(Math.max(...ws))} | ${f2(mean(ms.map((m) => m.plays)))} | ${Math.round((100 * mean(ms.map((m) => m.plays))) / mean(ms.map((m) => m.draws)))}% | ${f2(mean(ms.map((m) => m.metal)))}`)
   }
 } else if (args.includes('--pairs')) {
   header()

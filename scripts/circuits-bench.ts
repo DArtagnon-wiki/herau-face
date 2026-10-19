@@ -12,7 +12,11 @@ import { DEFAULT_SETTINGS, PRINCIPLES, fightWith, startingDeck, type Card, type 
 import { apply, greedyMove } from './circuits-players'
 
 /** Quintessence a metal is worth: the tincture of salt sets a floor of about 3, and metal probably counts for more, since it scales the run. */
-export const METAL_WORTH = 3
+export let METAL_WORTH = 3
+/** Price metal differently, as the upgrades it buys suggest. */
+export function setMetalWorth(x: number): void {
+  METAL_WORTH = x
+}
 
 // ---------------------------------------------------------------------------
 // Decks
@@ -50,6 +54,8 @@ export const changed = (id: number, change: (c: Card, p: Principle) => Card): De
 
 export interface Outcome {
   cost: number
+  /** Metal smelted after the fight. */
+  metal: number
   /** Times the watched card was drawn, and played. */
   draws: number
   plays: number
@@ -71,7 +77,7 @@ export function playFight(deck: Card[], against: Commission, seed: number, watch
     r = apply(r, m)
   }
   const metal = r.stage === 'reward' || r.stage === 'won' ? (r.smelted?.value ?? 0) : 0
-  return { cost: start - r.quintessence - METAL_WORTH * metal, draws, plays }
+  return { cost: start - r.quintessence - METAL_WORTH * metal, metal, draws, plays }
 }
 
 export interface Measure {
@@ -79,6 +85,8 @@ export interface Measure {
   costs: number[]
   /** Each seed's cost summed over the enemies, for paired errors. */
   bySeed: number[]
+  /** Metal smelted a fight. */
+  metal: number
   /** Per fight: times the watched card was drawn and played. */
   draws: number
   plays: number
@@ -87,6 +95,7 @@ export interface Measure {
 export function measureDeck(deckOf: DeckOf, fights: Commission[], seeds: number, base: number, watch = ID): Measure {
   let draws = 0
   let plays = 0
+  let metal = 0
   const bySeed = new Array<number>(seeds).fill(0)
   const costs = fights.map((against) => {
     let total = 0
@@ -96,11 +105,12 @@ export function measureDeck(deckOf: DeckOf, fights: Commission[], seeds: number,
       bySeed[i] += o.cost
       draws += o.draws
       plays += o.plays
+      metal += o.metal
     }
     return total / seeds
   })
   const n = fights.length * seeds
-  return { costs, bySeed, draws: draws / n, plays: plays / n }
+  return { costs, bySeed, metal: metal / n, draws: draws / n, plays: plays / n }
 }
 
 export const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0)

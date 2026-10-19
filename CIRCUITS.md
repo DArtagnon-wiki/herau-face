@@ -95,6 +95,7 @@ Wash, as sketched: a moon is its input and its circle must run before the collec
 - **Advanced rhythms and tools.** Other attack rhythms for harder fights, and runes to meet them; Foresight ("on the next quarter moon, draw 2") is now in the draft.
 - **What the draft should aim for.** Two Washes on the gallery bench is worth about −1 Wash against drafting nothing (a blank twelfth costs about 3), and the bench's element balance doesn't match the run's water-heavy commissions: a pool tuned there drops runs to 61%, against 77% without a draft. The game keeps the pool tuned on the run's own fights (78%). Either the target rises by the cost of a twelfth card, or the runs draw from the gallery, or both. The new inputs, outputs and statuses are only in the draft so far; the shop could sell them too.
 - **Mend is far too strong as an added sigil** (8 to 9 Washes on any card: N, then N−1 and so on, is 15 to 21 quintessence from a card collecting 5 or 6), and Settle, Thorns and a quintessence output are strong too. Volatile costs more than it gives; Stall does nothing.
+- **Metal buys almost nothing.** Greedy smelts about 1.1 metal before the last shop, and a rune costs 3; even a deck built to smelt (two distils on the Sieve, 1.7 a fight) can't reach a bought rune inside four fights. A metal is worth about (the next rune's worth a fight) × (fights left) ÷ 3: 1.7 quintessence at the first shop, down to 0.7 at the last. For it to matter, a run needs more metal a fight, cheaper runes, or more fights. See "The upgrade path, and what metal is worth".
 - **The bench's last residues.** Circulate sits about 0.08 Washes below the other purifiers and Kindle about 0.05 below Wash, close to what the bench can resolve. The principles aren't symmetric either (silver needs mercury and salt; sulfur only makes lead), which the bench averages away by turning them.
 - **The gallery joins runs?** The ten new enemies are on the bench only; runs still play the four commissions. Their debuffs (locks, scattered hands, smaller draws) aren't drawn on the dial yet.
 - **Make decisions meaningful.** The play loop works but offers few real choices; thresholds like Wash's (wait for the pool to fill, or wash now?) are one lever.
@@ -139,7 +140,7 @@ A separate page beside Mud to Clay (`circuits.html`), on one screen: the moon di
 
 ### The balance bench
 
-`scripts/circuits-balance.ts` scores rune builds against a basic Wash. A build goes into the deck (as a twelfth card beside the eleven opening cards, or as a change to one of them), and greedy plays the same fights with it: every enemy in the rogues gallery but the Mire, each on its own at full quintessence, the same seeds for every build. What a fight costs is the quintessence it takes, less 3 for each metal smelted after it (the tincture of salt's floor; metal scales the run, so probably more). A build's worth is what it saves against a blank twelfth card that does nothing, over what a second Wash saves: blank 0, Wash 1. So no element is tied to a principle, the metal makers' principles turn over the seeds, and so does any principle output of the card measured. Errors are paired: what a build saves seed by seed, against the blank on the same seed.
+`scripts/circuits-balance.ts` scores rune builds against a basic Wash. A build goes into the deck (as a twelfth card beside the eleven opening cards, or as a change to one of them), and greedy plays the same fights with it: every enemy in the rogues gallery but the Mire, each on its own at full quintessence, the same seeds for every build. What a fight costs is the quintessence it takes, less 3 for each metal smelted after it (the tincture of salt's floor; in the four-fight run a metal turns out to be worth 1.7 at most, as "The upgrade path, and what metal is worth" shows; `--metal` sets the price). A build's worth is what it saves against a blank twelfth card that does nothing, over what a second Wash saves: blank 0, Wash 1. So no element is tied to a principle, the metal makers' principles turn over the seeds, and so does any principle output of the card measured. Errors are paired: what a build saves seed by seed, against the blank on the same seed.
 
 #### The rogues gallery
 
@@ -284,5 +285,66 @@ A dash: that pair didn't make the pool.
 - **On a card played conditionally, most of the gain is being played more.** A Wash with one more input is played 53% of the times it's drawn instead of 29%; three quarters of its gain is the extra plays. Once a card reaches its ceiling of plays (about 70% of draws for a metal maker, over 90% for the others) that part stops, and only better plays remain.
 - **Gain doesn't run out on the pool but on the requirement.** On the Sieve: +2.8, +1.7, +1.4, +1.2, +0.6 for five gains, as fights end sooner and purification past the requirement is wasted (the "more plays" part turns negative because shorter fights have fewer plays).
 - **So the derivative depends on where the card sits:** below its ceiling of plays it is mostly ū·dP, at the ceiling P̄·du, and both fall to zero once the card can take the whole pool or overkills the requirement.
+
+#### The upgrade path, and what metal is worth
+
+`--upgrades` walks the shop. From the opening eleven it tries every rune the shop sells on every card it fits (the Catalyst as a new card), each against the deck as it stands, takes the best, and goes again. Each step also prices the shop: the free pick is the best of three offered at random, a bought pick the second best. `--upgrades --replay` runs a path again and splits each rune into quintessence saved and metal added; greedy never plays for metal, so a rune's worth at any price of metal is saved + price × metal. 300 seeds an enemy; quintessence a fight, over the 13 enemies.
+
+With metal not counted, the path is pure quintessence:
+
+| Upgrade | Taken | Saves a fight | Deck loses a fight after it | Share of what it lost | Free pick | Bought pick |
+| --- | --- | --- | --- | --- | --- | --- |
+| (the opening eleven) | | | 8.69 | | | |
+| 1 | input 3 any on the Sieve | 4.33 | 4.36 | 50% | 2.70 | 1.55 |
+| 2 | gain on the Sieve | 1.17 | 3.19 | 27% | 0.95 | 0.54 |
+| 3 | input 3 any on Cupel | 0.75 | 2.44 | 24% | 0.53 | 0.30 |
+| 4 | input 3 any on Digest | 0.46 | 1.98 | 19% | 0.33 | 0.19 |
+| 5 | input 3 any on Dissolve | 0.36 | 1.62 | 18% | 0.25 | 0.14 |
+| 6 | input 3 any on Kindle | 0.26 | 1.36 | 16% | 0.19 | 0.10 |
+
+- **The differential: each upgrade saves a share of what the deck still loses, and the share shrinks.** dL/dn ≈ −k·L, with k a half for the first upgrade, then about a quarter, falling to a sixth. Two things drive it down: the floor (at full quintessence the gallery takes 8.7 a fight from the opening deck, and after three upgrades under 2.5 is left to save), and where the next sigil can go.
+- **The Sieve takes the pure benefit first; everything after is the speculative kind.** Its input changes nothing about how often it's played (1.54 a fight) and makes every play better. Steps 3 to 6 put inputs on cards played on half their draws or fewer, and most of each gain is plays: Cupel 0.66 → 0.92 a fight, Kindle 0.23 → 0.40.
+- **Offense thins every card's plays.** A gain on the Sieve plays it less (1.54 → 1.24 a fight), because fights end sooner and there are fewer draws.
+- **The free pick falls faster than the best rune,** since few runes fit the best spot: 2.70, then 0.95, 0.53.
+
+Count metal at 3 and the path turns at step 2:
+
+| Upgrade | Taken | Quintessence saved a fight | Metal added a fight | Worth at 3 | Deck smelts a fight after it |
+| --- | --- | --- | --- | --- | --- |
+| (the opening eleven) | | | | | 0.15 |
+| 1 | input 3 any on the Sieve | 4.33 | −0.08 | 4.08 | 0.06 |
+| 2 | distil mercury on the Sieve | 0.02 | +0.64 | 1.94 | 0.70 |
+| 3 | distil salt on the Sieve | 0.23 | +0.95 | 3.09 | 1.66 |
+| 4 | input 3 any on Kindle | 0.83 | +0.03 | 0.92 | 1.69 |
+| 5 | input 3 any on Calcine | 0.52 | 0.00 | 0.53 | 1.69 |
+| 6 | input 3 any on Calcine | 0.30 | +0.07 | 0.50 | 1.76 |
+
+- **The jump is a metal engine.** Distil mercury and distil salt on the always-played Sieve make silver after nearly every fight. The second distil adds more than the first (0.95 metal a fight against 0.64), because silver needs both: that is the rising step in the path. It is all metal: together they save a quarter of a quintessence a fight.
+- **The price of metal decides whether the engine gets built.** The first distil beats a gain on the Sieve only from about 1.7 quintessence a metal; once it's in, the second beats a gain from about 0.8. As a pair against the two best quintessence upgrades (1.92 a fight) they win from about 1. So below 1.7, a builder taking the best next rune never starts an engine that would pay from 1: it is an investment over two steps, and the next-step derivative can't see it.
+
+What a bought rune is worth in the run comes from handing the run 3 metal at one shop (`circuits-sim.ts --bonus-metal 3 --bonus-at k`, 4000 runs a row; without it greedy buys a second rune at 1 to 4% of shops):
+
+| 3 metal handed over at | Fights left | Quintessence the bought rune saves | A metal | Runs won | Same as starting with | A metal, by runs won |
+| --- | --- | --- | --- | --- | --- | --- |
+| (none) | | | | 77% | 40 | |
+| the first shop | 3 | 5.2 | 1.7 | 87% | 47 | 2.3 |
+| the second shop | 2 | 3.6 | 1.2 | 85% | 45 | 1.7 |
+| the third shop | 1, the Mire | 2.1 | 0.7 | 83% | 43.5 | 1.2 |
+| 6 metal at the first shop | 3 | 8.5 | 1.4 | 92% | 52 | 2.0 |
+
+- **A bought rune saves about 1.4 to 2.1 a fight in the run,** close to the bench's bought pick at the first step (1.55). A run's deck has had only random free picks, so it stays early on the curve, and the Mire is long and hard.
+- **So a metal is worth (what the next rune saves a fight) × (fights left) ÷ 3.** That is about 1.7 at the first shop, 1.2 at the second and 0.7 at the last; a little more counted in runs won (2.3, 1.7, 1.2), since a rune saves most in the fights that go badly. Metal smelted after the Mire is worth nothing. Metal does scale the run: it scales with how much run is left. At 1.7 a fight, a metal is worth 3 quintessence with about five fights still to come, and the next rune's worth a fight shrinks as the deck improves (the first table), so later metal needs more fights again.
+- **The run never reaches the price.** Greedy smelts about 0.3 metal a fight, 1.1 by the last shop, against 3 for a rune. The engine can't pay in four fights either: it takes two upgrades (built by the second shop at the earliest), then smelts 1.7 in each of the last two fights, and the Mire's metal is never spent; that is about 2.4 by the third shop. As the run stands, smelting is worth about nothing. The playtest found one bought rune a shop felt right, and the run now buys almost none.
+- **The bench counts metal at 3; it is worth less in this run.** Since greedy ignores metal, the price only moves the score:
+
+| As a twelfth card | Metal at 3 | At 1 | At 0 |
+| --- | --- | --- | --- |
+| A Wash saves, over the 13 fights | 11.9 | 11.0 | 10.6 |
+| Sieve | 5.6 | 6.25 | 6.6 |
+| Catalyst | 3.1 | 3.5 | 3.8 |
+| The six purifiers | 2.3 to 2.55 | 2.6 to 2.9 | 2.8 to 3.1 |
+| The four metal makers | 0.98 to 1.03 | 0.98 to 1.01 | 0.98 to 1.00 |
+
+- **The fixed point.** Price metal at 3 and the best path builds the engine and smelts 1.7 a fight. In a four-fight run that metal buys nothing, so its real price is near zero, and at that price the path never builds the engine. The price that agrees with itself is about zero for smelting, and up to 1.7 for metal that arrives early in a lump of 3. The metal makers' symmetry doesn't depend on the price (their principles turn), but a lower price lifts everything else against a Wash, by 12 to 15% at 1.
 
 Playtest: the scarcity felt right (one bought rune per shop, where the earlier version bought three), and so did two plays per draw.

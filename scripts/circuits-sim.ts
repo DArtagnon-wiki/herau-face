@@ -23,7 +23,7 @@
 // Every run opens with the draft of a twelfth rune: greedy and delay take the
 // one the balance simulator (scripts/circuits-balance.ts) found worth most,
 // random takes any.
-//   (also --no-draft: the eleven opening cards, no twelfth rune; --picks need|wet: inputs for what the coming commissions feed, or only water and earth;
+//   (also --bonus-metal 3 --bonus-at 1: metal handed over at the shop after that fight; --no-draft: the eleven opening cards, no twelfth rune; --picks need|wet: inputs for what the coming commissions feed, or only water and earth;
 //    --hand 4, --stock 80)
 
 import { makeRng, type Rng } from '../src/sim/rng'
@@ -51,6 +51,9 @@ const runs = Number(arg('--runs') ?? 300)
 const picks = (arg('--picks') ?? 'need') as 'need' | 'wet'
 /** Skip the opening draft: the eleven opening cards only. */
 const noDraft = args.includes('--no-draft')
+/** Metal handed over at one shop (--bonus-at 1, 2 or 3: after that fight), to price metal against starting quintessence. */
+const bonusMetal = Number(arg('--bonus-metal') ?? 0)
+const bonusAt = Number(arg('--bonus-at') ?? 1)
 const settings: Settings = {
   ...DEFAULT_SETTINGS,
   hand: Number(arg('--hand') ?? DEFAULT_SETTINGS.hand),
@@ -244,6 +247,7 @@ function play(strategy: Strategy, n = runs): Result {
         }
         r = next
       } else if (r.stage === 'reward') {
+        if (r.fightIndex === bonusAt - 1) r = { ...r, metals: r.metals + bonusMetal }
         const before = r
         r = strategy.reward(r, rng)
         fights[before.fightIndex][fights[before.fightIndex].length - 1].runes = parts(r) - parts(before)
