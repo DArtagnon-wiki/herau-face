@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { COMMISSIONS, DEFAULT_SETTINGS, METAL_GATE, UNIT_GATE, catalystCard, TINCTURE_WARD, addRune, draftCard, draftPick, fits, costOf, craft, emptyPool, newRun, nextFight, playCard, poolTotal, resolveCard, resolveIn, smelt, startingDeck, takeRune, upcoming, wait, type Card, type Run, type StatusKey } from './engine'
+import { COMMISSIONS, GALLERY, fightWith, DEFAULT_SETTINGS, METAL_GATE, UNIT_GATE, catalystCard, TINCTURE_WARD, addRune, draftCard, draftPick, fits, costOf, craft, emptyPool, newRun, nextFight, playCard, poolTotal, resolveCard, resolveIn, smelt, startingDeck, takeRune, upcoming, wait, type Card, type Run, type StatusKey } from './engine'
 
 const pool = (p: Partial<Record<'water' | 'earth' | 'air' | 'fire', number>>) => ({ ...emptyPool(), ...p })
 /** A run straight into the first fight, with the eleven opening cards. */
@@ -392,5 +392,45 @@ describe('statuses', () => {
     expect(at('retain').fight.hand).toHaveLength(3)
     expect(at('retain').fight.dial).toBe(4)
     expect(at('foresight').fight.hand).toHaveLength(2)
+  })
+})
+
+describe('the rogues gallery', () => {
+  const enemy = (key: string) => GALLERY.find((c) => c.key === key)!
+  const fight = (key: string) => fightWith(1, startingDeck(), enemy(key))
+
+  it('has fourteen enemies, the run\'s four among them', () => {
+    expect(GALLERY).toHaveLength(14)
+    expect(GALLERY.slice(0, 4)).toEqual(COMMISSIONS)
+  })
+
+  it('locks an element out of every input until the lock lifts', () => {
+    let run = fight('magma')
+    expect(run.fight.locked).toBe('earth')
+    const calcine = startingDeck().find((c) => c.name === 'Calcine')!
+    expect(resolveIn(run, calcine).processed).toBe(0)
+    run = { ...run, fight: { ...run.fight, hand: [] } }
+    run = wait(run)
+    expect(run.fight.dial).toBe(8)
+    expect(run.fight.locked).toBe(null)
+    expect(resolveIn(run, calcine).processed).toBe(5)
+  })
+
+  it('scatters a card out of your hand at its phases', () => {
+    let run = fight('sandstorm')
+    run = playCard(run, run.fight.hand[0].id)
+    expect(run.fight.dial).toBe(2)
+    expect(run.fight.hand).toHaveLength(2)
+    expect(run.fight.discard).toHaveLength(2)
+  })
+
+  it('can leave you drawing fewer, and feed differently by phase', () => {
+    expect(fight('fog').fight.hand).toHaveLength(3)
+    const squall = enemy('squall')
+    let run = fight('squall')
+    expect(run.fight.pool).toEqual(pool(squall.feedsAt!.new!))
+    run = wait({ ...run, fight: { ...run.fight, hand: [] } })
+    expect(run.fight.dial).toBe(8)
+    expect(run.fight.pool).toEqual(pool({ ...squall.feedsAt!.new!, ...squall.feedsAt!.full! }))
   })
 })

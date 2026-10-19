@@ -93,7 +93,10 @@ Wash, as sketched: a moon is its input and its circle must run before the collec
 
 - **Extend the runic schema** to more resources (Ward as an input, say) as stronger cards need them.
 - **Advanced rhythms and tools.** Other attack rhythms for harder fights, and runes to meet them; Foresight ("on the next quarter moon, draw 2") is now in the draft.
-- **The draft's pool.** 39 of the 136 pairs reach about two Washes. Stall, Starve, Expose and Retain mostly can't, nor can draw with most inputs; Settle and Foresight jump past it in one step. The simulated player's guesses at what statuses are worth decide how it plays them, so some may be better than they score. The new inputs, outputs and statuses are only in the opening draft so far; the shop could sell them too.
+- **What the draft should aim for.** Two Washes on the gallery bench is worth about −1 Wash against drafting nothing (a blank twelfth costs about 3), and the bench's element balance doesn't match the run's water-heavy commissions: a pool tuned there drops runs to 61%, against 77% without a draft. The game keeps the pool tuned on the run's own fights (78%). Either the target rises by the cost of a twelfth card, or the runs draw from the gallery, or both. The new inputs, outputs and statuses are only in the draft so far; the shop could sell them too.
+- **Mend is far too strong as an added sigil** (8 to 9 Washes on any card: N, then N−1 and so on, is 15 to 21 quintessence from a card collecting 5 or 6), and Settle, Thorns and a quintessence output are strong too. Volatile costs more than it gives; Stall does nothing.
+- **The bench's last residues.** Circulate sits about 0.08 Washes below the other purifiers and Kindle about 0.05 below Wash, close to what the bench can resolve. The principles aren't symmetric either (silver needs mercury and salt; sulfur only makes lead), which the bench averages away by turning them.
+- **The gallery joins runs?** The ten new enemies are on the bench only; runs still play the four commissions. Their debuffs (locks, scattered hands, smaller draws) aren't drawn on the dial yet.
 - **Make decisions meaningful.** The play loop works but offers few real choices; thresholds like Wash's (wait for the pool to fill, or wash now?) are one lever.
 - **Tune the numbers:** feed rates, purification requirements, card capacities, the draw rule.
 - **Decide crafting:** which recipes are in-fight, what each costs in material, how recipes are earned.
@@ -106,7 +109,8 @@ A separate page beside Mud to Clay (`circuits.html`), on one screen: the moon di
 
 - **Commissions,** each feeding in bulk at every new and full moon and flaring at 3/8 and 7/8 of the moon. Mud: 5 water and 2 earth, needs 20. The peat bog: 4 water, 4 earth and 1 fire, needs 30. The Fumarole: 4 air, 4 fire and 1 water, needs 30; it is there so a deck built only for water and earth suffers. The Mire: 5 water, 3 earth and 1 fire, an earth more at each feed after the first, needs 40. The run starts with 40 quintessence.
 - **The opening deck** is eleven cards, and the draft adds a twelfth. Six purifiers take up to 3 each of two elements and purify 1 for each, yielding nothing, one for each pair: Dissolve (water and earth), Circulate (water and air), Digest (water and fire), Sublime (earth and air), Coagulate (earth and fire) and Cupel (air and fire). Four metal makers take up to 5 of one element and ground it, yielding their principle once they take 4 or more: Wash (water, mercury), Calcine (earth, salt), Fan (air, mercury) and Kindle (fire, sulfur). The Sieve takes 3 of anything, purifies it and raises Ward. Every card takes an eighth of the moon.
-- **The draft** offers three runes, no two with the same output, from a pool of 39 that `scripts/circuits-balance.ts` tuned to about two Washes (`src/circuits/draft-pairs.ts`). Their inputs are an element, any, quintessence, a discard or an eighth of the moon; their outputs purify, a ground stage, Ward, catalyst, draw, spare eighths, quintessence or a status. Six water purifying is one; so are a discard collecting 12 to purify, and a moon input collecting 9. The drafted rune is called Opus. A card holds at most 3 inputs, 2 gains (only on cards that purify), 3 side outputs and 2 ground stages; distilling runes (salt, sulfur or mercury) go on any card, and the shop sometimes offers a whole new card, the Catalyst.
+- **The draft** offers three runes, no two with the same output, from a pool of 39 that `scripts/circuits-balance.ts` tuned to about two Washes on the run's own fights (Mud, the peat bog, the Fumarole; metal not counted), in `src/circuits/draft-pairs.ts`. Their inputs are an element, any, quintessence, a discard or an eighth of the moon; their outputs purify, a ground stage, Ward, catalyst, draw, spare eighths, quintessence or a status. Six water purifying is one; so are a discard collecting 12 to purify, and a moon input collecting 9. The drafted rune is called Opus. A card holds at most 3 inputs, 2 gains (only on cards that purify), 3 side outputs and 2 ground stages; distilling runes (salt, sulfur or mercury) go on any card, and the shop sometimes offers a whole new card, the Catalyst.
+- **Ties.** When elements tie for most plentiful (for any input, a ground stage, Settle, Thorns, the homunculus, Starve), each fight settles it in its own order of the elements, shuffled when the fight opens. A fixed order (water, earth, air, fire) always drained earth before air, which left more air for Fan and more fire for Kindle.
 - **Recipes,** each brewed in no time. Tincture of salt: 2 salt, Ward 6. Spirit of mercury: 3 mercury, draw 2. Homunculus: 3 mercury, 2 salt and 1 sulfur, then it drains 2 of the most plentiful instability and purifies 2 at every phase.
 - **Metal.** Silver from 2 mercury and a salt (worth 3), lead from any two principles (worth 1). The first rune between fights is free; more cost 3 metal.
 
@@ -120,52 +124,130 @@ A separate page beside Mud to Clay (`circuits.html`), on one screen: the moon di
 
 | Strategy | Runs won | Paid in Mud | Metal | Paid in Peat | Metal | Paid in Fumarole | Metal | Reach the Mire, with |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Random | 0% | 42.4 | 0.1 | 20.9 | 0.0 | 11.9 | 0.0 | none |
-| Greedy, no twelfth rune | 78% | 3.7 | 0.1 | 6.8 | 0.1 | 8.6 | 0.2 | 99%, with 21 |
-| Greedy | 80% | 3.2 | 0.3 | 6.8 | 0.3 | 9.1 | 0.3 | 99%, with 21 |
-| Delay, keep 1 | 0% | 37.4 | 1.4 | 3.8 | 0.3 | 3.6 | 0.2 | 4%, with 1 |
-| Delay, keep 25 | 55% | 14.1 | 1.2 | 6.3 | 0.5 | 8.9 | 0.3 | 90%, with 13 |
-| Delay, keep 30 | 68% | 9.3 | 1.1 | 5.9 | 0.5 | 8.9 | 0.3 | 98%, with 17 |
-| Delay, keep 35 | 79% | 4.9 | 1.0 | 6.2 | 0.5 | 8.9 | 0.3 | 99%, with 21 |
+| Random | 0% | 42.5 | 0.1 | 21.3 | 0.0 | 22.6 | 0.0 | none |
+| Greedy, no twelfth rune | 77% | 3.5 | 0.1 | 6.6 | 0.1 | 8.7 | 0.2 | 99%, with 21 |
+| Greedy | 78% | 3.2 | 0.3 | 6.6 | 0.3 | 9.3 | 0.3 | 99%, with 22 |
+| Delay, keep 1 | 1% | 37.4 | 1.4 | 3.9 | 0.2 | 3.9 | 0.2 | 4%, with 1 |
+| Delay, keep 25 | 54% | 14.1 | 1.3 | 6.0 | 0.5 | 8.6 | 0.3 | 93%, with 13 |
+| Delay, keep 30 | 69% | 9.3 | 1.2 | 5.9 | 0.4 | 9.0 | 0.4 | 97%, with 17 |
+| Delay, keep 35 | 78% | 5.0 | 1.0 | 6.1 | 0.4 | 9.2 | 0.4 | 99%, with 21 |
 
-- **The opening deck alone** wins 78% for greedy (76% while gains still cost a tick); a drafted rune worth two Washes adds 2 points.
-- **Full blocks:** greedy fully blocks 59% of Mud's flares, 33% of the peat bog's, 21% of the Fumarole's and 28% of the Mire's.
+- **The opening deck alone** wins 77% for greedy; a drafted rune adds a point.
+- **Full blocks:** greedy fully blocks 59% of Mud's flares, 33% of the peat bog's, 23% of the Fumarole's and 27% of the Mire's.
 - **Fights last 1.7 to 1.8 moons,** about 8 cards.
 - **Holding back doesn't pay.** Metal comes out at about one per fight, so stalling for it never beats greedy.
 
-### Balance simulator
+### The balance bench
 
-`scripts/circuits-balance.ts` scores rune builds against a basic Wash. A build goes into the deck as a twelfth card beside the eleven opening cards, and greedy plays the same fights with it: Mud, the peat bog and the Fumarole, each on its own at full quintessence, 400 seeds each, the same seeds for every build. What a fight costs is the quintessence it takes: flares, plus whatever the cards pay, less whatever they gain. A build's worth is what it saves against a blank twelfth card that does nothing, over what a second Wash saves: blank 0, Wash 1. (The Mire is left out by default: the opening deck alone loses it nearly every time, so what a card saves there is mostly whether it turns a loss into a win.) A blank twelfth card costs 5.8, 12.0 and 12.0 quintessence in the three fights, and a Wash saves 2.4, 1.8 and nothing.
+`scripts/circuits-balance.ts` scores rune builds against a basic Wash. A build goes into the deck (as a twelfth card beside the eleven opening cards, or as a change to one of them), and greedy plays the same fights with it: every enemy in the rogues gallery but the Mire, each on its own at full quintessence, the same seeds for every build. What a fight costs is the quintessence it takes, less 3 for each metal smelted after it (the tincture of salt's floor; metal scales the run, so probably more). A build's worth is what it saves against a blank twelfth card that does nothing, over what a second Wash saves: blank 0, Wash 1. So no element is tied to a principle, the metal makers' principles turn over the seeds, and so does any principle output of the card measured. Errors are paired: what a build saves seed by seed, against the blank on the same seed.
 
-| Opening card, as a twelfth | Washes |
+#### The rogues gallery
+
+The run's four commissions and ten more (`GALLERY` in the engine). Between them they feed every pair of elements twice and all four once, with fills of every shape and new debuffs: hands scattered, elements locked, draws cut, other attack rhythms. The cost is what each costs with a blank twelfth card: its difficulty.
+
+| Enemy | Feeds | Flares | Debuff | Needs | Cost |
+| --- | --- | --- | --- | --- | --- |
+| Will-o'-the-wisp | 3 air, 5 fire at new and full | once, at 7/8 | – | 22 | 2.4 |
+| Mud | 5 water, 2 earth at new and full | 3/8, 7/8 | – | 20 | 5.5 |
+| Squall | 6 air at the new moon, 6 water at the full | at the quarters | it breaks just as you discard | 30 | 6.5 |
+| Hot spring | 4 water, 5 fire at new and full | 3/8, 7/8 | scalds a card out of your hand at each flare | 18 | 7.1 |
+| Geyser | 6 water, 5 fire, at the new moon only | once, at the full | – | 34 | 8.3 |
+| Kiln | 2 earth, 3 fire at new and full, one more of each every time | 3/8, 7/8 | it grows | 24 | 10.0 |
+| Dust devil | 3 earth, 1 air at every quarter | 3/8, 7/8 | – | 13 | 10.7 |
+| Peat bog | 4 water, 4 earth, 1 fire at new and full | 3/8, 7/8 | – | 30 | 11.3 |
+| Fumarole | 4 air, 4 fire, 1 water at new and full | 3/8, 7/8 | – | 30 | 11.3 |
+| Prism | 2 of each at new and full | 3/8, 7/8 | locks whatever is most plentiful at new and full | 22 | 16.5 |
+| Magma | 4 fire, 3 earth at new and full | 3/8, 7/8 | earth locked from the new moon to the full | 20 | 16.6 |
+| Sandstorm | 4 earth, 4 air at new and full | 3/8, 7/8 | scours a card out of your hand right after each draw | 28 | 16.9 |
+| Fog bank | 1 water, 1 air at every phase | 3/8, 7/8 | you draw one fewer | 18 | 20.2 |
+| The Mire | 5 water, 3 earth, 1 fire, an earth more each time | 3/8, 7/8 | it grows | 40 | (the boss; not on the bench) |
+
+`scripts/circuits-gallery-tune.ts` tuned the ten. A card's worth is a sum over enemies, so a change to one enemy moves only that enemy's column: it measures variants of each (an element more or less, the requirement 3 more or less), then searches the combination that evens out the symmetric cards while keeping each enemy in its band of difficulty. The last steps were by hand on fresh seeds, since the search fits its own seeds' noise.
+
+| Over three fresh runs of 1000 seeds | Washes |
 | --- | --- |
-| Sieve | 3.6 |
-| Dissolve | 2.4 |
-| Digest | 1.9 |
-| Circulate | 1.6 |
-| Catalyst, Cupel | 1.5 |
-| Coagulate | 1.2 |
-| Wash | 1.0 |
-| Sublime | 0.9 |
-| Calcine | 0.7 |
-| Kindle | 0.4 |
-| Fan | 0.3 |
+| Wash, Calcine, Fan, Kindle | 1.00, 0.96, 0.99, 0.94 |
+| Dissolve, Circulate, Digest, Sublime, Coagulate, Cupel | 2.40, 2.30, 2.41, 2.37, 2.37, 2.39 |
 
-With `--calibrate` it finds, for each of the 136 input and output pairs, the amount that makes the rune worth two Washes: the input's number for outputs that read what it collects, the count for draw, spare eighths, Foresight and the catalyst. `--write` checks each on fresh seeds and keeps the ones within 0.3 of two both times.
+- **It is a usable bench, at enough seeds.** With 1000 seeds an enemy a card's worth is known to about ±0.04 Washes; at 200 to 400 seeds runs disagree by 0.1 to 0.2, which is how the first tunings fooled themselves. The metal makers now agree within 0.06 and the purifiers within 0.11; Circulate is the one steadily low, by about 0.08.
+- **Metal makers turn on their gate.** A feed of 4 or more of an element is what makes its metal maker pay: dropping the wisp's fire from 4 to 3 cut Kindle's worth there from 1.6 to 0.4.
+- **Near-losses have huge leverage.** A card that flips a lost fight saves dozens of quintessence, so hard enemies swing the totals; the bands keep each one winnable.
 
-| Amount in the pool | Purify | Ward | Thorns | Settle |
+| Card, as a twelfth | Washes |
+| --- | --- |
+| Sieve | 5.6 |
+| Catalyst | 3.1 |
+| The six purifiers | 2.3 to 2.6 |
+| The four metal makers | 1.0 |
+
+#### A twelfth card has a cost
+
+The blank is not nothing. Against no twelfth card at all, a blank costs about 3.1 Washes (35 quintessence over the 13 fights): every draw it fills is a play lost. So a second Wash is worth +1 against the blank but about −2 against not having it, and a rune must be worth more than about 3 on this bench to beat leaving the deck at eleven. That is deck thinning, measured, and it is why worth here compares builds with each other rather than with nothing.
+
+#### Tuning the draft
+
+With `--calibrate` the bench finds, for each of the 136 input and output pairs, the amount that makes the rune worth two Washes: the input's number for outputs that read what it collects, the count for draw, spare eighths, Foresight and the catalyst. `--write` checks each on fresh seeds and keeps those within 0.3 of two both times: 51 on the gallery bench. Counting metal changed the amounts a lot, since the drafted rune's one-arc principle yields at every play. That pool isn't in the game: two Washes there is about −1 against drafting nothing, and its air and fire runes are dead weight in the run's water-heavy fights (runs won fall to 61%, from 77% without a draft; water runes alone hold 74 to 92%). The game keeps the earlier pool, tuned on the run's own fights.
+
+| Amount in the pool | Purify | Ward | Condense | Settle |
 | --- | --- | --- | --- | --- |
-| Water | 6 | 4 | 2 | – |
-| Any | 3 | 2 | – | – |
-| Earth | – | – | – | 2 |
-| A moon input | 9 | 8 | 3 | 2 |
-| A discard | 12 | 8 | 3 | 2 |
-| Quintessence | 16 | 13 | – | 3 |
+| Water | 4 | 4 | 3 | – |
+| Air | 4 | 5 | 3 | – |
+| Any | 1 | – | 1 | – |
+| A moon input | 3 | 3 | 3 | 1 |
+| A discard | 3 | 3 | 3 | 1 |
+| Quintessence (3 paid) | 9 | 8 | 13 | 2 |
 
-A dash: that pair didn't make the pool, being past two at its smallest step (any → Thorns 2 is 2.8), short of it at its largest, or off on the second run of seeds.
+A dash: that pair didn't make the pool.
 
-- **Element inputs do double duty.** Purifying like six water takes 9 from an eighth of the moon, 12 from a discard and 16 from 3 quintessence.
-- **The opening cards are uneven:** the Sieve is worth 3.6 Washes, Fan and Kindle under half of one (their metal isn't counted).
-- **Settle is strong per point** (2 or 3 is enough from anything), and Foresight draws its 2 into the gap between a quarter's discard and the next draw.
+#### What adding a sigil is worth
+
+`--sigils` adds each sigil to each opening card (within the caps) and measures the change, with how often the card is drawn and played. The Sieve is played 90% of the times it is drawn, the purifiers about 60%, the metal makers under a third.
+
+| Sigil added | On the Sieve | On a purifier | On a metal maker |
+| --- | --- | --- | --- |
+| Mend | 8.4 | 8.9 | 8.1 |
+| Settle | 6.2 | 5.2 | 3.0 |
+| Thorns | 5.3 | 4.3 | 2.6 |
+| A quintessence output | 4.8 | 4.3 | 2.6 |
+| An input of 3 any | 5.4 | 3.6 | 2.3 |
+| Foresight | 5.0 | 3.5 | 1.3 |
+| Condense | 4.1 | 3.5 | 2.1 |
+| A moon input (3) | 4.2 | 2.1 | 0.1 |
+| A discard input (3) | 3.7 | 1.6 | 0.2 |
+| An element input | 2.9 to 3.3 | 1.5 to 1.9 | 0.9 to 1.0 (0.2 to 0.3 of its own element) |
+| Ward | 2.9 | 2.4 | 1.4 |
+| Gain | 2.8 | 2.3 | – |
+| Catalyst ×2 | 2.3 | 1.9 | 1.6 |
+| Ground stage | 1.7 | 2.0 | 2.1 |
+| Retain | 2.6 | 1.7 | 0.7 |
+| Starve | 1.8 | 1.4 | 1.0 |
+| Spare an eighth | 1.6 | 1.2 | 0.6 |
+| Draw 1 | 1.6 | 1.1 | 0.1 |
+| Expose | 1.1 | 1.0 | 0.8 |
+| Distil (from 4) | 0.0 | 0.5 | 0.5 |
+| Stall | 0.1 | 0.1 | 0.1 |
+| A quintessence input (3) | 0.8 | −1.0 | −0.9 |
+| Volatile | −2.6 | −1.3 | −0.8 |
+
+`--curve` adds the same sigil again and again, caps lifted, and splits each step. A card's worth V (its deck against the same deck with the card blanked) is how often it is played a fight, P, times its worth a play, u. Each step's gain is ΔV = P̄·Δu (each play better: pure benefit) + ū·ΔP (played more often: the speculative part).
+
+| Adding inputs of 3 any | Worth | Played when drawn | From better plays | From more plays |
+| --- | --- | --- | --- | --- |
+| Sieve as it opens | 8.3 | 90% | | |
+| one more | 13.8 | 94% | +5.6 | −0.2 |
+| two more | 14.8 | 93% | +1.5 | −0.4 |
+| three more | 14.8 | 93% | +0.2 | −0.2 |
+| Dissolve as it opens | 5.1 | 61% | | |
+| one more | 8.8 | 89% | +1.5 | +2.2 |
+| two more | 9.9 | 92% | +1.1 | 0.0 |
+| Wash as it opens | 1.6 | 29% | | |
+| one more | 3.9 | 53% | +0.5 | +1.7 |
+| two more | 5.5 | 66% | +0.4 | +1.3 |
+| three more | 6.0 | 68% | +0.1 | +0.3 |
+
+- **The Sieve's inputs are pure benefit, and then the pool runs out.** It is played whenever it's drawn, so each input makes every play better (5.5 to 9.3 a play, for 5.4 Washes), and Ward doubles what purification already counts. By two more inputs it takes 9 of anything, about all a half-moon's pool holds: that is how good it gets, about 14.8 Washes. A second input of one element adds nearly nothing for the same reason.
+- **On a card played conditionally, most of the gain is being played more.** A Wash with one more input is played 53% of the times it's drawn instead of 29%; three quarters of its gain is the extra plays. Once a card reaches its ceiling of plays (about 70% of draws for a metal maker, over 90% for the others) that part stops, and only better plays remain.
+- **Gain doesn't run out on the pool but on the requirement.** On the Sieve: +2.8, +1.7, +1.4, +1.2, +0.6 for five gains, as fights end sooner and purification past the requirement is wasted (the "more plays" part turns negative because shorter fights have fewer plays).
+- **So the derivative depends on where the card sits:** below its ceiling of plays it is mostly ū·dP, at the ceiling P̄·du, and both fall to zero once the card can take the whole pool or overkills the requirement.
 
 Playtest: the scarcity felt right (one bought rune per shop, where the earlier version bought three), and so did two plays per draw.

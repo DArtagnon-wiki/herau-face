@@ -193,13 +193,24 @@ export interface Context {
   condense?: number
   /** Statuses multiplying what cards purify (Expose, Volatile). */
   mult?: number
+  /** An element the commission has locked: no input takes it. */
+  locked?: Elemental | null
+  /** The fight's order of the elements, for ties over which is most plentiful. */
+  ties?: Elemental[]
 }
 
-/** Take up to n from the most plentiful elements of a pool (changed in place), one most plentiful at a time. */
-function takeMost(left: Pool, n: number, into?: Pool): number {
+/** The most plentiful element of a pool; ties go to whichever comes first in the order given. */
+export const mostIn = (p: Pool, order: Elemental[] = ELEMENTS) => order.reduce((a, b) => (p[b] > p[a] ? b : a))
+
+/**
+ * Take up to n from the most plentiful elements of a pool (changed in place),
+ * one most plentiful at a time; ties go by the fight's own order of the
+ * elements, shuffled when it opens, so no element is always drained first.
+ */
+function takeMost(left: Pool, n: number, into?: Pool, order: Elemental[] = ELEMENTS): number {
   let need = n
   while (need > 0 && poolTotal(left) > 0) {
-    const e = ELEMENTS.reduce((a, b) => (left[b] > left[a] ? b : a))
+    const e = mostIn(left, order)
     const k = Math.min(left[e], need)
     left[e] -= k
     if (into) into[e] += k
@@ -224,6 +235,8 @@ function takeMost(left: Pool, n: number, into?: Pool): number {
  */
 export function resolveCard(card: Card, pool: Pool, boost = 1, ctx: Context = {}): CardResult {
   const left = { ...pool }
+  // A locked element is out of reach of every input and ground stage.
+  if (ctx.locked) left[ctx.locked] = 0
   const drained = emptyPool()
   const principles: Record<Principle, number> = { salt: 0, sulfur: 0, mercury: 0 }
   let processed = 0
@@ -235,7 +248,7 @@ export function resolveCard(card: Card, pool: Pool, boost = 1, ctx: Context = {}
   for (const { ch, i } of ordered) {
     let took = 0
     const src = ch.element
-    if (src === 'any') took = takeMost(left, ch.capacity, drained)
+    if (src === 'any') took = takeMost(left, ch.capacity, drained, ctx.ties)
     else if (src === 'quintessence') {
       // It pays its fixed cost only if that leaves you some quintessence.
       if ((ctx.quintessence ?? 0) - paid > QUINT_INPUT_COST) {
@@ -256,7 +269,7 @@ export function resolveCard(card: Card, pool: Pool, boost = 1, ctx: Context = {}
     processed += took
     took_[i] = took
   }
-  const condensed = ctx.condense ? takeMost(left, ctx.condense, drained) : 0
+  const condensed = ctx.condense ? takeMost(left, ctx.condense, drained, ctx.ties) : 0
   processed += condensed
   let ward = 0
   let catalyst = 1
@@ -291,7 +304,7 @@ export function resolveCard(card: Card, pool: Pool, boost = 1, ctx: Context = {}
     }
   }
   const grounded: number[] = []
-  for (let g = 0; g < card.ground; g++) grounded.push(takeMost(left, GROUND_DRAIN, drained))
+  for (let g = 0; g < card.ground; g++) grounded.push(takeMost(left, GROUND_DRAIN, drained, ctx.ties))
   const purification = card.purifies ? Math.ceil(processed * (1 + card.gain) * boost * (ctx.mult ?? 1)) : 0
   return { drained, processed, purification, principles, ward, catalyst, took: took_, grounded, condensed, paid, discards, draw, regain, gain, statuses }
 }
@@ -305,6 +318,8 @@ export function resolveIn(run: Run, card: Card): CardResult {
     others: f.hand.length - (inHand ? 1 : 0),
     condense: f.status.condense,
     mult: multOf(f),
+    locked: f.locked,
+    ties: f.ties,
   })
 }
 
@@ -335,6 +350,18 @@ export interface Commission {
   /** Phases at which it grows stronger, adding buffFeed to its feed. */
   buffs?: Phase[]
   buffFeed?: Partial<Pool>
+  /** Feeds that differ by phase: at these of its feeding phases it feeds this instead of `feed`. */
+  feedsAt?: Partial<Record<Phase, Partial<Pool>>>
+  /** It scatters your hand: at these phases you discard n cards at random. */
+  scatter?: { at: Phase[]; n: number }
+  /**
+   * From each of these phases an element is locked, so no input can take it,
+   * until the next; 'most' locks whatever is most plentiful in the pool then
+   * (ties broken at random); null lifts the lock.
+   */
+  locks?: Partial<Record<Phase, Elemental | 'most' | null>>
+  /** You draw this many fewer at each new and full moon. */
+  handLess?: number
 }
 
 export const COMMISSIONS: Commission[] = [
@@ -379,10 +406,122 @@ export const COMMISSIONS: Commission[] = [
 ]
 
 
-/** Its feed after this many buffs. */
-export function feedOf(c: Commission, buffs: number): Pool {
+/**
+ * The rogues gallery: the run's four commissions and ten more, for the
+ * balance simulator (and runs to come). Between them they cover every pair of
+ * elements twice (and all four once), with fills of every shape (bulk,
+ * trickle, every quarter, alternating, one burst a moon, rising) and
+ * debuffs: scattered hands, locked elements, smaller draws, other attack
+ * rhythms. They are tuned so the element-symmetric opening cards (the four
+ * metal makers; the six purifiers) come out worth the same over the gallery.
+ */
+export const GALLERY: Commission[] = [
+  ...COMMISSIONS,
+  {
+    key: 'wisp',
+    name: "Will-o'-the-wisp",
+    blurb: 'Faint and flighty: some air and more fire at every new and full moon, and it flares only once a moon, at 7/8.',
+    require: 22,
+    feed: { air: 3, fire: 5 },
+    feedAt: FEED_PHASES,
+    attacks: ['waning-crescent'],
+  },
+  {
+    key: 'dust',
+    name: 'Dust devil',
+    blurb: 'Whirls up earth and a little air at every quarter of the moon; flares at 3/8 and 7/8.',
+    require: 13,
+    feed: { earth: 3, air: 1 },
+    feedAt: ['new', 'first', 'full', 'last'],
+    attacks: ATTACK_PHASES,
+  },
+  {
+    key: 'fog',
+    name: 'Fog bank',
+    blurb: 'Seeps in a little water and air at every phase, and its murk leaves you drawing one fewer; flares at 3/8 and 7/8.',
+    require: 18,
+    feed: { water: 1, air: 1 },
+    feedAt: PHASES,
+    attacks: ATTACK_PHASES,
+    handLess: 1,
+  },
+  {
+    key: 'squall',
+    name: 'Squall',
+    blurb: 'Gusts of air at the new moon, rain at the full, and it breaks on the quarters, just as you would discard.',
+    require: 30,
+    feed: { air: 6 },
+    feedsAt: { new: { air: 6 }, full: { water: 6 } },
+    feedAt: FEED_PHASES,
+    attacks: ['first', 'last'],
+  },
+  {
+    key: 'geyser',
+    name: 'Geyser',
+    blurb: 'Builds pressure all moon: one burst of water and fire at the new moon, and it blows once, at the full.',
+    require: 34,
+    feed: { water: 6, fire: 5 },
+    feedAt: ['new'],
+    attacks: ['full'],
+  },
+  {
+    key: 'spring',
+    name: 'Hot spring',
+    blurb: 'Water and fire at every new and full moon; at each flare (3/8 and 7/8) it scalds a card out of your hand.',
+    require: 18,
+    feed: { water: 4, fire: 5 },
+    feedAt: FEED_PHASES,
+    attacks: ATTACK_PHASES,
+    scatter: { at: ATTACK_PHASES, n: 1 },
+  },
+  {
+    key: 'sandstorm',
+    name: 'Sandstorm',
+    blurb: 'Earth and air at every new and full moon, and right after you draw it scours a card out of your hand; flares at 3/8 and 7/8.',
+    require: 28,
+    feed: { earth: 4, air: 4 },
+    feedAt: FEED_PHASES,
+    attacks: ATTACK_PHASES,
+    scatter: { at: ['waxing-crescent', 'waning-gibbous'], n: 1 },
+  },
+  {
+    key: 'kiln',
+    name: 'Kiln',
+    blurb: 'Earth and fire at every new and full moon, hotter each time; flares at 3/8 and 7/8.',
+    require: 24,
+    feed: { earth: 2, fire: 3 },
+    feedAt: FEED_PHASES,
+    attacks: ATTACK_PHASES,
+    buffs: ['new', 'full'],
+    buffFeed: { earth: 1, fire: 1 },
+  },
+  {
+    key: 'magma',
+    name: 'Magma',
+    blurb: 'Fire and some earth at every new and full moon; its crust locks the earth away from the new moon to the full; flares at 3/8 and 7/8.',
+    require: 20,
+    feed: { fire: 4, earth: 3 },
+    feedAt: FEED_PHASES,
+    attacks: ATTACK_PHASES,
+    locks: { new: 'earth', full: null },
+  },
+  {
+    key: 'prism',
+    name: 'Prism',
+    blurb: 'A little of every element at every new and full moon, and each time it locks whatever is then most plentiful; flares at 3/8 and 7/8.',
+    require: 22,
+    feed: { water: 2, earth: 2, air: 2, fire: 2 },
+    feedAt: FEED_PHASES,
+    attacks: ATTACK_PHASES,
+    locks: { new: 'most', full: 'most' },
+  },
+]
+
+/** Its feed after this many buffs, at this phase (its feed may differ by phase). */
+export function feedOf(c: Commission, buffs: number, phase?: Phase): Pool {
+  const base = (phase && c.feedsAt?.[phase]) || c.feed
   const out = emptyPool()
-  for (const e of ELEMENTS) out[e] = (c.feed[e] ?? 0) + buffs * (c.buffFeed?.[e] ?? 0)
+  for (const e of ELEMENTS) out[e] = (base[e] ?? 0) + buffs * (c.buffFeed?.[e] ?? 0)
   return out
 }
 
@@ -512,6 +651,10 @@ export interface Fight {
   spare: number
   /** Flares a Stall has held back, waiting for the next phase. */
   pending: number
+  /** An element the commission has locked, out of reach of every input. */
+  locked: Elemental | null
+  /** This fight's order of the elements, for ties over which is most plentiful: shuffled when it opens. */
+  ties: Elemental[]
 }
 
 export interface Run {
@@ -662,9 +805,8 @@ export function newRun(seed = Date.now(), settings: Settings = DEFAULT_SETTINGS,
   return draft ? { ...run, stage: 'draft', seed: rng.state() } : startFight(run, 0)
 }
 
-function startFight(run: Run, index: number): Run {
+function startFight(run: Run, index: number, commission: Commission = COMMISSIONS[index]): Run {
   const rng = makeRng(run.seed)
-  const commission = COMMISSIONS[index]
   const fight: Fight = {
     commission,
     dial: 0,
@@ -684,6 +826,8 @@ function startFight(run: Run, index: number): Run {
     status: noStatus(),
     spare: 0,
     pending: 0,
+    locked: null,
+    ties: rng.shuffle(ELEMENTS),
   }
   // The new moon that opens the fight: the first feed and the first hand.
   return phaseEvents({ ...run, stage: 'fight', fightIndex: index, seed: rng.state(), fight }, 0, true)
@@ -717,15 +861,24 @@ function phaseEvents(run: Run, pos: number, opening = false): Run {
   const c = f.commission
   const notes: string[] = []
   let quint = run.quintessence
+  let seed = run.seed
+  if (c.locks && phase in c.locks) {
+    const was = f.locked
+    const lock = c.locks[phase] ?? null
+    if (lock === 'most') {
+      // Locks after this phase's feed, below, so it locks what it has just fed if that is most.
+    } else f.locked = lock
+    if (lock !== 'most' && f.locked !== was) notes.push(f.locked ? `${c.name} locks ${f.locked}` : `${c.name} releases ${was}`)
+  }
   if (!opening && f.homunculi > 0) {
-    const drained = takeMost(f.pool, HOMUNCULUS_DRAIN * f.homunculi)
+    const drained = takeMost(f.pool, HOMUNCULUS_DRAIN * f.homunculi, undefined, f.ties)
     if (drained) {
       f.purified += drained
       notes.push(`the homunculus purifies ${drained}`)
     }
   }
   if (!opening && st.settle > 0) {
-    const settled = takeMost(f.pool, st.settle)
+    const settled = takeMost(f.pool, st.settle, undefined, f.ties)
     f.purified += settled
     st.settle -= 1
     if (settled) notes.push(`${settled} settles and is purified`)
@@ -745,7 +898,7 @@ function phaseEvents(run: Run, pos: number, opening = false): Run {
   if (held) notes.push(`${c.name} is stalled`)
   for (let k = 0; k < due - held; k++) {
     if (st.thorns > 0) {
-      const pricked = takeMost(f.pool, st.thorns)
+      const pricked = takeMost(f.pool, st.thorns, undefined, f.ties)
       f.purified += pricked
       st.thorns = 0
       if (pricked) notes.push(`thorns purify ${pricked}`)
@@ -767,15 +920,23 @@ function phaseEvents(run: Run, pos: number, opening = false): Run {
     notes.push(`${c.name} grows`)
   }
   if (opening || c.feedAt.includes(phase)) {
-    const feed = feedOf(c, f.buffs)
+    const feed = feedOf(c, f.buffs, phase)
     let starved = 0
     while (st.starve > starved && poolTotal(feed) > 0) {
-      feed[ELEMENTS.reduce((a, b) => (feed[b] > feed[a] ? b : a))] -= 1
+      feed[mostIn(feed, f.ties)] -= 1
       starved++
     }
     st.starve = 0
     for (const e of ELEMENTS) f.pool[e] += feed[e]
     notes.push(`${c.name} feeds ${ELEMENTS.filter((e) => feed[e]).map((e) => `${feed[e]} ${e}`).join(', ') || 'nothing'}${starved ? ` (${starved} starved)` : ''}`)
+  }
+  if (c.locks?.[phase] === 'most') {
+    const top = Math.max(...ELEMENTS.map((e) => f.pool[e]))
+    const tied = ELEMENTS.filter((e) => f.pool[e] === top)
+    const rng = makeRng(seed)
+    f.locked = tied[rng.int(0, tied.length - 1)]
+    seed = rng.state()
+    notes.push(`${c.name} locks ${f.locked}`)
   }
   let extra = 0
   if (!opening && DISCARD_PHASES.includes(phase)) {
@@ -793,10 +954,19 @@ function phaseEvents(run: Run, pos: number, opening = false): Run {
       notes.push(`foresight draws ${extra}`)
     }
   }
-  const draws = (opening || DRAW_PHASES.includes(phase) ? run.settings.hand : 0) + extra
-  if (notes.length) f.log.unshift(`${PHASE_NAMES[phase]}: ${notes.join('; ')}.`)
-  let next: Run = { ...run, quintessence: Math.max(0, quint - paid), fight: f }
+  const draws = (opening || DRAW_PHASES.includes(phase) ? Math.max(0, run.settings.hand - (c.handLess ?? 0)) : 0) + extra
+  let next: Run = { ...run, seed, quintessence: Math.max(0, quint - paid), fight: f }
   if (draws) next = drawCards(next, draws)
+  // It scatters your hand: cards thrown away at random, after any draw.
+  if (!opening && c.scatter?.at.includes(phase) && next.fight.hand.length) {
+    const rng = makeRng(next.seed)
+    const hand = next.fight.hand.slice()
+    const thrown: Card[] = []
+    for (let k = 0; k < c.scatter.n && hand.length; k++) thrown.push(...hand.splice(rng.int(0, hand.length - 1), 1))
+    notes.push(`${c.name} scatters ${thrown.map((t) => t.name).join(', ')}`)
+    next = { ...next, seed: rng.state(), fight: { ...next.fight, hand, discard: [...next.fight.discard, ...thrown] } }
+  }
+  if (notes.length) next = { ...next, fight: { ...next.fight, log: [`${PHASE_NAMES[phase]}: ${notes.join('; ')}.`, ...next.fight.log] } }
   return next
 }
 
@@ -990,7 +1160,9 @@ export function takeRune(run: Run, offerIndex: number, cardId?: number): Run {
  * A single fight against one commission with this deck, at full
  * quintessence: what the balance simulator plays.
  */
-export function fightWith(seed: number, deck: Card[], index: number, settings: Settings = DEFAULT_SETTINGS): Run {
+export function fightWith(seed: number, deck: Card[], against: number | Commission, settings: Settings = DEFAULT_SETTINGS): Run {
+  const index = typeof against === 'number' ? against : 0
+  const commission = typeof against === 'number' ? COMMISSIONS[against] : against
   const run: Run = {
     settings,
     seed,
@@ -1006,7 +1178,7 @@ export function fightWith(seed: number, deck: Card[], index: number, settings: S
     nextId: 1 + Math.max(0, ...deck.map((c) => c.id)),
     draft: null,
   }
-  return startFight(run, index)
+  return startFight(run, index, commission)
 }
 
 /** Go on to the next fight. */

@@ -243,7 +243,7 @@ function nextFeed(run: Run): { phase: string; feed: Pool } | null {
   const f = run.fight
   const x = upcoming(f, 8).find((u) => u.feed)
   if (!x) return null
-  return { phase: PHASE_NAMES[x.phase].toLowerCase(), feed: feedOf(f.commission, f.buffs + (x.buff ? 1 : 0)) }
+  return { phase: PHASE_NAMES[x.phase].toLowerCase(), feed: feedOf(f.commission, f.buffs + (x.buff ? 1 : 0), x.phase) }
 }
 const feedWords = (p: Pool) => ELEMENTS.filter((e) => p[e]).map((e) => `${p[e]} ${e}`).join(', ')
 
@@ -272,7 +272,7 @@ function situationNote(run: Run): [string, string] {
 function dialNote(run: Run): [string, string] {
   const f = run.fight
   const items = upcoming(f, 4).map((x) => {
-    const fd = feedOf(f.commission, f.buffs + (x.buff ? 1 : 0))
+    const fd = feedOf(f.commission, f.buffs + (x.buff ? 1 : 0), x.phase)
     const what = [x.attack ? 'flare' : x.held ? 'its flare is held back' : '', x.buff ? 'it grows' : '', x.feed ? `it feeds ${feedWords(fd)}` : '', x.discard ? 'you discard' : '', x.draw ? `you draw ${run.settings.hand}` : ''].filter(Boolean)
     return `<b>${PHASE_NAMES[x.phase]}</b> (${ticks(x.pos - f.dial)}): ${what.length ? what.join(', ') : 'nothing'}`
   })

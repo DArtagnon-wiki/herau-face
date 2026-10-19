@@ -11,13 +11,17 @@ It is all on one screen: the moon dial with the pool in its middle, materials an
 ```sh
 npm run dev                          # then open /circuits.html
 npx tsx scripts/circuits-sim.ts --compare                        # every strategy side by side
-npx tsx scripts/circuits-balance.ts                              # rune builds scored against a basic Wash
+npx tsx scripts/circuits-balance.ts                              # cards scored against a basic Wash, over the rogues gallery
+npx tsx scripts/circuits-balance.ts --symmetry --seeds 1000      # the element-symmetric opening cards, enemy by enemy
+npx tsx scripts/circuits-balance.ts --sigils                     # what adding each sigil to each opening card is worth
+npx tsx scripts/circuits-balance.ts --curve Sieve                # the same sigil again and again: worth, plays, worth a play
 npx tsx scripts/circuits-balance.ts --calibrate --out pairs.json # tune each input and output pair to 2 Washes (then --write pairs.json)
+npx tsx scripts/circuits-gallery-tune.ts --measure --out cols.json   # then --search cols.json: even out the symmetric cards
 npx tsx scripts/circuits-sim.ts --strategy delay --reserve 70    # one in detail (greedy, random, delay; --picks need|wet; --hand; --stock)
 npm run build                        # also dist/circuits.html
 ```
 
-The simulator has three players: greedy (whatever looks best right now), random, and delay (in the fights before the boss, keep the fight going for principles as long as a greedy finish would still leave a chosen reserve of quintessence). With 40 quintessence, greedy wins 78% of 600 runs with the eleven opening cards and 80% with a drafted twelfth; holding back for metal never beats it. The balance simulator plays the same fights with one card swapped and scores it in Washes (blank 0, Wash 1). The rules are in `src/circuits/engine.ts`; the drawings in `src/circuits/sigils.ts` (the sigil alphabet), `circuit.ts` (cards) and `dial.ts`; the page in `src/circuits/main.ts`.
+The simulator has three players: greedy (whatever looks best right now), random, and delay (in the fights before the boss, keep the fight going for principles as long as a greedy finish would still leave a chosen reserve of quintessence). With 40 quintessence, greedy wins 78% of 600 runs with the eleven opening cards and 80% with a drafted twelfth; holding back for metal never beats it. The balance bench plays the same fights with one card swapped or changed and scores it in Washes (blank 0, Wash 1), counting each metal as 3 quintessence. It plays the rogues gallery: the run's commissions and ten more enemies with locked elements, scattered hands, smaller draws and other rhythms, tuned so the element-symmetric opening cards come out equal. The rules are in `src/circuits/engine.ts`; the drawings in `src/circuits/sigils.ts` (the sigil alphabet), `circuit.ts` (cards) and `dial.ts`; the page in `src/circuits/main.ts`.
 
 ## Prototype: mud to clay
 

@@ -207,13 +207,20 @@ interface Result {
 function play(strategy: Strategy, n = runs): Result {
   const fights: FightStat[][] = COMMISSIONS.map(() => [])
   const quintLeft: number[] = []
+  const byDraft = new Map<string, { n: number; won: number }>()
   let runsWon = 0
   for (let i = 0; i < n; i++) {
     const rng = makeRng(90000 + i)
     let r = newRun(7000 + i, settings, { draft: !noDraft })
     let stat = freshStat(r.quintessence)
+    let drafted = 'none'
     for (let guard = 0; guard < 3000; guard++) {
-      if (r.stage === 'draft') r = strategy.draft(r, rng)
+      if (r.stage === 'draft') {
+        r = strategy.draft(r, rng)
+        const o = r.deck[r.deck.length - 1]
+        const out = o.outputs.find((x) => x.kind !== 'principle')
+        drafted = `${o.channels[0].element} ${o.channels[0].capacity} → ${o.purifies ? 'purify' : o.ground ? 'ground' : out?.kind === 'status' ? out.status : out?.kind}`
+      }
       else if (r.stage === 'fight') {
         const m = strategy.move(r, rng)
         const next = apply(r, m)
@@ -247,6 +254,12 @@ function play(strategy: Strategy, n = runs): Result {
       runsWon++
       quintLeft.push(r.quintessence)
     }
+    const d = byDraft.get(drafted) ?? { n: 0, won: 0 }
+    byDraft.set(drafted, { n: d.n + 1, won: d.won + (r.stage === 'won' ? 1 : 0) })
+  }
+  if (args.includes('--by-draft')) {
+    const by = [...byDraft.entries()].sort((a, b) => b[1].n - a[1].n)
+    console.log(by.map(([k, e]) => `  ${k}: ${e.n} runs, won ${Math.round((100 * e.won) / e.n)}%`).join('\n'))
   }
   return { name: strategy.name, runsWon, quintLeft, fights }
 }
