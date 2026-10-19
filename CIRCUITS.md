@@ -184,6 +184,20 @@ The run's four commissions and ten more (`GALLERY` in the engine). Between them 
 
 The blank is not nothing. Against no twelfth card at all, a blank costs about 3.1 Washes (35 quintessence over the 13 fights): every draw it fills is a play lost. So a second Wash is worth +1 against the blank but about −2 against not having it, and a rune must be worth more than about 3 on this bench to beat leaving the deck at eleven. That is deck thinning, measured, and it is why worth here compares builds with each other rather than with nothing.
 
+The Sieve sets much of that bar. It is the strongest card in the deck (a steady 3 drained, 3 Ward and 3 purified whenever it's drawn, against a Wash's conditional up-to-5 drained), so every extra card dilutes it. `--dilution --without Sieve` runs the same test on the opening eleven without it (1000 seeds an enemy):
+
+| Extra card | 11 cards with the Sieve: against a blank | against no extra card | 10 cards without: against a blank | against no extra card |
+| --- | --- | --- | --- | --- |
+| Sieve | 5.8 | +2.7 | 6.0 | +3.5 |
+| Catalyst | 3.2 | 0.0 | 3.4 | +1.0 |
+| The six purifiers | 2.4 to 2.6 | −0.5 to −0.7 | 2.4 to 2.7 | 0.0 to +0.25 |
+| The four metal makers | 1.0 to 1.1 | −2.1 | 0.9 to 1.0 | −1.4 to −1.5 |
+| Blank | 0 | −3.1 | 0 | −2.4 |
+
+- **The break-even sits near the deck's average card:** about 2.3 Washes with the Sieve, 1.9 without. A purifier is below it with the Sieve and just above it without; a metal maker is below it either way.
+- **In quintessence the blank costs no less without the Sieve** (39 over the 13 fights, against 36): fights are harder and every card counts for more, and a Wash is worth 16 quintessence instead of 11. What drops is the bar measured in Washes.
+- **Without the Sieve, water leads again a little:** Wash 1.00, Calcine 0.93, Kindle 0.91, Fan 0.88 (±0.03). The gallery was tuned with the Sieve in the deck.
+
 #### Tuning the draft
 
 With `--calibrate` the bench finds, for each of the 136 input and output pairs, the amount that makes the rune worth two Washes: the input's number for outputs that read what it collects, the count for draw, spare eighths, Foresight and the catalyst. `--write` checks each on fresh seeds and keeps those within 0.3 of two both times: 51 on the gallery bench. Counting metal changed the amounts a lot, since the drafted rune's one-arc principle yields at every play. That pool isn't in the game: two Washes there is about −1 against drafting nothing, and its air and fire runes are dead weight in the run's water-heavy fights (runs won fall to 61%, from 77% without a draft; water runes alone hold 74 to 92%). The game keeps the earlier pool, tuned on the run's own fights.

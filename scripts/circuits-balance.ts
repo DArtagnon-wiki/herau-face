@@ -26,7 +26,9 @@
 //                                                        what adding each sigil to each opening card is worth
 //   npx tsx scripts/circuits-balance.ts --curve Sieve [--steps 5]
 //                                                        the same sigil added again and again, caps lifted: worth, plays, worth a play
-//   (--seeds 300: fights per enemy for each build; --fights mud,peat,...: which enemies; --base 5000: the first seed)
+//   npx tsx scripts/circuits-balance.ts --dilution [--without Sieve]
+//                                                        what an extra card is worth against a blank and against no extra card at all
+//   (--without Sieve: leave opening cards out of every deck; --seeds 300: fights per enemy for each build; --fights mud,peat,...: which enemies; --base 5000: the first seed)
 
 import { writeFileSync, readFileSync } from 'node:fs'
 import {
@@ -48,7 +50,7 @@ import {
   type Principle,
   type Source,
 } from '../src/circuits/engine'
-import { ID, METAL_WORTH, blankCard, byName, changed, opening, scorer, sum, twelfth, withPrinciple, type DeckOf } from './circuits-bench'
+import { ID, METAL_WORTH, baseDeck, blankCard, byName, leaveOut, measureDeck, changed, opening, scorer, sum, twelfth, withPrinciple, type DeckOf } from './circuits-bench'
 
 const args = process.argv.slice(2)
 const arg = (n: string) => (args.includes(n) ? args[args.indexOf(n) + 1] : undefined)
@@ -56,6 +58,7 @@ const SEEDS = Number(arg('--seeds') ?? 300)
 const TARGET = Number(arg('--target') ?? 2)
 const TOLERANCE = Number(arg('--tolerance') ?? 0.3)
 const FIGHTS: Commission[] = (arg('--fights')?.split(',') ?? GALLERY.filter((c) => c.key !== 'mire').map((c) => c.key)).map((k) => GALLERY.find((c) => c.key === k)!)
+if (arg('--without')) leaveOut(arg('--without')!.split(','))
 const S = scorer(FIGHTS, SEEDS, Number(arg('--base') ?? 5000))
 
 // ---------------------------------------------------------------------------
@@ -231,6 +234,23 @@ if (args.includes('--write')) {
     console.log(`--- | --- | ${names.map(() => '---').join(' | ')}`)
     for (const r of rows) console.log(`${r.name} | ${f2(r.worth)} | ${r.saves.map(f1).join(' | ')}`)
   }
+} else if (args.includes('--dilution')) {
+  // An extra card against a blank (same seeds, same shuffles) and against no extra card (a deck one smaller).
+  header()
+  const none = measureDeck((i) => baseDeck(i), FIGHTS, SEEDS, Number(arg('--base') ?? 5000))
+  const vsNone = (m: { costs: number[] }) => (sum(none.costs) - sum(m.costs)) / S.unit
+  const deckSize = baseDeck(0).length
+  console.log(`\nThe deck: ${deckSize} cards${arg('--without') ? ` (the opening eleven without ${arg('--without')})` : ''}. No extra card costs ${f1(sum(none.costs))}; a blank extra ${f1(sum(S.blank.costs))}; so a blank costs ${f2(-vsNone(S.blank))} Washes against no card.`)
+  console.log(`Extra card | Washes against a blank | against no extra card`)
+  console.log(`--- | --- | ---`)
+  const rows = [...new Set(opening.map((c) => c.name))].map((name) => {
+    const m = S.measure(twelfth((p) => withPrinciple(byName(name), p)))
+    return { name, w: S.worth(m), e: S.error(m), n: vsNone(m) }
+  })
+  const cat = S.measure(twelfth(() => catalystCard(ID)))
+  rows.push({ name: 'Catalyst', w: S.worth(cat), e: S.error(cat), n: vsNone(cat) })
+  rows.sort((a, b) => b.w - a.w)
+  for (const r of rows) console.log(`${r.name} | ${f2(r.w)} ± ${f2(r.e)} | ${f2(r.n)}`)
 } else if (args.includes('--pairs')) {
   header()
   const rows = DRAFT_INPUTS.flatMap((ch) => DRAFT_OUTPUTS.map((o) => ({ name: `${ch.element} ${ch.capacity} → ${outKey(o)}`, t: measurePair(ch.element, o, ch.capacity, 1) })))

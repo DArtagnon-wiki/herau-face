@@ -26,8 +26,14 @@ export const byName = (name: string) => opening.find((c) => c.name === name)!
 export const withPrinciple = (c: Card, p: Principle): Card => ({ ...c, outputs: c.outputs.map((o) => (o.kind === 'principle' ? { ...o, principle: p } : o)) })
 const makerIds = opening.filter((c) => !c.purifies).map((c) => c.id)
 /** The opening deck with the metal makers' principles turned by seed: each yields every principle equally often. */
+/** The deck the bench builds on: the opening cards, less any left out. */
+let base = opening
+/** Leave these opening cards out of every deck the bench builds. */
+export function leaveOut(names: string[]): void {
+  base = opening.filter((c) => !names.includes(c.name))
+}
 export const baseDeck = (i: number): Card[] =>
-  opening.map((c) => {
+  base.map((c) => {
     const k = makerIds.indexOf(c.id)
     return k < 0 ? c : withPrinciple(c, PRINCIPLES[(i + k) % 3])
   })
