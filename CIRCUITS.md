@@ -198,6 +198,27 @@ The Sieve sets much of that bar. It is the strongest card in the deck (a steady 
 - **In quintessence the blank costs no less without the Sieve** (39 over the 13 fights, against 36): fights are harder and every card counts for more, and a Wash is worth 16 quintessence instead of 11. What drops is the bar measured in Washes.
 - **Without the Sieve, water leads again a little:** Wash 1.00, Calcine 0.93, Kindle 0.91, Fan 0.88 (±0.03). The gallery was tuned with the Sieve in the deck.
 
+#### What a purifier is made of
+
+`--anatomy` pulls a purifier apart with variants, each averaged over every element or pair of elements (600 seeds an enemy, as a twelfth card):
+
+| Variant | Washes | Played when drawn |
+| --- | --- | --- |
+| Purifier: 3 + 3 of two elements, purify | 2.45 | 54% |
+| The same, grounding instead (defense only) | 1.28 | 31% |
+| One element, 6, purify (same reach, one element) | 1.89 | 41% |
+| One element, 3, purify (half a purifier) | 1.06 | 33% |
+| One element, 5, purify, metal from 4 (a Wash that purifies) | 2.34 | 40% |
+| One element, 5, purify, no metal | 1.80 | 40% |
+| Metal maker: one element, 5, ground, metal from 4 | 1.00 | 24% |
+| One element, 5, ground, no metal | 0.72 | 24% |
+
+- **Offense is the biggest part.** Grounding instead of purifying halves a purifier (2.45 to 1.28) and a 5-water card (1.80 to 0.72). Purification pays twice: it is progress, and a fight that ends sooner flares fewer times; and it makes the card worth playing far more often.
+- **Breadth is worth about half a Wash.** 3 and 3 of two elements beats 6 of one (2.45 to 1.89), and more than two half-purifiers add up to (2 × 1.06): two elements find something to take more often.
+- **Consistency shows as plays.** A purifier is played on 54% of its draws, a metal maker on 24%: a cap of 3 fills from a small pool, where a metal maker wants 4 of one element.
+- **Its defense alone beats a Wash** (1.28 to 1.00): 3 + 3 across two elements drains more often than 5 of one.
+- **Metal is the small part of a metal maker:** 0.28 Washes at 3 quintessence a metal. A Wash that purified would be worth a purifier (2.34); grounding is what costs it.
+
 #### Tuning the draft
 
 With `--calibrate` the bench finds, for each of the 136 input and output pairs, the amount that makes the rune worth two Washes: the input's number for outputs that read what it collects, the count for draw, spare eighths, Foresight and the catalyst. `--write` checks each on fresh seeds and keeps those within 0.3 of two both times: 51 on the gallery bench. Counting metal changed the amounts a lot, since the drafted rune's one-arc principle yields at every play. That pool isn't in the game: two Washes there is about −1 against drafting nothing, and its air and fire runes are dead weight in the run's water-heavy fights (runs won fall to 61%, from 77% without a draft; water runes alone hold 74 to 92%). The game keeps the earlier pool, tuned on the run's own fights.

@@ -26,6 +26,7 @@
 //                                                        what adding each sigil to each opening card is worth
 //   npx tsx scripts/circuits-balance.ts --curve Sieve [--steps 5]
 //                                                        the same sigil added again and again, caps lifted: worth, plays, worth a play
+//   npx tsx scripts/circuits-balance.ts --anatomy           what a purifier's worth is made of: offense, breadth, consistency, metal
 //   npx tsx scripts/circuits-balance.ts --dilution [--without Sieve]
 //                                                        what an extra card is worth against a blank and against no extra card at all
 //   (--without Sieve: leave opening cards out of every deck; --seeds 300: fights per enemy for each build; --fights mud,peat,...: which enemies; --base 5000: the first seed)
@@ -251,6 +252,32 @@ if (args.includes('--write')) {
   rows.push({ name: 'Catalyst', w: S.worth(cat), e: S.error(cat), n: vsNone(cat) })
   rows.sort((a, b) => b.w - a.w)
   for (const r of rows) console.log(`${r.name} | ${f2(r.w)} ± ${f2(r.e)} | ${f2(r.n)}`)
+} else if (args.includes('--anatomy')) {
+  // What a purifier's worth is made of: variants that pull apart offense (purify or ground), breadth
+  // (two elements or one), and the metal makers' metal, each averaged over every element or pair.
+  header()
+  const mk = (channels: Channel[], purifies: boolean, outputs: Output[] = []): Card => ({ id: ID, name: 'x', channels, outputs, purifies, gain: 0, time: 2, ground: 0 })
+  const E = ['water', 'earth', 'air', 'fire'] as const
+  const pairs = E.flatMap((a, i) => E.slice(i + 1).map((b) => [a, b] as const))
+  const metal = (p: Principle): Output => ({ kind: 'principle', principle: p, gate: METAL_GATE })
+  const families: { name: string; builds: ((p: Principle) => Card)[] }[] = [
+    { name: 'Purifier: 3 + 3 of two elements, purify', builds: pairs.map(([a, b]) => () => mk([{ element: a, capacity: 3 }, { element: b, capacity: 3 }], true)) },
+    { name: 'The same, grounding instead (defense only)', builds: pairs.map(([a, b]) => () => mk([{ element: a, capacity: 3 }, { element: b, capacity: 3 }], false)) },
+    { name: 'One element, 6, purify (same reach, one element)', builds: E.map((a) => () => mk([{ element: a, capacity: 6 }], true)) },
+    { name: 'One element, 3, purify (half a purifier)', builds: E.map((a) => () => mk([{ element: a, capacity: 3 }], true)) },
+    { name: 'One element, 5, purify, no metal', builds: E.map((a) => () => mk([{ element: a, capacity: 5 }], true)) },
+    { name: 'Metal maker: one element, 5, ground, metal from 4', builds: E.map((a) => (p) => mk([{ element: a, capacity: 5 }], false, [metal(p)])) },
+    { name: 'One element, 5, ground, no metal', builds: E.map((a) => () => mk([{ element: a, capacity: 5 }], false)) },
+    { name: 'One element, 5, purify, metal from 4', builds: E.map((a) => (p) => mk([{ element: a, capacity: 5 }], true, [metal(p)])) },
+  ]
+  console.log(`\nVariant | Washes (mean over its elements) | range | played a fight | played when drawn`)
+  console.log(`--- | --- | --- | --- | ---`)
+  for (const fam of families) {
+    const ms = fam.builds.map((b) => S.measure(twelfth(b)))
+    const ws = ms.map((m) => S.worth(m))
+    const mean = (xs: number[]) => sum(xs) / xs.length
+    console.log(`${fam.name} | ${f2(mean(ws))} | ${f2(Math.min(...ws))} to ${f2(Math.max(...ws))} | ${f2(mean(ms.map((m) => m.plays)))} | ${Math.round((100 * mean(ms.map((m) => m.plays))) / mean(ms.map((m) => m.draws)))}%`)
+  }
 } else if (args.includes('--pairs')) {
   header()
   const rows = DRAFT_INPUTS.flatMap((ch) => DRAFT_OUTPUTS.map((o) => ({ name: `${ch.element} ${ch.capacity} → ${outKey(o)}`, t: measurePair(ch.element, o, ch.capacity, 1) })))

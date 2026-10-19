@@ -15,6 +15,7 @@ npx tsx scripts/circuits-balance.ts                              # cards scored 
 npx tsx scripts/circuits-balance.ts --symmetry --seeds 1000      # the element-symmetric opening cards, enemy by enemy
 npx tsx scripts/circuits-balance.ts --sigils                     # what adding each sigil to each opening card is worth
 npx tsx scripts/circuits-balance.ts --curve Sieve                # the same sigil again and again: worth, plays, worth a play
+npx tsx scripts/circuits-balance.ts --anatomy                    # what a purifier's worth is made of
 npx tsx scripts/circuits-balance.ts --dilution --without Sieve   # an extra card against a blank and against none, here without the Sieve
 npx tsx scripts/circuits-balance.ts --calibrate --out pairs.json # tune each input and output pair to 2 Washes (then --write pairs.json)
 npx tsx scripts/circuits-gallery-tune.ts --measure --out cols.json   # then --search cols.json: even out the symmetric cards
