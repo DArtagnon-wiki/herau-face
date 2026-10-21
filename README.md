@@ -1,6 +1,15 @@
 # herau-face
 
-A roguelike deckbuilder of runes and alchemy, built from Circumgician's world. The design lives in [DESIGN.md](DESIGN.md); a new direction, cards as small circuits, in [CIRCUITS.md](CIRCUITS.md).
+A roguelike deckbuilder of runes and alchemy, built from Circumgician's world. The design lives in [DESIGN.md](DESIGN.md); a new direction, cards as small circuits, in [CIRCUITS.md](CIRCUITS.md); the newest, with offense and defense apart, in [DSP.md](DSP.md).
+
+## Prototype: DSP (newest)
+
+One fight, Mud, on the Circuits moon dial. Drainers (sigils inside the circuit) take instability out of the pool and charge one battery; sculptors (sigils outside) play elements into an attack. Make the material by growing the attack to its size and its shape to an 80% match, spending charge at any time to smooth the wrong elements into the missing ones. Each element is a band of sound, earth the bass to fire the treble, so a rough attack sounds rough and a matched one pure.
+
+```sh
+npm run dev                                  # then open /dsp.html
+npx tsx scripts/dsp-sim.ts --games 1000      # Mud with four strategies
+```
 
 ## Prototype: Circuits (new direction)
 

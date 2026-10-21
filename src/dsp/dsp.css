@@ -1,0 +1,52 @@
+/* DSP: the Circuits screen, with the spectrum where the bench was. */
+
+.dsp .cx-head .who { gap: 0; }
+.dsp .cx-head .eyebrow { font-family: var(--font-display); font-size: 10px; letter-spacing: 0.24em; color: var(--ink-faint); }
+
+/* The attack: spectrum, readout, battery. */
+.spec { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) auto; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.spec-art { padding: 2px 4px 0; background: var(--panel); display: block; min-width: 0; }
+.spec-art.is-on { border-color: var(--gilt-bright); }
+.spectrum { display: block; width: 100%; height: auto; max-height: 88px; }
+.spectrum .band-name { font-family: var(--font-display); letter-spacing: 0.06em; }
+.spec-read { display: grid; gap: 5px; min-width: 0; }
+.spec-read .row { margin: 0; display: flex; align-items: baseline; gap: 6px; font-size: 15px; white-space: nowrap; }
+.spec-read .lbl { flex: none; font-family: var(--font-display); font-size: 11px; letter-spacing: 0.12em; color: var(--ink-faint); text-transform: uppercase; width: 5.2em; }
+.spec-read b { font-family: var(--font-display); font-size: 19px; }
+.spec-read b.ok { color: var(--good); }
+.spec-read .to { color: var(--lit); font-family: var(--font-display); font-size: 15px; }
+.spec-read .of { color: var(--ink-faint); font-size: 14px; }
+.meter { position: relative; display: block; height: 8px; border-radius: 4px; background: rgba(217, 184, 114, 0.14); overflow: visible; }
+.meter .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--lit); }
+.meter .ghost { position: absolute; top: 0; bottom: 0; background: var(--ghost); border-radius: 4px; }
+.meter .notch { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--gilt-bright); border-radius: 1px; }
+.cell { display: grid; justify-items: center; gap: 0; padding: 6px 10px 5px; background: var(--panel); min-width: 74px; }
+.cell .num { font-family: var(--font-display); font-size: 20px; line-height: 1.1; }
+.cell .num .to { font-size: 14px; color: var(--warn); }
+.cell-lbl { font-family: var(--font-display); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-soft); }
+.cell.is-on { border-color: var(--gilt-bright); background: rgba(217, 184, 114, 0.2); }
+.cell.empty { opacity: 0.6; }
+
+/* Cards: drainers and sculptors told apart by a hairline along the top. */
+.dsp .ccard .circuit { height: 96px; }
+.dsp .ccard.drainer { box-shadow: inset 0 2px 0 rgba(239, 228, 255, 0.18); }
+.dsp .ccard.sculptor { box-shadow: inset 0 2px 0 rgba(246, 227, 168, 0.32); }
+
+/* Start and end. */
+.dsp .start-art { grid-auto-flow: column; gap: 18px; }
+.dsp .start-art .circuit { width: min(38vw, 150px); height: auto; }
+.dsp .end-art .spec-art.big { width: min(86vw, 380px); padding: 8px 10px 4px; }
+.dsp .end-art .spec-art.big .spectrum { max-height: none; }
+
+@media (max-width: 420px) {
+  .spec { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "art cell" "read cell"; row-gap: 4px; }
+  .spec .spec-art { grid-area: art; }
+  .spec .spec-read { grid-area: read; }
+  .spec .cell { grid-area: cell; align-self: stretch; align-content: center; }
+}
+
+.dsp.cx.start, .dsp.cx.end { grid-template-columns: minmax(0, 1fr); }
+/* The shared .end from Mud to Clay is a centered overlay; here it is a screen like the others. */
+.dsp.cx.end { position: static; z-index: auto; place-items: stretch; background: none; backdrop-filter: none; overflow: hidden; }
+.dsp.cx.end .end-art { place-items: center; }
+.dsp .cx-head .quint { min-width: 0; }

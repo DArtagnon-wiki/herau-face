@@ -1,6 +1,7 @@
 // Builds each prototype into one self-contained page.
 //   dist/index.html, dist/artifact.html          Mud to Clay
 //   dist/circuits.html, dist/circuits-artifact.html   Circuits, the new direction
+//   dist/dsp.html, dist/dsp-artifact.html             DSP, offense and defense apart
 // Each .html is a complete page to open locally or host anywhere; each
 // -artifact.html is the same page without the document skeleton, for
 // publishing as a Claude artifact.
@@ -11,6 +12,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 const PAGES = [
   { entry: 'src/main.ts', title: 'Mud to Clay', page: 'index.html', artifact: 'artifact.html' },
   { entry: 'src/circuits/main.ts', title: 'Alchemical Circuits', page: 'circuits.html', artifact: 'circuits-artifact.html' },
+  { entry: 'src/dsp/main.ts', title: 'DSP', page: 'dsp.html', artifact: 'dsp-artifact.html' },
 ]
 
 await mkdir('dist', { recursive: true })
