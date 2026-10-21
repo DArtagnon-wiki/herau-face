@@ -10,15 +10,22 @@
 //   come, which a player doesn't: take it as a ceiling.
 //
 //   npx tsx scripts/dsp-sim.ts [--games 1000] [--rollouts 12] [--stock 40] [--hand 4]
+//     [--flare stays|empties|halves] [--feed water:5,earth:2]
 
 import { makeRng, type Rng } from '../src/sim/rng'
-import { DEFAULT_SETTINGS, TICKS, isDrainer, isSculptor, matchOf, newGame, playCard, poolTotal, smoothingFinishes, tune, type Game, type Settings } from '../src/dsp/engine'
+import { DEFAULT_SETTINGS, MUD, TICKS, type Commission, isDrainer, isSculptor, matchOf, newGame, playCard, poolTotal, smoothingFinishes, tune, type Game, type Settings } from '../src/dsp/engine'
 
 const args = process.argv.slice(2)
 const arg = (n: string) => (args.includes(n) ? args[args.indexOf(n) + 1] : undefined)
 const GAMES = Number(arg('--games') ?? 1000)
 const ROLLOUTS = Number(arg('--rollouts') ?? 12)
-const settings: Settings = { stock: Number(arg('--stock') ?? DEFAULT_SETTINGS.stock), hand: Number(arg('--hand') ?? DEFAULT_SETTINGS.hand) }
+const settings: Settings = {
+  stock: Number(arg('--stock') ?? DEFAULT_SETTINGS.stock),
+  hand: Number(arg('--hand') ?? DEFAULT_SETTINGS.hand),
+  flare: (arg('--flare') ?? 'stays') as Settings['flare'],
+}
+/** Mud, or Mud with another feed: --feed water:3,earth:1. */
+const mud: Commission = arg('--feed') ? { ...MUD, feed: Object.fromEntries(arg('--feed')!.split(',').map((x) => [x.split(':')[0], Number(x.split(':')[1])])) } : MUD
 
 type Move = { kind: 'card'; id: number } | { kind: 'tune' }
 const apply = (g: Game, m: Move) => (m.kind === 'tune' ? tune(g) : playCard(g, m.id))
@@ -74,11 +81,13 @@ interface Stat {
   smoothed: number
   size: number
   rawMatch: number
+  /** Each flare in turn. */
+  each: number[]
 }
 
 function game(i: number, policy: Policy): Stat {
   const rng = makeRng(424242 + i)
-  let g = newGame(1000 + i, settings)
+  let g = newGame(1000 + i, settings, mud)
   let plays = 0
   let raw = 0
   for (let guard = 0; guard < 300 && g.stage === 'fight'; guard++) {
@@ -96,16 +105,17 @@ function game(i: number, policy: Policy): Stat {
     smoothed: g.fight.smoothed,
     size: poolTotal(g.fight.attack),
     rawMatch: raw || matchOf(g.fight.attack, g.fight.commission.target),
+    each: g.fight.flares,
   }
 }
 
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0)
 const pct = (n: number, d: number) => `${Math.round((100 * n) / Math.max(1, d))}%`
 
-console.log(`Mud, ${GAMES} games each · ${settings.stock} quintessence · draw ${settings.hand} at new and full moons, discard at the quarters`)
+console.log(`Mud (feeds ${JSON.stringify(mud.feed)}), ${GAMES} games each · ${settings.stock} quintessence · draw ${settings.hand} at new and full moons, discard at the quarters · flares: pool ${settings.flare}`)
 console.log('')
-console.log('Strategy | Won | Quintessence left (won) | Flares | Cards played | Moons | Charge spent smoothing | Match before the last smoothing')
-console.log('--- | --- | --- | --- | --- | --- | --- | ---')
+console.log('Strategy | Won | Flares 1st to 4th (mean, where at least a tenth of games reach it) | Quintessence left (won) | Flares | Cards played | Moons | Charge spent smoothing | Match before the last smoothing')
+console.log('--- | --- | --- | --- | --- | --- | --- | --- | ---')
 for (const [name, policy, n] of [
   ['Random', random, GAMES],
   ['Offense first', offense, GAMES],
@@ -115,6 +125,6 @@ for (const [name, policy, n] of [
   const s = Array.from({ length: n }, (_, i) => game(i, policy))
   const w = s.filter((x) => x.won)
   console.log(
-    `${name} | ${pct(w.length, n)} | ${mean(w.map((x) => x.left)).toFixed(1)} | ${mean(s.map((x) => x.flares)).toFixed(1)} | ${mean(s.map((x) => x.plays)).toFixed(1)} | ${mean(s.map((x) => x.moons)).toFixed(2)} | ${mean(w.map((x) => x.smoothed)).toFixed(1)} | ${Math.round(100 * mean(w.map((x) => x.rawMatch)))}%`,
+    `${name} | ${pct(w.length, n)} | ${[0, 1, 2, 3].map((k) => { const xs = s.filter((x) => x.each.length > k).map((x) => x.each[k]); return xs.length >= n / 10 ? mean(xs).toFixed(1) : '–' }).join(', ')} | ${mean(w.map((x) => x.left)).toFixed(1)} | ${mean(s.map((x) => x.flares)).toFixed(1)} | ${mean(s.map((x) => x.plays)).toFixed(1)} | ${mean(s.map((x) => x.moons)).toFixed(2)} | ${mean(w.map((x) => x.smoothed)).toFixed(1)} | ${Math.round(100 * mean(w.map((x) => x.rawMatch)))}%`,
   )
 }
