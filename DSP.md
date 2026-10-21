@@ -4,7 +4,7 @@ DSP keeps the circuit cards and the moon dial from [Circuits](CIRCUITS.md), and 
 
 ## The fight
 
-- **The threat is the same.** The commission feeds instability into a pool on the moon dial. At its attack phases the pool flares for its total against your quintessence, and stays.
+- **The threat.** The commission feeds instability into a pool on the moon dial. At its attack phases the pool flares for its total against your quintessence, and the flare empties it. So each flare costs only what came in since the last, at most one feed's worth, and a full-effort defense can take it to zero. Escalation is the commission's to author (a feed that grows), not the player's backlog.
 - **Defense: drainers.** Their sigils sit inside the circuit. A triangle inside takes up to its number of that element out of the pool. The cell below charges one battery, 1 for each unit taken.
 - **Offense: sculptors.** Their sigils sit outside the circuit. A triangle outside plays its number of that element into the attack.
 - **The goal is a material.** Each commission names a target profile. You make it once the attack is at least the target's size and its shape is a close enough match. The match compares shape only: the share of the attack that overlaps the target's proportions.
@@ -38,16 +38,18 @@ Each element is a band of sound: earth the bass (110 Hz), water a low mid (330 H
 
 `scripts/dsp-sim.ts` plays Mud 1000 times with each strategy (the lookahead 400):
 
-| Strategy | Won | Quintessence left, when won | Flares | Cards played | Moons | Charge spent smoothing | Match before the last smoothing |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Random cards | 59% | 13.3 | 3.5 | 8.0 | 1.83 | 9.8 | 52% |
-| Sculptors first | 11% | 18.3 | 3.5 | 7.2 | 1.65 | 7.3 | 57% |
-| Drainers first | 2% | 8.3 | 5.4 | 10.8 | 2.56 | 10.8 | 54% |
-| Lookahead | 100% | 16.9 | 3.0 | 7.0 | 1.62 | 9.0 | 56% |
+| Strategy | Won | Flares, 1st to 4th | Quintessence left, when won | Flares a fight | Cards played | Moons | Charge spent smoothing | Match before the last smoothing |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Random cards | 88% | 4.7, 4.7, 4.6, 4.7 | 22.7 | 4.3 | 10.0 | 2.32 | 10.5 | 51% |
+| Sculptors first | 7% | 6.2, 6.3, 6.3, 6.3 | 27.1 | 6.5 | 13.1 | 3.13 | 6.4 | 60% |
+| Drainers first | 64% | 3.2, 3.3, 3.2, 3.2 | 10.3 | 10.9 | 23.0 | 5.54 | 11.9 | 50% |
+| Lookahead | 100% | 4.1, 4.1, 4.3, 3.7 | 25.8 | 3.5 | 7.9 | 1.85 | 9.2 | 55% |
 
-- **Neither half wins alone.** Playing sculptors first leaves too little charge to smooth the noise. Playing drainers first leaves the attack too small while the flares add up.
-- **A mixed hand wins with room to spare.** The lookahead player wins every time and keeps about 17 of 40. Its playouts run on the real draw pile, so it knows the cards to come: take it as a ceiling.
-- **A won Mud takes 7 cards over about 1.6 moons and 3 flares.** It spends about 9 charge, lifting the match from the mid 50s to past 80%.
+- **The threat is flat.** Each flare is about the same size from the first to the fourth. When the pool stayed between flares, they grew with the backlog: 4.1, 7.8 and 11.4 for the lookahead, which lost 23 quintessence a Mud against 14 now.
+- **Neither half wins alone, but defense is a plan now.** Sculptors first still wins only 7%, because without charge it can't smooth the noise. Drainers first wins 64%, up from 2%.
+- **A mixed hand wins with room to spare.** The lookahead player wins every time and keeps about 26 of 40. Its playouts run on the real draw pile, so it knows the cards to come: take it as a ceiling.
+- **A won Mud takes about 8 cards over 1.85 moons and 3.5 flares,** spending about 9 charge to lift the match from the mid 50s past 80%.
+- **Charge works both ways.** Offense protects you by finishing sooner, which skips flares; defense powers offense, since drained instability becomes the charge that finishes the material.
 
 ## Prototype
 

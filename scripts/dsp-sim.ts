@@ -10,7 +10,7 @@
 //   come, which a player doesn't: take it as a ceiling.
 //
 //   npx tsx scripts/dsp-sim.ts [--games 1000] [--rollouts 12] [--stock 40] [--hand 4]
-//     [--flare stays|empties|halves] [--feed water:5,earth:2]
+//     [--flare empties|stays|halves] [--feed water:5,earth:2]   (flares empty the pool unless told otherwise)
 
 import { makeRng, type Rng } from '../src/sim/rng'
 import { DEFAULT_SETTINGS, MUD, TICKS, type Commission, isDrainer, isSculptor, matchOf, newGame, playCard, poolTotal, smoothingFinishes, tune, type Game, type Settings } from '../src/dsp/engine'
@@ -22,7 +22,7 @@ const ROLLOUTS = Number(arg('--rollouts') ?? 12)
 const settings: Settings = {
   stock: Number(arg('--stock') ?? DEFAULT_SETTINGS.stock),
   hand: Number(arg('--hand') ?? DEFAULT_SETTINGS.hand),
-  flare: (arg('--flare') ?? 'stays') as Settings['flare'],
+  flare: (arg('--flare') ?? 'empties') as Settings['flare'],
 }
 /** Mud, or Mud with another feed: --feed water:3,earth:1. */
 const mud: Commission = arg('--feed') ? { ...MUD, feed: Object.fromEntries(arg('--feed')!.split(',').map((x) => [x.split(':')[0], Number(x.split(':')[1])])) } : MUD

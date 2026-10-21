@@ -90,7 +90,7 @@ function situationNote(g: Game): [string, string] {
   const size = poolTotal(f.attack)
   const title = atk ? `${PHASE_NAMES[atk.phase]} in ${ticks(atk.pos - f.dial)}` : 'The moon'
   const lines = [
-    atk ? `${esc(f.commission.name)} flares there for whatever is in the pool (${threatOf(f)} now, the red badge). The pool stays.` : '',
+    atk ? `${esc(f.commission.name)} flares there for whatever is in the pool (${threatOf(f)} now, the red badge), and that empties it.` : '',
     dis && (!atk || dis.pos < atk.pos) ? `You discard your hand at the ${PHASE_NAMES[dis.phase].toLowerCase()}, before it.` : '',
     drw ? `You draw ${g.settings.hand} at the ${PHASE_NAMES[drw.phase].toLowerCase()}.` : '',
     `To win, ${materialWords(g)}. ${size ? `The attack is ${size}, a ${pct(m)} match.` : 'The attack is empty.'}${f.charge ? ` The battery holds ${f.charge}.` : ''}`,
@@ -173,7 +173,7 @@ function legendText(): string {
     ${row(I(moon(0, 0, 8, { stroke: 'var(--moon)' })), 'A crescent is time: every card takes an eighth of the moon.')}
     ${row(I(batteryIcon(0, 0, 10, 'var(--lit)', 0.6)), 'Smoothing spends charge, at any time and in no time: each charge moves one unit of the wrong element into the one most missing.')}
     ${row(I(`<rect x="-8" y="-2" width="5" height="10" fill="var(--earth)" opacity="0.6"/><rect x="-1" y="-8" width="5" height="16" fill="var(--water)" opacity="0.6"/><rect x="6" y="2" width="4" height="6" fill="var(--fire)" opacity="0.6" stroke="var(--warn)"/>`), 'The spectrum is the attack: earth the bass, water and air the mids, fire the treble. Match its shape to the gilt outlines, and make it big enough, to make the material.')}
-    ${row(I(quintessence(0, 0, 8, { stroke: 'var(--fire)', fill: 'var(--fire)' })), 'A red star on the dial is a flare: the pool costs you that much quintessence, and stays.')}
+    ${row(I(quintessence(0, 0, 8, { stroke: 'var(--fire)', fill: 'var(--fire)' })), 'A red star on the dial is a flare: whatever is in the pool costs you that much quintessence, and the pool empties.')}
     ${row(I(cardSig(0, 0, 7, { stroke: 'var(--ink-soft)' })), 'You draw at the new and full moons, and discard your hand at the quarters.')}
   </ul>`
 }

@@ -95,12 +95,12 @@ describe('Mud', () => {
     expect(a.fight.dial).toBe(2)
     const b = playCard(a, named('Cupel').id)
     expect(b.fight.attack).toEqual(P({ air: 3, fire: 3 }))
-    // Then the hand is empty, so the moon runs on: the 2 water left flares at 3/8, and the full moon feeds again.
+    // Then the hand is empty, so the moon runs on: the 2 water left flares at 3/8 and is gone, and the full moon feeds again.
     expect(b.fight.flares).toEqual([2])
-    expect(b.fight.pool).toEqual(P({ water: 7, earth: 2 }))
+    expect(b.fight.pool).toEqual(P({ water: 5, earth: 2 }))
   })
 
-  it('flares the pool at 3/8, and it stays', () => {
+  it('flares the pool at 3/8, which empties it', () => {
     let g = rigged(['Cupel', 'Digest', 'Sublime'], ['Quench'])
     g = wait(g)
     expect(g.fight.flares).toEqual([])
@@ -109,7 +109,8 @@ describe('Mud', () => {
     expect(g.fight.dial).toBe(8)
     expect(g.fight.flares).toEqual([7])
     expect(g.quintessence).toBe(33)
-    expect(poolTotal(g.fight.pool)).toBe(14)
+    // Emptied by the flare, then fed again at the full moon.
+    expect(poolTotal(g.fight.pool)).toBe(7)
   })
 
   it('discards the hand at the quarter and moves on to the next draw when nothing is left', () => {
@@ -120,7 +121,7 @@ describe('Mud', () => {
     expect(g.fight.dial).toBe(8)
     expect(g.fight.hand.map((c) => c.name).sort()).toEqual(['Dissolve', 'Quench', 'Sift', 'Snuff'])
     expect(g.fight.flares).toEqual([7])
-    expect(g.fight.pool).toEqual(P({ water: 10, earth: 4 }))
+    expect(g.fight.pool).toEqual(P({ water: 5, earth: 2 }))
   })
 
   it('is won once smoothing brings a big enough attack close enough', () => {

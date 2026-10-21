@@ -1,6 +1,7 @@
 // DSP: offense and defense pulled apart. The commission still feeds
-// instability into a pool on the moon dial, and the pool still flares against
-// your quintessence. Drainers (their sigils inside the circuit) take
+// instability into a pool on the moon dial, and the pool flares against your
+// quintessence; a flare discharges the pool, so each one costs only what came
+// in since the last. Drainers (their sigils inside the circuit) take
 // instability out of the pool, and what they take charges one battery.
 // Sculptors (their sigils outside) play elements into an attack, which must
 // grow into the commission's material: at least its size, and close enough to
@@ -130,7 +131,7 @@ export interface Commission {
   /** Instability fed into the pool in one bulk at each feeding phase. */
   feed: Partial<Pool>
   feedAt: Phase[]
-  /** Phases at which the pool flares: what is in it costs quintessence, and stays. */
+  /** Phases at which the pool flares: what is in it costs quintessence, and the pool empties. */
   attacks: Phase[]
 }
 
@@ -153,7 +154,7 @@ export interface Settings {
   stock: number
   /** How many you draw at each new and full moon. */
   hand: number
-  /** What a flare does to the pool, for experiments: it stays (the rule), empties, or keeps half. */
+  /** What a flare does to the pool: it empties (the rule), or, for experiments, stays or keeps half. */
   flare?: 'stays' | 'empties' | 'halves'
 }
 export const DEFAULT_SETTINGS: Settings = { stock: 40, hand: 4 }
@@ -237,9 +238,10 @@ function phaseEvents(g: Game, pos: number, opening = false): Game {
     paid = flare
     f.flares = [...f.flares, flare]
     f.paid += flare
-    // The pool stays: a flare costs what is in it, but doesn't empty it (unless an experiment says otherwise).
-    if (g.settings.flare === 'empties') f.pool = emptyPool()
-    if (g.settings.flare === 'halves') for (const e of ELEMENTS) f.pool[e] = Math.floor(f.pool[e] / 2)
+    // A flare discharges the pool: it costs what is in it, and empties it (experiments can keep it, or half).
+    const rule = g.settings.flare ?? 'empties'
+    if (rule === 'empties') f.pool = emptyPool()
+    if (rule === 'halves') for (const e of ELEMENTS) f.pool[e] = Math.floor(f.pool[e] / 2)
     notes.push(flare ? `${c.name} flares: pay ${flare}` : `${c.name} flares, but the pool is empty`)
   }
   if (opening || c.feedAt.includes(phase)) {
