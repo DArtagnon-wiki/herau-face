@@ -50,3 +50,4 @@
 .dsp.cx.end { position: static; z-index: auto; place-items: stretch; background: none; backdrop-filter: none; overflow: hidden; }
 .dsp.cx.end .end-art { place-items: center; }
 .dsp .cx-head .quint { min-width: 0; }
+.dsp.cx { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }

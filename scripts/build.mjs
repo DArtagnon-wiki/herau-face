@@ -12,7 +12,8 @@ import { mkdir, writeFile } from 'node:fs/promises'
 const PAGES = [
   { entry: 'src/main.ts', title: 'Mud to Clay', page: 'index.html', artifact: 'artifact.html' },
   { entry: 'src/circuits/main.ts', title: 'Alchemical Circuits', page: 'circuits.html', artifact: 'circuits-artifact.html' },
-  { entry: 'src/dsp/main.ts', title: 'DSP', page: 'dsp.html', artifact: 'dsp-artifact.html' },
+  // DSP keeps a 16px side gutter that clears a phone's side bar, so it can say so.
+  { entry: 'src/dsp/main.ts', title: 'DSP', page: 'dsp.html', artifact: 'dsp-artifact.html', meta: '<meta name="claude:viewport-fit-sides" content="cover">' },
 ]
 
 await mkdir('dist', { recursive: true })
@@ -29,7 +30,7 @@ for (const p of PAGES) {
   })
   const js = result.outputFiles.find((f) => f.path.endsWith('.js')).text.replaceAll('</script', '<\\/script')
   const css = result.outputFiles.find((f) => f.path.endsWith('.css')).text
-  const head = `<title>${p.title}</title>
+  const head = `<title>${p.title}</title>${p.meta ? `\n${p.meta}` : ''}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&display=swap" rel="stylesheet">
