@@ -42,6 +42,8 @@ export interface Card {
   gives: Partial<Pool>
   /** Time on the dial, in ticks. */
   time: number
+  /** How a sculptor voices its elements among each band's notes; even when not given. */
+  timbre?: Timbre
 }
 
 export const isDrainer = (c: Card) => poolTotal({ ...emptyPool(), ...c.takes }) > 0
@@ -64,6 +66,68 @@ export function startingDeck(): Card[] {
   const drainers = PAIRS.map(([a, b], i): Card => ({ id: i + 1, name: DRAINER_NAMES[i], takes: { [a]: DRAIN, [b]: DRAIN }, gives: {}, time: EIGHTH }))
   const sculptors = PAIRS.map(([a, b], i): Card => ({ id: i + 7, name: SCULPTOR_NAMES[i], takes: {}, gives: { [a]: SCULPT, [b]: SCULPT }, time: EIGHTH }))
   return [...drainers, ...sculptors]
+}
+
+// ---------------------------------------------------------------------------
+// Notes: each element's band holds three notes, harmonics of one root
+
+/** The root every note is a harmonic of: A1. */
+export const ROOT_HZ = 55
+/**
+ * Each band's three notes, low to high, as harmonics of the root: earth 110,
+ * 165 and 220 Hz; water 275, 330 and 440; air 550, 660 and 825; fire 1320,
+ * 1650 and 1980. Together they spell one A major sonority.
+ */
+export const NOTE_HARMONICS: Record<Elemental, number[]> = { earth: [2, 3, 4], water: [5, 6, 8], air: [10, 12, 15], fire: [24, 30, 36] }
+/** Something heard note by note: three amounts per element, low to high. */
+export type Voice = Record<Elemental, number[]>
+export const emptyVoice = (): Voice => ({ water: [0, 0, 0], earth: [0, 0, 0], air: [0, 0, 0], fire: [0, 0, 0] })
+export const sumsOf = (v: Voice): Pool => ({ water: sum3(v.water), earth: sum3(v.earth), air: sum3(v.air), fire: sum3(v.fire) })
+const sum3 = (xs: number[]) => xs[0] + xs[1] + xs[2]
+export const voiceTotal = (v: Voice) => poolTotal(sumsOf(v))
+const copyVoice = (v: Voice): Voice => ({ water: v.water.slice(), earth: v.earth.slice(), air: v.air.slice(), fire: v.fire.slice() })
+
+/** Where a sculptor puts each 3 units of an element among the band's three notes. */
+export type Timbre = 'dark' | 'even' | 'bright'
+export const TIMBRES: Record<Timbre, number[]> = { dark: [2, 1, 0], even: [1, 1, 1], bright: [0, 1, 2] }
+/** How n units of an element land among its notes, for a timbre. */
+export const voicing = (n: number, timbre: Timbre = 'even') => TIMBRES[timbre].map((x) => (x * n) / 3)
+
+/** How close a voice is to a chord, note by note: the share of it that overlaps the chord's proportions. */
+export function noteMatch(voice: Voice, chord: Voice): number {
+  const a = voiceTotal(voice)
+  const t = voiceTotal(chord)
+  if (!a || !t) return 0
+  return ELEMENTS.reduce((n, e) => n + [0, 1, 2].reduce((m, i) => m + Math.min(voice[e][i] / a, chord[e][i] / t), 0), 0)
+}
+
+/**
+ * Smoothing note by note: each charge moves one unit from the note furthest
+ * over the chord's shape (notes the chord doesn't have first) into the note
+ * furthest under it, as long as that improves the match.
+ */
+export function smoothNotes(voice: Voice, chord: Voice, charge: number): { voice: Voice; spent: number } {
+  const out = copyVoice(voice)
+  const t = voiceTotal(chord)
+  let spent = 0
+  const notes = BANDS.flatMap((e) => [0, 1, 2].map((i) => [e, i] as const))
+  for (let k = 0; k < charge && t; k++) {
+    const a = voiceTotal(out)
+    const want = (e: Elemental, i: number) => (chord[e][i] * a) / t
+    const over = notes.filter(([e, i]) => out[e][i] > want(e, i) + 1e-9 && out[e][i] > 1e-9).sort(([e1, i1], [e2, i2]) => (chord[e2][i2] === 0 ? 1 : 0) - (chord[e1][i1] === 0 ? 1 : 0) || out[e2][i2] - want(e2, i2) - (out[e1][i1] - want(e1, i1)))
+    const under = notes.filter(([e, i]) => out[e][i] < want(e, i) - 1e-9).sort(([e1, i1], [e2, i2]) => want(e2, i2) - out[e2][i2] - (want(e1, i1) - out[e1][i1]))
+    if (!over.length || !under.length) break
+    const [fe, fi] = over[0]
+    const [te, ti] = under[0]
+    const amount = Math.min(1, out[fe][fi])
+    const next = copyVoice(out)
+    next[fe][fi] -= amount
+    next[te][ti] += amount
+    if (noteMatch(next, chord) <= noteMatch(out, chord) + 1e-9) break
+    Object.assign(out, next)
+    spent++
+  }
+  return { voice: out, spent }
 }
 
 // ---------------------------------------------------------------------------
@@ -128,6 +192,12 @@ export interface Commission {
   blurb: string
   /** The material to make: its shape, and its size (the total), which the attack must reach. */
   target: Pool
+  /**
+   * The material as a chord: how each element's share sits among its band's
+   * three notes, low to high. Each element's notes sum to its target. It is the
+   * material's voice; play matches on elements unless the notes setting asks.
+   */
+  chord: Voice
   /** Instability fed into the pool in one bulk at each feeding phase. */
   feed: Partial<Pool>
   feedAt: Phase[]
@@ -140,6 +210,7 @@ export const MUD: Commission = {
   name: 'Mud',
   blurb: 'Feeds 5 water and 2 earth at every new and full moon, and flares at 3/8 and 7/8 of the moon. Its material is 12 water to 8 earth.',
   target: { water: 12, earth: 8, air: 0, fire: 0 },
+  chord: { earth: [5, 2, 1], water: [3, 6, 3], air: [0, 0, 0], fire: [0, 0, 0] },
   feed: { water: 5, earth: 2 },
   feedAt: ['new', 'full'],
   attacks: ['waxing-gibbous', 'waning-crescent'],
@@ -156,6 +227,10 @@ export interface Settings {
   hand: number
   /** What a flare does to the pool: it empties (the rule), or, for experiments, stays or keeps half. */
   flare?: 'stays' | 'empties' | 'halves'
+  /** What the match compares: elements (the rule), or, for experiments, notes against the material's chord. */
+  match?: 'elements' | 'notes'
+  /** The match that finishes a material, for experiments; MATCH_TO_FINISH when not given. */
+  bar?: number
 }
 export const DEFAULT_SETTINGS: Settings = { stock: 40, hand: 4 }
 
@@ -165,6 +240,8 @@ export interface Fight {
   pool: Pool
   /** The attack sculpted so far, by element. */
   attack: Pool
+  /** The same attack note by note, as the sculptors' timbres voiced it. */
+  voice: Voice
   /** The battery. */
   charge: number
   hand: Card[]
@@ -195,6 +272,7 @@ export function newGame(seed = Date.now(), settings: Settings = DEFAULT_SETTINGS
     dial: 0,
     pool: emptyPool(),
     attack: emptyPool(),
+    voice: emptyVoice(),
     charge: 0,
     hand: [],
     draw: rng.shuffle(deck),
@@ -272,13 +350,48 @@ function advance(g: Game, ticks: number): Game {
   return next
 }
 
+/** The match as this game counts it: by element (the rule), or note by note. */
+export function matchNow(g: Game, f: Fight = g.fight): number {
+  return g.settings.match === 'notes' ? noteMatch(f.voice, f.commission.chord) : matchOf(f.attack, f.commission.target)
+}
+const done = (g: Game, f: Fight = g.fight) => poolTotal(f.attack) >= poolTotal(f.commission.target) && matchNow(g, f) >= (g.settings.bar ?? MATCH_TO_FINISH) - 1e-9
+
 /** The material is made: the fight is won. */
-const check = (g: Game): Game => (g.stage === 'fight' && finishes(g.fight.attack, g.fight.commission.target) ? { ...g, stage: 'won' } : g)
+const check = (g: Game): Game => (g.stage === 'fight' && done(g) ? { ...g, stage: 'won' } : g)
+
+/**
+ * Smoothing in this game's terms: what the attack becomes, note by note and
+ * by element, and the charge spent. Smoothing by element moves a unit out of
+ * the band's loudest note and into the note the material's chord most wants.
+ */
+export function smoothed(g: Game): { attack: Pool; voice: Voice; spent: number } {
+  const f = g.fight
+  const chord = f.commission.chord
+  if (g.settings.match === 'notes') {
+    const s = smoothNotes(f.voice, chord, f.charge)
+    return { attack: sumsOf(s.voice), voice: s.voice, spent: s.spent }
+  }
+  const s = smooth(f.attack, f.commission.target, f.charge)
+  const voice = copyVoice(f.voice)
+  for (const { from, to } of s.moved) {
+    const loud = [0, 1, 2].reduce((a, b) => (voice[from][b] > voice[from][a] ? b : a))
+    const take = Math.min(1, voice[from][loud])
+    voice[from][loud] -= take
+    const pattern = sum3(chord[to]) ? chord[to] : [1, 1, 1]
+    const after = sum3(voice[to]) + take
+    const gap = (i: number) => (pattern[i] * after) / sum3(pattern) - voice[to][i]
+    const put = [0, 1, 2].reduce((a, b) => (gap(b) > gap(a) ? b : a))
+    voice[to][put] += take
+  }
+  return { attack: s.attack, voice, spent: s.spent }
+}
 
 /** Whether smoothing now would finish the material. */
 export function smoothingFinishes(g: Game): boolean {
   const f = g.fight
-  return f.charge > 0 && finishes(smooth(f.attack, f.commission.target, f.charge).attack, f.commission.target)
+  if (!f.charge) return false
+  const s = smoothed(g)
+  return s.spent > 0 && done(g, { ...f, attack: s.attack, voice: s.voice })
 }
 
 /** With no cards in hand, the moon moves on by itself to the next draw, unless smoothing now would finish. */
@@ -308,15 +421,18 @@ export function playCard(g: Game, id: number): Game {
   const r = resolve(f0, c)
   const pool = { ...f0.pool }
   const attack = { ...f0.attack }
+  const voice = copyVoice(f0.voice)
   for (const e of ELEMENTS) {
     pool[e] -= r.took[e]
     attack[e] += r.gives[e]
+    if (r.gives[e]) voicing(r.gives[e], c.timbre).forEach((x, i) => (voice[e][i] += x))
   }
   const what = [isDrainer(c) ? `takes ${pairWords(r.took)}, charge +${r.charge}` : '', isSculptor(c) ? `plays ${pairWords(r.gives)} into the attack` : ''].filter(Boolean)
   const fight: Fight = {
     ...f0,
     pool,
     attack,
+    voice,
     charge: f0.charge + r.charge,
     hand: f0.hand.filter((x) => x.id !== id),
     discard: [...f0.discard, c],
@@ -330,13 +446,14 @@ export function playCard(g: Game, id: number): Game {
 export function tune(g: Game): Game {
   if (g.stage !== 'fight') return g
   const f = g.fight
-  const s = smooth(f.attack, f.commission.target, f.charge)
+  const s = smoothed(g)
   if (!s.spent) throw new Error(f.charge ? 'Nothing to smooth: charge would not bring the attack closer.' : 'No charge to spend.')
-  const before = matchOf(f.attack, f.commission.target)
-  const after = matchOf(s.attack, f.commission.target)
+  const before = matchNow(g)
+  const after = matchNow(g, { ...f, attack: s.attack, voice: s.voice })
   const fight: Fight = {
     ...f,
     attack: s.attack,
+    voice: s.voice,
     charge: f.charge - s.spent,
     smoothed: f.smoothed + s.spent,
     log: [`Smooths with ${s.spent} charge: match ${pct(before)} → ${pct(after)}.`, ...f.log],

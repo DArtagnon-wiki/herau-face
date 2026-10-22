@@ -4,7 +4,11 @@ import {
   MATCH_TO_FINISH,
   MUD,
   emptyPool,
+  emptyVoice,
   finishes,
+  noteMatch,
+  smoothNotes,
+  voicing,
   isDrainer,
   isSculptor,
   matchOf,
@@ -154,3 +158,38 @@ describe('Mud', () => {
 })
 
 void (null as unknown as Card)
+
+describe('notes and chords', () => {
+  it("gives Mud a chord whose notes add up to its material", () => {
+    for (const e of ['water', 'earth', 'air', 'fire'] as const) expect(MUD.chord[e].reduce((a, b) => a + b, 0)).toBe(MUD.target[e])
+  })
+
+  it('voices what a sculptor plays by its timbre', () => {
+    expect(voicing(3, 'dark')).toEqual([2, 1, 0])
+    expect(voicing(3, 'bright')).toEqual([0, 1, 2])
+    expect(voicing(3)).toEqual([1, 1, 1])
+    const g = rigged(['Dissolve'])
+    const dark = { ...g, fight: { ...g.fight, hand: [{ ...named('Dissolve'), timbre: 'dark' as const }] } }
+    const a = playCard(dark, named('Dissolve').id)
+    expect(a.fight.voice.water).toEqual([2, 1, 0])
+    expect(a.fight.voice.earth).toEqual([2, 1, 0])
+  })
+
+  it('matches note by note when the setting asks, and smooths there too', () => {
+    const chord = MUD.chord
+    expect(noteMatch(chord, chord)).toBeCloseTo(1)
+    const v = { ...emptyVoice(), water: [1, 1, 1], earth: [1, 1, 1] }
+    // Right elements, wrong voicing: elements match 90%, notes less.
+    expect(noteMatch(v, chord)).toBeLessThan(0.9)
+    const s = smoothNotes({ ...emptyVoice(), water: [4, 4, 4], earth: [3, 3, 2], fire: [0, 0, 4] }, chord, 6)
+    expect(s.spent).toBeGreaterThan(0)
+    expect(s.voice.fire[2]).toBeLessThan(4)
+    expect(noteMatch(s.voice, chord)).toBeGreaterThan(noteMatch({ ...emptyVoice(), water: [4, 4, 4], earth: [3, 3, 2], fire: [0, 0, 4] }, chord))
+  })
+
+  it('keeps the voice in step with the attack when smoothing by element', () => {
+    const g = rigged(['Snuff'], ['Quench'], { attack: P({ water: 9, earth: 6, fire: 9 }), voice: { ...emptyVoice(), water: [3, 3, 3], earth: [2, 2, 2], fire: [3, 3, 3] }, charge: 5 })
+    const t = tune(g)
+    for (const e of ['water', 'earth', 'air', 'fire'] as const) expect(t.fight.voice[e].reduce((a, b) => a + b, 0)).toBeCloseTo(t.fight.attack[e])
+  })
+})

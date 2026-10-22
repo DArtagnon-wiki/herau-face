@@ -113,7 +113,7 @@ function spectrumNote(g: Game): [string, string] {
   const t = f.commission.target
   return [
     'The spectrum',
-    `Each element is a band of sound: earth the bass, water and air the mids, fire the treble. The bars are the attack's shape, each band's share of it; the gilt outlines are ${esc(f.commission.name.toLowerCase())}'s shape, ${amounts(t)}. A band ringed in red is noise the material has none of. The closer the shape, the purer the sound: tap the spectrum to hear the attack. Match ${pct(matchOf(f.attack, t))} of ${pct(MATCH_TO_FINISH)}; size ${poolTotal(f.attack)} of ${need(g)}.`,
+    `Each element is a band of sound: earth the bass, water and air the mids, fire the treble. The bars are the attack's shape, each band's share of it; the gilt outlines are ${esc(f.commission.name.toLowerCase())}'s shape, ${amounts(t)}. Each band holds three notes, and the note heads inside the outlines are the material's chord: how strongly it sounds each one. The match counts elements only; the chord is how the material sounds. A band ringed in red is noise the material has none of. The closer the shape, the purer the sound: tap the spectrum to hear the attack, or hear the material itself from the menu. Match ${pct(matchOf(f.attack, t))} of ${pct(MATCH_TO_FINISH)}; size ${poolTotal(f.attack)} of ${need(g)}.`,
   ]
 }
 
@@ -172,7 +172,7 @@ function legendText(): string {
     ${row(I(`<circle cx="-5" r="7" fill="none" stroke="var(--line)" stroke-width="1.3"/>${element('fire', 7, 0, 5, { stroke: ELEMENT_COLOR.fire })}`), '<b>Outside is offense.</b> A triangle outside plays its number of that element into the attack.')}
     ${row(I(moon(0, 0, 8, { stroke: 'var(--moon)' })), 'A crescent is time: every card takes an eighth of the moon.')}
     ${row(I(batteryIcon(0, 0, 10, 'var(--lit)', 0.6)), 'Smoothing spends charge, at any time and in no time: each charge moves one unit of the wrong element into the one most missing.')}
-    ${row(I(`<rect x="-8" y="-2" width="5" height="10" fill="var(--earth)" opacity="0.6"/><rect x="-1" y="-8" width="5" height="16" fill="var(--water)" opacity="0.6"/><rect x="6" y="2" width="4" height="6" fill="var(--fire)" opacity="0.6" stroke="var(--warn)"/>`), 'The spectrum is the attack: earth the bass, water and air the mids, fire the treble. Match its shape to the gilt outlines, and make it big enough, to make the material.')}
+    ${row(I(`<rect x="-8" y="-2" width="5" height="10" fill="var(--earth)" opacity="0.6"/><rect x="-1" y="-8" width="5" height="16" fill="var(--water)" opacity="0.6"/><rect x="6" y="2" width="4" height="6" fill="var(--fire)" opacity="0.6" stroke="var(--warn)"/>`), 'The spectrum is the attack: earth the bass, water and air the mids, fire the treble. Match its shape to the gilt outlines, and make it big enough, to make the material. The note heads are the material\'s chord, how it sounds.')}
     ${row(I(quintessence(0, 0, 8, { stroke: 'var(--fire)', fill: 'var(--fire)' })), 'A red star on the dial is a flare: whatever is in the pool costs you that much quintessence, and the pool empties.')}
     ${row(I(cardSig(0, 0, 7, { stroke: 'var(--ink-soft)' })), 'You draw at the new and full moons, and discard your hand at the quarters.')}
   </ul>`
@@ -202,7 +202,7 @@ function spectrumPanel(g: Game, after: Game | null): string {
   const meter = (frac: number, ghostFrac: number | null) =>
     `<span class="meter" aria-hidden="true"><span class="fill" style="width:${Math.round(100 * Math.min(1, frac))}%"></span>${ghostFrac !== null && Math.abs(ghostFrac - frac) > 0.004 ? `<span class="ghost" style="left:${Math.round(100 * Math.min(frac, ghostFrac))}%;width:${Math.round(100 * Math.abs(Math.min(1, ghostFrac) - Math.min(1, frac)))}%"></span>` : ''}<span class="notch" style="left:${Math.round(100 * MATCH_TO_FINISH)}%"></span></span>`
   return `<section class="bench spec" aria-label="The attack">
-    <button class="spec-art ${ui.focus === 'spectrum' ? 'is-on' : ''}" data-act="spectrum" aria-label="The spectrum: tap to hear the attack">${spectrumSvg(f.attack, t, ghost)}</button>
+    <button class="spec-art ${ui.focus === 'spectrum' ? 'is-on' : ''}" data-act="spectrum" aria-label="The spectrum: tap to hear the attack">${spectrumSvg(f.attack, t, ghost, f.commission.chord)}</button>
     <div class="spec-read">
       <p class="row"><span class="lbl">Match</span><b class="num ${m >= MATCH_TO_FINISH ? 'ok' : ''}">${pct(m)}</b>${gm !== null && Math.abs(gm - m) > 0.004 ? `<span class="to num">→ ${pct(gm)}</span>` : ''}<span class="of">of ${pct(MATCH_TO_FINISH)}</span></p>
       ${meter(m, gm)}
@@ -305,7 +305,7 @@ function endView(g: Game): string {
   return `<div class="cx end dsp">
     ${header(g, won ? `${f.commission.name}, made` : 'Spent')}
     <section class="end-art">
-      <button class="spec-art big" data-act="spectrum" aria-label="Hear the attack">${spectrumSvg(f.attack, t)}</button>
+      <button class="spec-art big" data-act="spectrum" aria-label="Hear the attack">${spectrumSvg(f.attack, t, null, f.commission.chord)}</button>
       <p>${won ? `An attack of ${poolTotal(f.attack)} at a ${pct(matchOf(f.attack, t))} match, in ${ticks(f.dial) || 'no time'}${f.dial > TICKS ? ` (${(f.dial / TICKS).toFixed(2)} moons)` : ''}. The flares took ${f.paid}; ${g.quintessence} quintessence left.` : `${esc(f.commission.name)} wore you down with the attack at ${poolTotal(f.attack)} of ${need(g)}, a ${pct(matchOf(f.attack, t))} match.`} Tap the spectrum to hear it.</p>
     </section>
     <div class="cx-actions one"><button class="primary go" data-act="restart">Again</button></div>
@@ -353,9 +353,9 @@ function apply(next: Game, kind: 'card' | 'tune' | 'wait', played?: Card) {
   const newFlares = next.fight.flares.slice(before.fight.flares.length)
   if (newFlares.length) sound.turn(newFlares, 0, paid)
   ui.fx = { paid, flared: newFlares.length > 0 }
-  const t = next.fight.commission.target
-  if (kind === 'tune') spectrumVoice.smooth(before.fight.attack, next.fight.attack, t)
-  else if (played && isSculptor(played)) spectrumVoice.play(next.fight.attack, t)
+  const c = next.fight.commission
+  if (kind === 'tune') spectrumVoice.smooth(before.fight.attack, next.fight.attack, c)
+  else if (played && isSculptor(played)) spectrumVoice.play(next.fight.attack, c)
   const drawn = next.fight.hand.filter((c) => !before.fight.hand.some((h) => h.id === c.id)).length
   if (drawn) setTimeout(() => sound.deal(drawn), 350)
   if (next.stage === 'won') setTimeout(() => sound.win(), kind === 'tune' ? 2600 : 1200)
@@ -390,13 +390,13 @@ root.addEventListener('click', (ev) => {
         sound.setEnabled(!sound.enabled)
         break
       case 'material':
-        spectrumVoice.material(MUD.target)
+        spectrumVoice.material(MUD)
         break
       case 'dial':
         ui.focus = ui.focus === 'dial' ? null : 'dial'
         break
       case 'spectrum':
-        if (g) spectrumVoice.play(g.fight.attack, g.fight.commission.target, true)
+        if (g) spectrumVoice.play(g.fight.attack, g.fight.commission, true)
         if (g?.stage === 'fight') ui.focus = ui.focus === 'spectrum' ? null : 'spectrum'
         break
       case 'pick-card': {

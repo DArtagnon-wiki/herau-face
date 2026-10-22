@@ -32,7 +32,18 @@ Only Dissolve plays nothing but Mud's elements; the other sculptors bring air or
 
 ## Sound
 
-Each element is a band of sound: earth the bass (110 Hz), water a low mid (330 Hz), air a high mid (660 Hz), fire the treble (1760 Hz). All four are harmonics of one root, so a material's shape sounds as one pure tone. Each band is as loud as its share of the attack. A band holding more than the material's share gets a detuned twin that beats against it, slow in the bass and harsh in the treble. The whole tone shudders and hisses as far as the shape is from the material's. Smoothing glides from the rough sound to the smoothed one. The spectrum panel draws the same thing: each band's share of the attack against the material's outline, with noise ringed in red.
+Each element is a band of three notes, all harmonics of one root (A, 55 Hz), together one A major sonority:
+
+| Band | Element | Notes (Hz) |
+| --- | --- | --- |
+| Bass | Earth | 110, 165, 220 |
+| Low mid | Water | 275, 330, 440 |
+| High mid | Air | 550, 660, 825 |
+| Treble | Fire | 1320, 1650, 1980 |
+
+**Each material is its own chord:** how strongly it sounds each note. Mud's earth leans on its lowest note (5, 2, 1) and its water on the middle one (3, 6, 3); each element's notes add up to its share of the material. The chord is the material's voice. Play still matches elements only.
+
+The attack is voiced through the material's chord, each band as loud as its share of the attack, so an attack that matches sounds exactly like the material. A band the material lacks sounds its three notes evenly. A band holding more than the material's share gets detuned twins that beat against its notes, slow in the bass and harsh in the treble. The whole tone shudders and hisses as far as the shape is from the material's. Smoothing glides from the rough sound to the smoothed one; "Hear mud" in the menu plays the chord itself. The spectrum panel draws the same thing: each band's share of the attack against the material's outline, the chord's notes standing inside it as note heads, and noise ringed in red.
 
 ## First numbers
 
@@ -50,6 +61,22 @@ Each element is a band of sound: earth the bass (110 Hz), water a low mid (330 H
 - **A mixed hand wins with room to spare.** The lookahead player wins every time and keeps about 26 of 40. Its playouts run on the real draw pile, so it knows the cards to come: take it as a ceiling.
 - **A won Mud takes about 8 cards over 1.85 moons and 3.5 flares,** spending about 9 charge to lift the match from the mid 50s past 80%.
 - **Charge works both ways.** Offense protects you by finishing sooner, which skips flares; defense powers offense, since drained instability becomes the charge that finishes the material.
+
+## Does note-level shape earn its place?
+
+`scripts/dsp-timbre.ts` plays Mud with three chords of the same material (12 water to 8 earth, voiced dark, even or bright within each band) under three rules: the match on elements (the game now); on notes with every sculptor spreading its elements evenly over a band; and on notes with sculptor timbres (Circulate and Coagulate dark, Digest and Sublime bright, Dissolve and Cupel even; dark plays each 3 units as 2, 1, 0 low to high, bright as 0, 1, 2). The lookahead plays 150 games of each. Whenever two or more sculptors are in hand, it judges which fits best, by the charge the attack would still need to reach the match, and checks whether another chord would pick a different one. (The lookahead's own moves can't answer this: 63% of them change with nothing but a reshuffle of its playouts, since most moves come out nearly tied.)
+
+| Rule | Bar | Best-fitting sculptor depends on the chord | Extra charge the wrong one costs | Charge spent a win | Quintessence left |
+| --- | --- | --- | --- | --- | --- |
+| Match on elements (now) | 80% | 0% | 0 | 9.2 | 25.8 |
+| Notes, spread evenly | 80% | 4 to 5% | 0 to 1.1 | 9.2 to 10.1 | 25.7 to 25.8 |
+| Notes, timbres | 80% | 31 to 32% | 0.5 to 1.3 | 9.4 to 10.3 | 25.6 to 26.0 |
+| Notes, spread evenly | 90% | 16 to 18% | 0.3 to 1.9 | 10.2 to 11.2 | 25.1 to 25.5 |
+| Notes, timbres | 90% | 30 to 34% | 0.8 to 1.5 | 10.4 to 11.3 | 24.9 to 25.3 |
+
+- **Timbres make a real choice.** In about a third of hands with two or more sculptors, which one fits best depends on the material's chord. Spreading evenly barely does (4 to 5%), and matching on elements never can.
+- **But it is worth about one charge.** Playing another chord's best fit costs about 1 more charge, against about 10 spent smoothing a win, so outcomes hardly move: the lookahead still wins every game with about 25 left, and note-level matching costs it about one more charge a fight. A 90% bar adds a charge and a quintessence, not much more.
+- **So shape stays a voice for now.** Note-level matching and timbres are in the engine behind settings (`match: 'notes'`, `Card.timbre`, `bar`), ready for when charge is scarcer, chords are sharper, or timbres differ more, any of which would raise the stakes.
 
 ## Prototype
 
