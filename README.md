@@ -4,7 +4,7 @@ A roguelike deckbuilder of runes and alchemy, built from Circumgician's world. T
 
 ## Prototype: DSP (newest)
 
-One fight, Mud, on the Circuits moon dial. A material is a spectrum of twelve lines, three to an element, and Mud hands you a raw spectrum 20 from its chord. Two kinds of card, Attenuate and Amplify, each played on the instability (drain it or pour more in, for charge) or on the spectrum (lower or raise the lines furthest from the chord). Seal the work when charge reaches 10 plus the spectrum's distance from the chord: overcharge it, or tune it close and seal it cheaply. Each line is a note, so a rough spectrum sounds rough and a tuned one sounds like the material.
+One fight, Mud, on the Circuits moon dial. A material is a spectrum of twelve lines, three to an element, and Mud hands you a raw spectrum 20 from its chord; match it exactly to win. Attenuate lowers the lines furthest over the chord, or drains the coming flare into charge; Amplify raises the lines furthest under it, or spends charge on Ward. Each line is a note, so a rough spectrum sounds rough and a matched one sounds like the material.
 
 ```sh
 npm run dev                                  # then open /dsp.html

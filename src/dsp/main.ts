@@ -1,15 +1,15 @@
 // DSP: one screen, as in Circuits. The dial carries the threat (the pool, the
-// flares, the moon) and the seal's progress; the spectrum carries the
-// material (its lines against the chord) and how close the seal is; the hand
-// docks below. Pick a card and both ways to play it show at once: the dial
-// and the charge show it played on instability, the spectrum and the seal show
-// it played on the spectrum. A note always explains what is picked.
+// flares, Ward, the moon) and how far the spectrum has closed on the chord;
+// the spectrum panel carries the material (its lines against the chord) with
+// charge and Ward beside it; the hand docks below. Pick a card and both ways
+// to play it show at once: its defensive way on the dial and the readout, its
+// spectrum way on the spectrum. A note always explains what is picked.
 
 import '../ui/style.css'
 import '../circuits/circuits.css'
 import './dsp.css'
 import { sound } from '../ui/sound'
-import { icon, element, ELEMENT_COLOR, moon, quintessence, card as cardSig } from '../circuits/sigils'
+import { icon, element, ELEMENT_COLOR, moon, quintessence, card as cardSig, ward as wardSig } from '../circuits/sigils'
 import { battery, cardSvg } from './card'
 import { dialSvg, waitIcon, type DialPreview } from './dial'
 import { spectrumSvg } from './spectrum'
@@ -24,7 +24,7 @@ import {
   TICKS,
   distance,
   distanceOf,
-  needOf,
+  modesOf,
   newGame,
   playCard,
   poolTotal,
@@ -92,10 +92,10 @@ function situationNote(g: Game): [string, string] {
   const drw = up.find((x) => x.draw)
   const title = atk ? `${PHASE_NAMES[atk.phase]} in ${ticks(atk.pos - f.dial)}` : 'The moon'
   const lines = [
-    atk ? `${esc(f.commission.name)} flares there for whatever is in the pool (${threatOf(f)} now, the red badge), and that empties it.` : '',
+    atk ? `${esc(f.commission.name)} flares there for whatever is in the pool${f.ward ? `, less the ${f.ward} Ward catches` : ''} (${threatOf(f)} now, the red badge), and that empties it.` : '',
     dis && (!atk || dis.pos < atk.pos) ? `You discard your hand at the ${PHASE_NAMES[dis.phase].toLowerCase()}, before it.` : '',
     drw ? `You draw ${g.settings.hand} at the ${PHASE_NAMES[drw.phase].toLowerCase()}.` : '',
-    `To seal the ${esc(f.commission.name.toLowerCase())}, charge must reach ${f.commission.base} plus the spectrum's distance from the chord (${distance(f)} now): ${needOf(f)}. Charge is ${f.charge}.`,
+    `To make ${esc(f.commission.name.toLowerCase())}, match its chord exactly: the spectrum is ${distance(f)} off now.${f.charge || f.ward ? ` Charge ${f.charge}, Ward ${f.ward}.` : ''}`,
     'Pick a card to see both ways to play it.',
   ]
   return [title, lines.filter(Boolean).join(' ')]
@@ -107,14 +107,15 @@ function dialNote(g: Game): [string, string] {
     const what = [x.attack ? 'flare' : '', x.feed ? `it feeds ${amounts(f.commission.feed)}` : '', x.discard ? 'you discard' : '', x.draw ? `you draw ${g.settings.hand}` : ''].filter(Boolean)
     return `<b>${PHASE_NAMES[x.phase]}</b> (${ticks(x.pos - f.dial)}): ${what.length ? what.join(', ') : 'nothing'}`
   })
-  return ['The moon', `${items.join('. ')}. The inner ring is charge toward the seal: ${f.charge} of ${needOf(f)}.`]
+  const start = distanceOf(f.commission.start, f.commission.chord)
+  return ['The moon', `${items.join('. ')}. The inner ring is how far the spectrum has closed on the chord: ${start - distance(f)} of ${start}.${f.ward ? ` Ward ${f.ward} (the shield) catches the next flare first.` : ''}`]
 }
 
 function spectrumNote(g: Game): [string, string] {
   const f = g.fight
   return [
     'The spectrum',
-    `Twelve lines, three to an element, low to high: earth the bass, water and air the mids, fire the treble. Each line is as tall as its amplitude; the gilt bars with note heads are the chord of ${esc(f.commission.name.toLowerCase())}. What stands above the chord is ringed in red; what is missing below it is dashed. Every line's gap added up is the distance, ${distance(f)} now, and the seal needs ${f.commission.base} plus that. Tap the spectrum to hear it; the closer to the chord, the purer it sounds. The menu plays the chord itself.`,
+    `Twelve lines, three to an element, low to high: earth the bass, water and air the mids, fire the treble. Each line is as tall as its amplitude; the gilt bars with note heads are the chord of ${esc(f.commission.name.toLowerCase())}. What stands above the chord is ringed in red; what is missing below it is dashed. Every line's gap added up is the distance, ${distance(f)} now; the work is done at zero. Tap the spectrum to hear it; the closer to the chord, the purer it sounds. The menu plays the chord itself.`,
   ]
 }
 
@@ -124,23 +125,23 @@ function lineWords(r: Effect): string {
 
 function cardNote(g: Game, c: Card): [string, string] {
   const f = g.fight
-  const inst = resolve(f, c, 'instability')
+  const guard = resolve(f, c, modesOf(c)[0])
   const spec = resolve(f, c, 'spectrum')
-  const need = needOf(f)
-  const needAfter = f.commission.base + distanceOf(spec.spectrum, f.commission.chord)
+  const d0 = distance(f)
+  const d1 = distanceOf(spec.spectrum, f.commission.chord)
   const flareNow = threatOf(f)
-  const flareAfter = flareNow - poolTotal(inst.took) + poolTotal(inst.added)
   const parts: string[] = []
   if (c.kind === 'attenuate') {
-    parts.push(`<b>On instability</b> it takes up to ${c.power} each of ${both(c)} from the pool (the triangles inside), and charge rises by what it takes.`)
-    parts.push(`<span class="now">Now: ${inst.charge ? `takes ${amounts(inst.took)}, charge +${inst.charge}, and the pool would flare ${flareAfter} instead of ${flareNow}.` : `no ${both(c)} in the pool, so nothing.`}</span>`)
-    parts.push(`<b>On the spectrum</b> it lowers the ${both(c)} lines furthest over the chord, by up to ${c.power} each.`)
+    const flareAfter = Math.max(0, poolTotal(f.pool) - poolTotal(guard.took) - f.ward)
+    parts.push(`<b>Drain</b>: it takes up to ${c.power} each of ${both(c)} from the pool (the triangles inside), and charge rises by what it takes (the cell).`)
+    parts.push(`<span class="now">Now: ${guard.charge ? `takes ${amounts(guard.took)}, charge +${guard.charge}, and the pool would flare ${flareAfter} instead of ${flareNow}.` : `no ${both(c)} in the pool, so nothing.`}</span>`)
+    parts.push(`<b>Lower</b>: it lowers the ${both(c)} lines furthest over the chord, by up to ${c.power} each.`)
   } else {
-    parts.push(`<b>On instability</b> it pours ${c.power} each of ${both(c)} into the pool (the triangles outside), and charge rises by ${c.power * c.elements.length}.`)
-    parts.push(`<span class="now">Now: charge +${inst.charge}, but the pool would flare ${flareAfter} instead of ${flareNow}.</span>`)
-    parts.push(`<b>On the spectrum</b> it raises the ${both(c)} lines furthest under the chord, by up to ${c.power} each.`)
+    parts.push(`<b>Ward</b>: it spends up to ${c.power * c.elements.length} charge and raises that much Ward (the shield), which catches flares and stays until used.`)
+    parts.push(`<span class="now">Now: ${guard.ward ? `charge ${f.charge} → ${f.charge + guard.charge}, Ward ${f.ward} → ${f.ward + guard.ward}.` : 'no charge to spend: drains make it.'}</span>`)
+    parts.push(`<b>Raise</b>: it raises the ${both(c)} lines furthest under the chord, by up to ${c.power} each (the triangles outside).`)
   }
-  parts.push(`<span class="now">Now: ${spec.moves.length ? `${lineWords(spec)}, so the seal needs ${needAfter} instead of ${need}.` : `no ${both(c)} line is ${c.kind === 'attenuate' ? 'over' : 'under'} the chord, so nothing.`}</span>`)
+  parts.push(`<span class="now">Now: ${spec.moves.length ? `${lineWords(spec)}, so the spectrum would be ${d1 ? `${d1} off instead of ${d0}` : 'a match'}.` : `no ${both(c)} line is ${c.kind === 'attenuate' ? 'over' : 'under'} the chord, so nothing.`}</span>`)
   return [`${c.name}, ${KIND_NAME[c.kind]} · ${both(c)}`, parts.join(' ')]
 }
 
@@ -160,11 +161,11 @@ function legendText(): string {
   const I = (m: string) => icon(m, 26)
   const row = (svg: string, text: string) => `<li>${svg}<span>${text}</span></li>`
   return `<ul class="legend">
-    ${row(I(`<circle r="9" fill="none" stroke="var(--line)" stroke-width="1.3"/>${element('water', -2, -3, 4.5, { stroke: ELEMENT_COLOR.water })}${element('earth', -2, 5, 4.5, { stroke: ELEMENT_COLOR.earth })}`), '<b>Attenuate</b> has its triangles inside the circle: it draws in. On instability it takes up to its number of each element out of the pool; on the spectrum it lowers the line in each of its bands furthest over the chord.')}
-    ${row(I(`<circle cx="-5" r="7" fill="none" stroke="var(--line)" stroke-width="1.3"/>${element('fire', 7, 0, 5, { stroke: ELEMENT_COLOR.fire })}`), '<b>Amplify</b> has its triangles outside: it puts out. On instability it pours its number of each element into the pool; on the spectrum it raises the line in each of its bands furthest under the chord.')}
-    ${row(I(battery(0, 0, 8, { stroke: 'var(--lit)' })), 'The cell below: played on instability, either kind charges toward the seal, by what it moved.')}
-    ${row(I(`<rect x="-9" y="-3" width="4" height="10" fill="var(--earth)" opacity="0.6"/><rect x="-3" y="-8" width="4" height="15" fill="var(--water)" opacity="0.6"/><path d="M-4 -8H2" stroke="var(--gilt-bright)" stroke-width="1.6"/><rect x="3" y="0" width="4" height="7" fill="var(--warn)" opacity="0.5" stroke="var(--warn)"/>`), 'The spectrum: twelve lines, three to an element, earth the bass to fire the treble. The gilt bars are the chord. The distance is every line’s gap from it, added up.')}
-    ${row(I(quintessence(0, 0, 8, { stroke: 'var(--lit)', fill: 'var(--lit-fill)' })), 'The seal: charge must reach the base plus the distance. Charging raises charge; tuning lowers what it must reach. Either way wins.')}
+    ${row(I(`<circle r="9" fill="none" stroke="var(--line)" stroke-width="1.3"/>${element('water', -2, -3, 4.5, { stroke: ELEMENT_COLOR.water })}${element('earth', -2, 5, 4.5, { stroke: ELEMENT_COLOR.earth })}`), '<b>Attenuate</b> has its triangles inside the circle: it draws in. Drain: it takes up to its number of each element out of the pool, and charges the cell below by what it took. Lower: it brings down the line in each of its bands furthest over the chord.')}
+    ${row(I(`<circle cx="-5" r="7" fill="none" stroke="var(--line)" stroke-width="1.3"/>${element('fire', 7, 0, 5, { stroke: ELEMENT_COLOR.fire })}`), '<b>Amplify</b> has its triangles outside: it puts out. Ward: it spends charge to raise the shield below, 1 Ward for each charge. Raise: it brings up the line in each of its bands furthest under the chord.')}
+    ${row(I(battery(0, 0, 8, { stroke: 'var(--lit)' })), 'Charge, the cell: drains fill it; Ward spends it.')}
+    ${row(I(wardSig(0, 0, 9, { stroke: 'var(--glass)' })), 'Ward, the shield: it catches flares before they reach your quintessence, and stays until used.')}
+    ${row(I(`<rect x="-9" y="-3" width="4" height="10" fill="var(--earth)" opacity="0.6"/><rect x="-3" y="-8" width="4" height="15" fill="var(--water)" opacity="0.6"/><path d="M-4 -8H2" stroke="var(--gilt-bright)" stroke-width="1.6"/><rect x="3" y="0" width="4" height="7" fill="var(--warn)" opacity="0.5" stroke="var(--warn)"/>`), 'The spectrum: twelve lines, three to an element, earth the bass to fire the treble. The gilt bars are the chord. The distance is every line’s gap from it, added up; match the chord exactly to make the material.')}
     ${row(I(moon(0, 0, 8, { stroke: 'var(--moon)' })), 'A crescent is time: every card takes an eighth of the moon.')}
     ${row(I(quintessence(0, 0, 8, { stroke: 'var(--fire)', fill: 'var(--fire)' })), 'A red star on the dial is a flare: whatever is in the pool costs you that much quintessence, and the pool empties.')}
     ${row(I(cardSig(0, 0, 7, { stroke: 'var(--ink-soft)' })), 'You draw at the new and full moons, and discard your hand at the quarters.')}
@@ -182,25 +183,25 @@ function header(g: Game | null, title: string): string {
   </header>`
 }
 
-/** The seal: charge filling toward what the seal needs, which tuning moves down. */
-function sealPanel(g: Game, c: Card | null): string {
+/** Beside the spectrum: how far off it is, charge and Ward, and what the picked card would make of them. */
+function readout(g: Game, c: Card | null): string {
   const f = g.fight
-  const need = needOf(f)
-  const inst = c ? resolve(f, c, 'instability') : null
+  const d0 = distance(f)
+  const start = distanceOf(f.commission.start, f.commission.chord)
   const spec = c ? resolve(f, c, 'spectrum') : null
-  const chargeAfter = inst ? f.charge + inst.charge : null
-  const needAfter = spec ? f.commission.base + distanceOf(spec.spectrum, f.commission.chord) : null
-  const scale = Math.max(f.commission.base + distanceOf(f.commission.start, f.commission.chord), need, chargeAfter ?? 0, f.charge) * 1.04
-  const at = (v: number) => `${Math.round((100 * Math.min(v, scale)) / scale)}%`
+  const guard = c ? resolve(f, c, modesOf(c)[0]) : null
+  const d1 = spec ? distanceOf(spec.spectrum, f.commission.chord) : null
+  const charge1 = guard ? f.charge + guard.charge : null
+  const ward1 = guard ? f.ward + guard.ward : null
+  const at = (v: number) => `${Math.round((100 * Math.max(0, start - v)) / Math.max(1, start))}%`
+  const to = (a: number | null, b: number) => (a !== null && a !== b ? `<span class="to num">→ ${a}</span>` : '')
   return `<div class="seal">
-      <p class="row"><span class="lbl">Charge</span><b class="num ${f.charge >= need ? 'ok' : ''}">${f.charge}</b>${chargeAfter !== null && chargeAfter !== f.charge ? `<span class="to num">→ ${chargeAfter}</span><span class="of">on instability</span>` : ''}</p>
+      <p class="row"><span class="lbl">Off by</span><b class="num ${d0 === 0 ? 'ok' : ''}">${d0}</b>${to(d1, d0)}<span class="of">${d1 === 0 ? 'a match' : 'match at 0'}</span></p>
       <span class="meter" aria-hidden="true">
-        <span class="fill" style="width:${at(f.charge)}"></span>
-        ${chargeAfter !== null && chargeAfter > f.charge ? `<span class="ghost" style="left:${at(f.charge)};width:calc(${at(chargeAfter)} - ${at(f.charge)})"></span>` : ''}
-        <span class="notch" style="left:${at(need)}"></span>
-        ${needAfter !== null && needAfter !== need ? `<span class="notch ghosted" style="left:${at(needAfter)}"></span>` : ''}
+        <span class="fill" style="width:${at(d0)}"></span>
+        ${d1 !== null && d1 < d0 ? `<span class="ghost" style="left:${at(d0)};width:calc(${at(d1)} - ${at(d0)})"></span>` : ''}
       </span>
-      <p class="row"><span class="lbl">Seal</span><b class="num">${need}</b>${needAfter !== null && needAfter !== need ? `<span class="to num">→ ${needAfter}</span><span class="of">on the spectrum</span>` : `<span class="of">${f.commission.base} + distance ${distance(f)}</span>`}</p>
+      <p class="row">${icon(battery(0, 0, 8, { stroke: 'var(--lit)', width: 1.4 }), 18)}<b class="num">${f.charge}</b>${to(charge1, f.charge)}<span class="gap"></span>${icon(wardSig(0, 0, 9, { stroke: 'var(--glass)', width: 1.5 }), 18)}<b class="num">${f.ward}</b>${to(ward1, f.ward)}</p>
     </div>`
 }
 
@@ -209,7 +210,7 @@ function spectrumPanel(g: Game, c: Card | null): string {
   const ghost = c ? resolve(f, c, 'spectrum').spectrum : null
   return `<section class="bench spec" aria-label="The material">
     <button class="spec-art ${ui.focus === 'spectrum' ? 'is-on' : ''}" data-act="spectrum" aria-label="The spectrum: tap to hear it">${spectrumSvg(f.spectrum, f.commission.chord, ghost)}</button>
-    ${sealPanel(g, c)}
+    ${readout(g, c)}
   </section>`
 }
 
@@ -219,8 +220,8 @@ function hand(g: Game): string {
   return `<section class="hand-row" aria-label="Hand">${f.hand
     .map((c) => {
       const on = ui.pick === c.id
-      const took = c.kind === 'attenuate' ? resolve(f, c, 'instability').took : null
-      return `<button class="ccard ${c.kind} ${on ? 'is-on' : ''}" data-act="pick-card" data-id="${c.id}" aria-pressed="${on}" aria-label="${esc(c.name)}, ${KIND_NAME[c.kind]} ${both(c)}">${cardSvg(c, { took, size: 120 })}<span class="cname">${esc(c.name)}</span></button>`
+      const took = c.kind === 'attenuate' ? resolve(f, c, 'drain').took : {}
+      return `<button class="ccard ${c.kind} ${on ? 'is-on' : ''}" data-act="pick-card" data-id="${c.id}" aria-pressed="${on}" aria-label="${esc(c.name)}, ${KIND_NAME[c.kind]} ${both(c)}">${cardSvg(c, { took, charged: f.charge > 0, size: 120 })}<span class="cname">${esc(c.name)}</span></button>`
     })
     .join('')}</section>`
 }
@@ -228,24 +229,26 @@ function hand(g: Game): string {
 function previewOf(g: Game, c: Card | null): DialPreview | null {
   if (!c) return null
   const f = g.fight
-  const r = resolve(f, c, 'instability')
+  const guard = resolve(f, c, modesOf(c)[0])
+  const spec = resolve(f, c, 'spectrum')
   const delta = { water: 0, earth: 0, air: 0, fire: 0 }
-  for (const e of ELEMENTS) delta[e] = r.added[e] - r.took[e]
-  const after = tryPlay(g, c, 'instability')
-  return { dial: after && after.stage === 'fight' ? after.fight.dial : f.dial, charge: f.charge + r.charge, need: needOf(f), delta }
+  for (const e of ELEMENTS) delta[e] = -guard.took[e]
+  const after = tryPlay(g, c, 'spectrum')
+  return { dial: after && after.stage === 'fight' ? after.fight.dial : f.dial, distance: distanceOf(spec.spectrum, f.commission.chord), delta, ward: f.ward + guard.ward }
 }
 
 function modeButton(g: Game, c: Card, mode: Mode): string {
   const f = g.fight
   const r = resolve(f, c, mode)
   const after = tryPlay(g, c, mode)
-  const title = mode === 'instability' ? (c.kind === 'attenuate' ? 'Drain' : 'Pour in') : c.kind === 'attenuate' ? 'Lower' : 'Raise'
-  const tuned = needOf(f) - (f.commission.base + distanceOf(r.spectrum, f.commission.chord))
-  const what = mode === 'instability' ? (r.charge ? `charge +${r.charge}${poolTotal(r.added) ? `, pool +${poolTotal(r.added)}` : ''}` : 'nothing to take') : r.moves.length ? `seal −${tuned}` : 'nothing to tune'
+  const title = mode === 'drain' ? 'Drain' : mode === 'ward' ? 'Ward' : c.kind === 'attenuate' ? 'Lower' : 'Raise'
+  const closed = distance(f) - distanceOf(r.spectrum, f.commission.chord)
+  const what =
+    mode === 'drain' ? (r.charge ? `charge +${r.charge}` : 'nothing to take') : mode === 'ward' ? (r.ward ? `Ward +${r.ward}, charge −${r.ward}` : 'no charge') : r.moves.length ? `off −${closed}` : 'nothing to move'
   const flares = after && after.stage !== 'won' ? after.fight.flares.length - f.flares.length : 0
   const cost = after && after.stage !== 'won' ? g.quintessence - after.quintessence : 0
-  const tail = after?.stage === 'won' ? 'seals it' : flares ? `<span class="warn-on-gold">flare −${cost}</span>` : ''
-  const idle = mode === 'instability' ? !r.charge : !r.moves.length
+  const tail = after?.stage === 'won' ? 'a match' : flares ? (cost ? `<span class="warn-on-gold">flare −${cost}</span>` : 'flare caught') : ''
+  const idle = mode === 'drain' ? !r.charge : mode === 'ward' ? !r.ward : !r.moves.length
   return `<button class="mode ${idle ? 'idle' : 'primary'}" data-act="play" data-mode="${mode}"><b>${title}</b><span>${what}${tail ? ` · ${tail}` : ''}</span></button>`
 }
 
@@ -258,7 +261,7 @@ function actions(g: Game): string {
   </div>`
   return `<div class="cx-actions modes">
     <button class="wait" data-act="wait" aria-label="Wait an eighth of the moon">${waitIcon()}</button>
-    ${modeButton(g, c, 'instability')}
+    ${modeButton(g, c, modesOf(c)[0])}
     ${modeButton(g, c, 'spectrum')}
   </div>`
 }
@@ -304,10 +307,10 @@ function endView(g: Game): string {
   const won = g.stage === 'won'
   const f = g.fight
   return `<div class="cx end dsp">
-    ${header(g, won ? `${f.commission.name}, sealed` : 'Spent')}
+    ${header(g, won ? `${f.commission.name}, made` : 'Spent')}
     <section class="end-art">
       <button class="spec-art big" data-act="spectrum" aria-label="Hear the spectrum">${spectrumSvg(f.spectrum, f.commission.chord)}</button>
-      <p>${won ? `Sealed with ${f.charge} charge at a distance of ${distance(f)} (the seal needed ${needOf(f)}), in ${f.dial > TICKS ? `${(f.dial / TICKS).toFixed(2)} moons` : ticks(f.dial)}. The flares took ${f.paid}; ${g.quintessence} quintessence left.` : `${esc(f.commission.name)} wore you down with ${f.charge} of the ${needOf(f)} charge the seal needed.`} Tap the spectrum to hear it.</p>
+      <p>${won ? `The spectrum matches the chord, in ${f.dial > TICKS ? `${(f.dial / TICKS).toFixed(2)} moons` : ticks(f.dial)}. The flares took ${f.paid}${f.flares.length ? ` of ${f.flares.reduce((a, b) => a + b, 0)}` : ''}; ${g.quintessence} quintessence left.` : `${esc(f.commission.name)} wore you down with the spectrum ${distance(f)} off the chord.`} Tap the spectrum to hear it.</p>
     </section>
     <div class="cx-actions one"><button class="primary go" data-act="restart">Again</button></div>
   </div>${popupView(g)}`
@@ -320,7 +323,7 @@ function startView(): string {
     <div class="start-words">
       <p class="eyebrow">A prototype</p>
       <h1>DSP</h1>
-      <p class="lede">Transmute a raw spectrum into a material's chord. Attenuate draws in, Amplify puts out; play either on the instability for charge, or on the spectrum to tune it. Seal the work when your charge reaches what the seal asks, and the closer the tuning, the less it asks.</p>
+      <p class="lede">Transmute a raw spectrum into a material's chord, line for line. Attenuate lowers the lines, or drains the coming flare into charge; Amplify raises them, or spends charge on Ward. The flares come either way.</p>
     </div>
     <div class="cx-actions">
       <button data-act="legend">Reading a circuit</button>

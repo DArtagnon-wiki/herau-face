@@ -1,11 +1,12 @@
 // A DSP card drawn on the circuit schema: a stage with its time stage up to
-// the right, and the cell below that charges toward the seal. An Attenuate's
-// sigils are inside the stage, each with a lead to the rim: what it draws in
-// (from the pool, or out of the spectrum's lines). An Amplify's are outside,
-// on leads from the rim: what it puts out (into the pool, or into the lines).
-// Either way, each triangle carries the amount it moves of that element.
+// the right. An Attenuate's sigils are inside the stage, each with a lead to
+// the rim: what it draws in (from the pool, or out of the spectrum's lines),
+// with the cell below that charges with what it drains. An Amplify's are
+// outside, on leads from the rim: what it puts out (into the lines), with the
+// shield below that it raises from charge. Each triangle carries the amount
+// it moves of that element.
 
-import { moon, numeral, element, ELEMENT_COLOR } from '../circuits/sigils'
+import { moon, numeral, element, ward as wardSig, ELEMENT_COLOR } from '../circuits/sigils'
 import { type Card } from './engine'
 import type { Elemental } from '../sim/types'
 
@@ -49,6 +50,8 @@ const down = (e: Elemental) => e === 'water' || e === 'earth'
 export interface CardArtOptions {
   /** What an Attenuate would take from the pool now, to light its sigils; omit to draw it plain. */
   took?: Partial<Record<Elemental, number>> | null
+  /** For an Amplify drawn live: whether there is charge to raise Ward from. */
+  charged?: boolean
   size?: number
 }
 
@@ -72,12 +75,16 @@ export function cardSvg(c: Card, opts: CardArtOptions = {}): string {
   const takes = c.kind === 'attenuate' ? c.elements : []
   const gives = c.kind === 'amplify' ? c.elements : []
 
-  // The cell below: played on instability, either kind charges toward the seal.
-  {
-    const charging = !live || gives.length > 0 || takes.some((e) => (opts.took![e] ?? 0) > 0)
+  // Below: an Attenuate's cell, charging with what it drains; an Amplify's shield, raised from charge.
+  if (c.kind === 'attenuate') {
+    const charging = !live || takes.some((e) => (opts.took![e] ?? 0) > 0)
     const color = live ? (charging ? LIT : DIM) : LIT
     parts.push(line(0, C.r, 0, C.r + 6, color))
     parts.push(battery(0, C.r + 13, 7, { stroke: color, width: 1.5 }))
+  } else {
+    const color = live && !opts.charged ? DIM : LIT
+    parts.push(line(0, C.r, 0, C.r + 5, color))
+    parts.push(wardSig(0, C.r + 13, 7.5, { stroke: color, width: 1.5 }))
   }
 
   // Offense: outer sigils to the right, each on a lead from the rim.

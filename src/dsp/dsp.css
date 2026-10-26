@@ -55,3 +55,5 @@
   .seal .row .lbl { width: auto; }
   .seal .row .of { display: none; }
 }
+.seal .row .sig { display: inline-block; align-self: center; }
+.seal .row .gap { flex: 0 0 14px; }

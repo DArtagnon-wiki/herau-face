@@ -2,16 +2,15 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_SETTINGS,
   MUD,
-  SEAL_BASE,
   distance,
   distanceOf,
   emptyPool,
-  needOf,
+  matched,
+  modesOf,
   newGame,
   playCard,
   poolTotal,
   resolve,
-  sealed,
   startingDeck,
   upcoming,
   wait,
@@ -39,45 +38,64 @@ describe('the opening deck', () => {
 })
 
 describe('Mud', () => {
-  it('starts 20 from its chord, so the seal needs 30', () => {
+  it('starts 20 from its chord, with nothing in hand to show for it yet', () => {
     const g = newGame(7)
     expect(distanceOf(MUD.start, MUD.chord)).toBe(20)
-    expect(needOf(g.fight)).toBe(SEAL_BASE + 20)
+    expect(distance(g.fight)).toBe(20)
+    expect(g.fight.charge).toBe(0)
+    expect(g.fight.ward).toBe(0)
     expect(g.fight.pool).toEqual(P({ water: 5, earth: 2 }))
     expect(g.fight.hand).toHaveLength(DEFAULT_SETTINGS.hand)
     expect(g.quintessence).toBe(40)
   })
 
-  it('Attenuate on instability takes from the pool and charges by what it took', () => {
+  it('each kind has its own two ways', () => {
+    expect(modesOf(named('Decant'))).toEqual(['drain', 'spectrum'])
+    expect(modesOf(named('Dissolve'))).toEqual(['ward', 'spectrum'])
+    expect(() => resolve(newGame(1).fight, named('Decant'), 'ward')).toThrow()
+  })
+
+  it('a drain takes from the pool and charges by what it took', () => {
     const g = rigged(['Decant', 'Snuff'])
-    const r = resolve(g.fight, named('Decant'), 'instability')
+    const r = resolve(g.fight, named('Decant'), 'drain')
     expect(r.took).toEqual(P({ water: 3, earth: 2 }))
     expect(r.charge).toBe(5)
-    const a = playCard(g, named('Decant').id, 'instability')
+    const a = playCard(g, named('Decant').id, 'drain')
     expect(a.fight.pool).toEqual(P({ water: 2 }))
     expect(a.fight.charge).toBe(5)
     expect(a.fight.dial).toBe(2)
     // Snuff finds no air or fire in Mud's pool: nothing to take.
-    expect(resolve(a.fight, named('Snuff'), 'instability').charge).toBe(0)
+    expect(resolve(a.fight, named('Snuff'), 'drain').charge).toBe(0)
   })
 
-  it('Amplify on instability adds to the pool and charges by the same', () => {
-    const g = rigged(['Dissolve', 'Snuff'])
-    const a = playCard(g, named('Dissolve').id, 'instability')
-    expect(a.fight.pool).toEqual(P({ water: 8, earth: 5 }))
-    expect(a.fight.charge).toBe(6)
+  it('Ward spends up to 3 charge for each of its elements, 1 Ward for each', () => {
+    const g = rigged(['Dissolve', 'Cupel'], [], { charge: 8 })
+    const r = resolve(g.fight, named('Dissolve'), 'ward')
+    expect(r.charge).toBe(-6)
+    expect(r.ward).toBe(6)
+    const a = playCard(g, named('Dissolve').id, 'ward')
+    expect(a.fight.charge).toBe(2)
+    expect(a.fight.ward).toBe(6)
+    expect(resolve(a.fight, named('Cupel'), 'ward').ward).toBe(2)
+    expect(resolve({ ...a.fight, charge: 0 }, named('Cupel'), 'ward').ward).toBe(0)
+  })
+
+  it('Ward catches a flare before it reaches quintessence, and what is left of it stays', () => {
+    let g = rigged(['Cupel', 'Digest', 'Sublime'], ['Quench'], { ward: 10 })
+    g = wait(wait(g))
+    expect(g.fight.flares).toEqual([7])
+    expect(g.quintessence).toBe(40)
+    expect(g.fight.ward).toBe(3)
+    expect(g.fight.paid).toBe(0)
   })
 
   it('on the spectrum, each band has its furthest line moved toward the chord, stopping there', () => {
     const g = rigged(['Snuff', 'Dissolve', 'Decant'])
-    // Snuff (air and fire): air's low line 2 → 0 and fire's high line 2 → 0; distance 20 → 16.
     const s = resolve(g.fight, named('Snuff'), 'spectrum')
     expect(s.moves).toEqual([
       { element: 'air', line: 0, from: 2, to: 0 },
       { element: 'fire', line: 2, from: 2, to: 0 },
     ])
-    expect(s.charge).toBe(0)
-    // Dissolve (water and earth) raises: water's middle 2 → 5 (of 6), earth's low 2 → 5.
     const d = resolve(g.fight, named('Dissolve'), 'spectrum')
     expect(d.moves.map((m) => [m.element, m.line, m.to])).toEqual([
       ['water', 1, 5],
@@ -85,7 +103,6 @@ describe('Mud', () => {
     ])
     const a = playCard(g, named('Dissolve').id, 'spectrum')
     expect(distance(a.fight)).toBe(14)
-    expect(needOf(a.fight)).toBe(24)
   })
 
   it('a spectrum play finds nothing when no line in its bands is off in its direction', () => {
@@ -93,15 +110,14 @@ describe('Mud', () => {
     expect(resolve(f, named('Snuff'), 'spectrum').moves).toEqual([])
   })
 
-  it('seals the moment charge reaches the base plus the distance', () => {
+  it('is won on a complete match, and only then', () => {
     const near = { earth: [5, 2, 1], water: [3, 6, 3], air: [0, 0, 0], fire: [0, 0, 2] }
-    const g = rigged(['Snuff', 'Decant'], ['Quench'], { spectrum: near, charge: 10 })
-    expect(needOf(g.fight)).toBe(12)
-    expect(sealed(g.fight)).toBe(false)
+    const g = rigged(['Snuff', 'Decant'], ['Quench'], { spectrum: near, charge: 50 })
+    expect(matched(g.fight)).toBe(false)
+    expect(playCard(g, named('Decant').id, 'drain').stage).toBe('fight')
     const t = playCard(g, named('Snuff').id, 'spectrum')
     expect(t.stage).toBe('won')
-    const c = playCard(g, named('Decant').id, 'instability')
-    expect(c.stage).toBe('won')
+    expect(distance(t.fight)).toBe(0)
   })
 
   it('flares the pool at 3/8, which empties it', () => {
@@ -109,18 +125,10 @@ describe('Mud', () => {
     g = wait(g)
     expect(g.fight.flares).toEqual([])
     g = wait(g)
-    // At the first quarter the hand goes; the moon runs on through the flare to the full moon's feed and draw.
     expect(g.fight.dial).toBe(8)
     expect(g.fight.flares).toEqual([7])
     expect(g.quintessence).toBe(33)
     expect(poolTotal(g.fight.pool)).toBe(7)
-  })
-
-  it('makes Amplify on instability cost at the next flare', () => {
-    let g = rigged(['Dissolve', 'Cupel', 'Snuff', 'Digest'])
-    g = playCard(g, named('Dissolve').id, 'instability')
-    g = playCard(g, named('Cupel').id, 'spectrum')
-    expect(g.fight.flares).toEqual([13])
   })
 
   it('is lost when the flares take all your quintessence', () => {
