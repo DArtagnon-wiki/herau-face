@@ -1,27 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_SETTINGS,
-  MATCH_TO_FINISH,
   MUD,
+  SEAL_BASE,
+  distance,
+  distanceOf,
   emptyPool,
-  emptyVoice,
-  finishes,
-  noteMatch,
-  smoothNotes,
-  voicing,
-  isDrainer,
-  isSculptor,
-  matchOf,
+  needOf,
   newGame,
   playCard,
   poolTotal,
   resolve,
-  smooth,
+  sealed,
   startingDeck,
-  tune,
   upcoming,
   wait,
-  type Card,
   type Game,
   type Pool,
 } from './engine'
@@ -35,107 +28,99 @@ function rigged(hand: string[], draw: string[] = [], over: Partial<Game['fight']
 }
 
 describe('the opening deck', () => {
-  it('is a drainer and a sculptor for each pair of elements', () => {
+  it('is an Attenuate and an Amplify for each pair of elements', () => {
     const deck = startingDeck()
     expect(deck).toHaveLength(12)
-    expect(deck.filter(isDrainer)).toHaveLength(6)
-    expect(deck.filter(isSculptor)).toHaveLength(6)
-    expect(deck.filter((c) => isDrainer(c) && isSculptor(c))).toHaveLength(0)
+    expect(deck.filter((c) => c.kind === 'attenuate')).toHaveLength(6)
+    expect(deck.filter((c) => c.kind === 'amplify')).toHaveLength(6)
+    expect(new Set(deck.map((c) => c.elements.join())).size).toBe(6)
     expect(new Set(deck.map((c) => c.id)).size).toBe(12)
-    for (const c of deck) expect(poolTotal(P(c.takes)) + poolTotal(P(c.gives))).toBe(6)
-  })
-})
-
-describe('matching the material', () => {
-  it('compares shape only', () => {
-    expect(matchOf(P({ water: 12, earth: 8 }), MUD.target)).toBeCloseTo(1)
-    expect(matchOf(P({ water: 24, earth: 16 }), MUD.target)).toBeCloseTo(1)
-    expect(matchOf(P({ water: 3, earth: 3 }), MUD.target)).toBeCloseTo(0.9)
-    expect(matchOf(P({ air: 3, fire: 3 }), MUD.target)).toBe(0)
-    expect(matchOf(emptyPool(), MUD.target)).toBe(0)
-  })
-
-  it('finishes at the size and close enough to the shape', () => {
-    expect(finishes(P({ water: 12, earth: 8 }), MUD.target)).toBe(true)
-    expect(finishes(P({ water: 6, earth: 4 }), MUD.target)).toBe(false)
-    expect(finishes(P({ water: 12, earth: 6, fire: 6 }), MUD.target)).toBe(false)
-    expect(matchOf(P({ water: 12, earth: 8, fire: 4 }), MUD.target)).toBeGreaterThanOrEqual(MATCH_TO_FINISH)
-  })
-})
-
-describe('smoothing', () => {
-  it('moves off-target noise into the band most short of the shape, a unit a charge', () => {
-    const s = smooth(P({ water: 3, earth: 3, fire: 6 }), MUD.target, 2)
-    expect(s.spent).toBe(2)
-    expect(s.moved.every((m) => m.from === 'fire')).toBe(true)
-    expect(s.attack).toEqual(P({ water: 5, earth: 3, fire: 4 }))
-  })
-
-  it('never makes the match worse, and stops when nothing helps', () => {
-    const a = P({ water: 12, earth: 8 })
-    expect(smooth(a, MUD.target, 5).spent).toBe(0)
-    const rough = P({ water: 6, air: 9, fire: 6, earth: 3 })
-    const s = smooth(rough, MUD.target, 100)
-    expect(matchOf(s.attack, MUD.target)).toBeGreaterThan(0.95)
-    expect(poolTotal(s.attack)).toBe(poolTotal(rough))
-    expect(s.spent).toBeLessThan(100)
   })
 })
 
 describe('Mud', () => {
-  it('opens with its feed and a hand of 4', () => {
+  it('starts 20 from its chord, so the seal needs 30', () => {
     const g = newGame(7)
+    expect(distanceOf(MUD.start, MUD.chord)).toBe(20)
+    expect(needOf(g.fight)).toBe(SEAL_BASE + 20)
     expect(g.fight.pool).toEqual(P({ water: 5, earth: 2 }))
     expect(g.fight.hand).toHaveLength(DEFAULT_SETTINGS.hand)
     expect(g.quintessence).toBe(40)
   })
 
-  it('drainers take from the pool and charge the battery; sculptors play into the attack', () => {
-    const g = rigged(['Decant', 'Cupel'])
-    expect(resolve(g.fight, named('Decant'))).toMatchObject({ took: P({ water: 3, earth: 2 }), charge: 5 })
-    const a = playCard(g, named('Decant').id)
+  it('Attenuate on instability takes from the pool and charges by what it took', () => {
+    const g = rigged(['Decant', 'Snuff'])
+    const r = resolve(g.fight, named('Decant'), 'instability')
+    expect(r.took).toEqual(P({ water: 3, earth: 2 }))
+    expect(r.charge).toBe(5)
+    const a = playCard(g, named('Decant').id, 'instability')
     expect(a.fight.pool).toEqual(P({ water: 2 }))
     expect(a.fight.charge).toBe(5)
     expect(a.fight.dial).toBe(2)
-    const b = playCard(a, named('Cupel').id)
-    expect(b.fight.attack).toEqual(P({ air: 3, fire: 3 }))
-    // Then the hand is empty, so the moon runs on: the 2 water left flares at 3/8 and is gone, and the full moon feeds again.
-    expect(b.fight.flares).toEqual([2])
-    expect(b.fight.pool).toEqual(P({ water: 5, earth: 2 }))
+    // Snuff finds no air or fire in Mud's pool: nothing to take.
+    expect(resolve(a.fight, named('Snuff'), 'instability').charge).toBe(0)
+  })
+
+  it('Amplify on instability adds to the pool and charges by the same', () => {
+    const g = rigged(['Dissolve', 'Snuff'])
+    const a = playCard(g, named('Dissolve').id, 'instability')
+    expect(a.fight.pool).toEqual(P({ water: 8, earth: 5 }))
+    expect(a.fight.charge).toBe(6)
+  })
+
+  it('on the spectrum, each band has its furthest line moved toward the chord, stopping there', () => {
+    const g = rigged(['Snuff', 'Dissolve', 'Decant'])
+    // Snuff (air and fire): air's low line 2 → 0 and fire's high line 2 → 0; distance 20 → 16.
+    const s = resolve(g.fight, named('Snuff'), 'spectrum')
+    expect(s.moves).toEqual([
+      { element: 'air', line: 0, from: 2, to: 0 },
+      { element: 'fire', line: 2, from: 2, to: 0 },
+    ])
+    expect(s.charge).toBe(0)
+    // Dissolve (water and earth) raises: water's middle 2 → 5 (of 6), earth's low 2 → 5.
+    const d = resolve(g.fight, named('Dissolve'), 'spectrum')
+    expect(d.moves.map((m) => [m.element, m.line, m.to])).toEqual([
+      ['water', 1, 5],
+      ['earth', 0, 5],
+    ])
+    const a = playCard(g, named('Dissolve').id, 'spectrum')
+    expect(distance(a.fight)).toBe(14)
+    expect(needOf(a.fight)).toBe(24)
+  })
+
+  it('a spectrum play finds nothing when no line in its bands is off in its direction', () => {
+    const f = { ...newGame(1).fight, spectrum: { ...MUD.chord } }
+    expect(resolve(f, named('Snuff'), 'spectrum').moves).toEqual([])
+  })
+
+  it('seals the moment charge reaches the base plus the distance', () => {
+    const near = { earth: [5, 2, 1], water: [3, 6, 3], air: [0, 0, 0], fire: [0, 0, 2] }
+    const g = rigged(['Snuff', 'Decant'], ['Quench'], { spectrum: near, charge: 10 })
+    expect(needOf(g.fight)).toBe(12)
+    expect(sealed(g.fight)).toBe(false)
+    const t = playCard(g, named('Snuff').id, 'spectrum')
+    expect(t.stage).toBe('won')
+    const c = playCard(g, named('Decant').id, 'instability')
+    expect(c.stage).toBe('won')
   })
 
   it('flares the pool at 3/8, which empties it', () => {
     let g = rigged(['Cupel', 'Digest', 'Sublime'], ['Quench'])
     g = wait(g)
     expect(g.fight.flares).toEqual([])
-    // At the first quarter the hand goes; the moon runs on through the flare to the full moon's feed and draw.
     g = wait(g)
+    // At the first quarter the hand goes; the moon runs on through the flare to the full moon's feed and draw.
     expect(g.fight.dial).toBe(8)
     expect(g.fight.flares).toEqual([7])
     expect(g.quintessence).toBe(33)
-    // Emptied by the flare, then fed again at the full moon.
     expect(poolTotal(g.fight.pool)).toBe(7)
   })
 
-  it('discards the hand at the quarter and moves on to the next draw when nothing is left', () => {
-    let g = rigged(['Cupel', 'Digest', 'Sublime', 'Decant'], ['Quench', 'Sift', 'Snuff', 'Dissolve'])
-    g = playCard(g, named('Cupel').id)
-    g = playCard(g, named('Digest').id)
-    // At the first quarter the other two go; with nothing in hand the moon runs on to the full moon's draw.
-    expect(g.fight.dial).toBe(8)
-    expect(g.fight.hand.map((c) => c.name).sort()).toEqual(['Dissolve', 'Quench', 'Sift', 'Snuff'])
-    expect(g.fight.flares).toEqual([7])
-    expect(g.fight.pool).toEqual(P({ water: 5, earth: 2 }))
-  })
-
-  it('is won once smoothing brings a big enough attack close enough', () => {
-    const g = rigged(['Snuff'], ['Quench'], { attack: P({ water: 9, earth: 6, fire: 9 }), charge: 5 })
-    expect(finishes(g.fight.attack, MUD.target)).toBe(false)
-    const t = tune(g)
-    expect(t.stage).toBe('won')
-    expect(t.fight.charge).toBe(0)
-    expect(t.fight.attack).toEqual(P({ water: 12, earth: 8, fire: 4 }))
-    expect(t.fight.dial).toBe(g.fight.dial)
+  it('makes Amplify on instability cost at the next flare', () => {
+    let g = rigged(['Dissolve', 'Cupel', 'Snuff', 'Digest'])
+    g = playCard(g, named('Dissolve').id, 'instability')
+    g = playCard(g, named('Cupel').id, 'spectrum')
+    expect(g.fight.flares).toEqual([13])
   })
 
   it('is lost when the flares take all your quintessence', () => {
@@ -149,47 +134,5 @@ describe('Mud', () => {
     expect(up.map((u) => u.phase)).toEqual(['waxing-crescent', 'first', 'waxing-gibbous', 'full'])
     expect(up.find((u) => u.attack)?.phase).toBe('waxing-gibbous')
     expect(up.find((u) => u.discard)?.phase).toBe('first')
-  })
-
-  it('refuses to smooth with no charge or nothing to fix', () => {
-    expect(() => tune(rigged(['Cupel']))).toThrow()
-    expect(() => tune(rigged(['Cupel'], [], { attack: P({ water: 12, earth: 8 }), charge: 3 }))).toThrow()
-  })
-})
-
-void (null as unknown as Card)
-
-describe('notes and chords', () => {
-  it("gives Mud a chord whose notes add up to its material", () => {
-    for (const e of ['water', 'earth', 'air', 'fire'] as const) expect(MUD.chord[e].reduce((a, b) => a + b, 0)).toBe(MUD.target[e])
-  })
-
-  it('voices what a sculptor plays by its timbre', () => {
-    expect(voicing(3, 'dark')).toEqual([2, 1, 0])
-    expect(voicing(3, 'bright')).toEqual([0, 1, 2])
-    expect(voicing(3)).toEqual([1, 1, 1])
-    const g = rigged(['Dissolve'])
-    const dark = { ...g, fight: { ...g.fight, hand: [{ ...named('Dissolve'), timbre: 'dark' as const }] } }
-    const a = playCard(dark, named('Dissolve').id)
-    expect(a.fight.voice.water).toEqual([2, 1, 0])
-    expect(a.fight.voice.earth).toEqual([2, 1, 0])
-  })
-
-  it('matches note by note when the setting asks, and smooths there too', () => {
-    const chord = MUD.chord
-    expect(noteMatch(chord, chord)).toBeCloseTo(1)
-    const v = { ...emptyVoice(), water: [1, 1, 1], earth: [1, 1, 1] }
-    // Right elements, wrong voicing: elements match 90%, notes less.
-    expect(noteMatch(v, chord)).toBeLessThan(0.9)
-    const s = smoothNotes({ ...emptyVoice(), water: [4, 4, 4], earth: [3, 3, 2], fire: [0, 0, 4] }, chord, 6)
-    expect(s.spent).toBeGreaterThan(0)
-    expect(s.voice.fire[2]).toBeLessThan(4)
-    expect(noteMatch(s.voice, chord)).toBeGreaterThan(noteMatch({ ...emptyVoice(), water: [4, 4, 4], earth: [3, 3, 2], fire: [0, 0, 4] }, chord))
-  })
-
-  it('keeps the voice in step with the attack when smoothing by element', () => {
-    const g = rigged(['Snuff'], ['Quench'], { attack: P({ water: 9, earth: 6, fire: 9 }), voice: { ...emptyVoice(), water: [3, 3, 3], earth: [2, 2, 2], fire: [3, 3, 3] }, charge: 5 })
-    const t = tune(g)
-    for (const e of ['water', 'earth', 'air', 'fire'] as const) expect(t.fight.voice[e].reduce((a, b) => a + b, 0)).toBeCloseTo(t.fight.attack[e])
   })
 })

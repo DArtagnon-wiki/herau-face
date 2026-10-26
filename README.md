@@ -4,11 +4,11 @@ A roguelike deckbuilder of runes and alchemy, built from Circumgician's world. T
 
 ## Prototype: DSP (newest)
 
-One fight, Mud, on the Circuits moon dial. Drainers (sigils inside the circuit) take instability out of the pool and charge one battery; sculptors (sigils outside) play elements into an attack. Make the material by growing the attack to its size and its shape to an 80% match, spending charge at any time to smooth the wrong elements into the missing ones. Each element is a band of sound, earth the bass to fire the treble, so a rough attack sounds rough and a matched one pure.
+One fight, Mud, on the Circuits moon dial. A material is a spectrum of twelve lines, three to an element, and Mud hands you a raw spectrum 20 from its chord. Two kinds of card, Attenuate and Amplify, each played on the instability (drain it or pour more in, for charge) or on the spectrum (lower or raise the lines furthest from the chord). Seal the work when charge reaches 10 plus the spectrum's distance from the chord: overcharge it, or tune it close and seal it cheaply. Each line is a note, so a rough spectrum sounds rough and a tuned one sounds like the material.
 
 ```sh
 npm run dev                                  # then open /dsp.html
-npx tsx scripts/dsp-sim.ts --games 1000      # Mud with four strategies
+npx tsx scripts/dsp-sim.ts --games 1000      # Mud with five strategies
 ```
 
 ## Prototype: Circuits (new direction)

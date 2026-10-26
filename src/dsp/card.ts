@@ -1,12 +1,12 @@
-// A DSP card drawn on the circuit schema: a collecting stage with its time
-// stage up to the right. Inner sigils are defense: element triangles inside
-// the stage, each with a lead to the rim, take instability from the pool, and
-// the cell below charges the battery with what they take. Outer sigils are
-// offense: element triangles outside the stage, on leads from its rim, play
-// their elements into the attack.
+// A DSP card drawn on the circuit schema: a stage with its time stage up to
+// the right, and the cell below that charges toward the seal. An Attenuate's
+// sigils are inside the stage, each with a lead to the rim: what it draws in
+// (from the pool, or out of the spectrum's lines). An Amplify's are outside,
+// on leads from the rim: what it puts out (into the pool, or into the lines).
+// Either way, each triangle carries the amount it moves of that element.
 
 import { moon, numeral, element, ELEMENT_COLOR } from '../circuits/sigils'
-import { BANDS, type Card } from './engine'
+import { type Card } from './engine'
 import type { Elemental } from '../sim/types'
 
 const LIT = 'var(--lit)'
@@ -47,7 +47,7 @@ export function batteryIcon(x: number, y: number, s: number, stroke: string, lev
 const down = (e: Elemental) => e === 'water' || e === 'earth'
 
 export interface CardArtOptions {
-  /** What playing it now would take, to light the inner sigils; omit to draw it plain. */
+  /** What an Attenuate would take from the pool now, to light its sigils; omit to draw it plain. */
   took?: Partial<Record<Elemental, number>> | null
   size?: number
 }
@@ -69,12 +69,12 @@ export function cardSvg(c: Card, opts: CardArtOptions = {}): string {
   parts.push(line(T.x + ms * 0.2, T.y + 1.5 - ms, T.x + ms * 0.2, rimTop(T.x, T.y, T.r, T.x + ms * 0.2), 'var(--moon)', 1.1))
   parts.push(moon(T.x, T.y + 1.5, ms, { stroke: 'var(--moon)' }))
 
-  const takes = BANDS.filter((e) => c.takes[e])
-  const gives = BANDS.filter((e) => c.gives[e])
+  const takes = c.kind === 'attenuate' ? c.elements : []
+  const gives = c.kind === 'amplify' ? c.elements : []
 
-  // Defense: the cell below, which charges with whatever the inner sigils take.
-  if (takes.length) {
-    const charging = !live || takes.some((e) => (opts.took![e] ?? 0) > 0)
+  // The cell below: played on instability, either kind charges toward the seal.
+  {
+    const charging = !live || gives.length > 0 || takes.some((e) => (opts.took![e] ?? 0) > 0)
     const color = live ? (charging ? LIT : DIM) : LIT
     parts.push(line(0, C.r, 0, C.r + 6, color))
     parts.push(battery(0, C.r + 13, 7, { stroke: color, width: 1.5 }))
@@ -90,7 +90,7 @@ export function cardSvg(c: Card, opts: CardArtOptions = {}): string {
     const [ox, oy] = polar(C.x, C.y, C.r + 15.5, a)
     parts.push(line(lx0, ly0, lx1, ly1, color, 1.3))
     parts.push(element(e, ox, oy, 8.5, { stroke: color, fill: 'var(--stage)', width: 1.6 }))
-    parts.push(numeral(c.gives[e]!, ox, oy + (down(e) ? -1.3 : 1.7), 7.5))
+    parts.push(numeral(c.power, ox, oy + (down(e) ? -1.3 : 1.7), 7.5))
   })
 
   // The collecting stage itself, its inner sigils in a column, each with a lead to the rim.
@@ -100,7 +100,7 @@ export function cardSvg(c: Card, opts: CardArtOptions = {}): string {
   takes.forEach((e, i) => {
     const ty = ys[i]
     const color = ELEMENT_COLOR[e]
-    const cap = c.takes[e]!
+    const cap = c.power
     const took = live ? (opts.took![e] ?? 0) : 0
     const fill = live && took ? `color-mix(in srgb, ${color} ${Math.round(25 + 60 * Math.min(1, took / cap))}%, transparent)` : 'var(--stage)'
     const stroke = live && !took ? DIM : color
@@ -110,7 +110,7 @@ export function cardSvg(c: Card, opts: CardArtOptions = {}): string {
     parts.push(numeral(cap, tx, ty + (down(e) ? -1.1 : 1.4), 7, live && !took ? 'var(--ink-faint)' : 'var(--ink)'))
   })
 
-  // One frame for every card, so drainers and sculptors sit alike in a hand.
+  // One frame for every card, so both kinds sit alike in a hand.
   const [x0, y0, w, hh] = [-27, -55, 75, 99]
   const size = opts.size ?? 96
   return `<svg class="circuit" viewBox="${x0} ${y0} ${w} ${hh}" width="${size}" height="${r2((size * hh) / w)}" aria-hidden="true">${parts.join('')}</svg>`

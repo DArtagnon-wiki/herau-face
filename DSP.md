@@ -1,21 +1,27 @@
-# DSP: offense and defense apart
+# DSP: transmuting a spectrum
 
-DSP keeps the circuit cards and the moon dial from [Circuits](CIRCUITS.md), and splits each card's job into defense or offense. In Circuits one card drained the pool and purified at once, so offense was defense too and purifiers beat everything built for defense alone. Here a card does one or the other, and the hand makes you choose.
+DSP keeps the circuit cards and the moon dial from [Circuits](CIRCUITS.md). A material is a spectrum: each element is a band of three spectral lines, and a commission hands you a raw spectrum and names the chord to transmute it into. You seal the work with charge, and the closer the tuning, the less charge the seal asks. So there are two ways to win: overcharge a rough spectrum, or tune it precisely and seal it cheaply. In a hallway fight either earns the same; later challenges can ask for high charge or precise tuning.
 
 ## The fight
 
-- **The threat.** The commission feeds instability into a pool on the moon dial. At its attack phases the pool flares for its total against your quintessence, and the flare empties it. So each flare costs only what came in since the last, at most one feed's worth, and a full-effort defense can take it to zero. Escalation is the commission's to author (a feed that grows), not the player's backlog.
-- **Defense: drainers.** Their sigils sit inside the circuit. A triangle inside takes up to its number of that element out of the pool. The cell below charges one battery, 1 for each unit taken.
-- **Offense: sculptors.** Their sigils sit outside the circuit. A triangle outside plays its number of that element into the attack.
-- **The goal is a material.** Each commission names a target profile. You make it once the attack is at least the target's size and its shape is a close enough match. The match compares shape only: the share of the attack that overlaps the target's proportions.
-- **Smoothing.** At any time, and in no time, you can spend charge to smooth the attack. Each charge moves one unit from the band furthest over the target's shape into the band most short of it, off-target noise first, as long as the move improves the match.
+- **The threat.** The commission feeds instability into a pool on the moon dial. At its attack phases the pool flares for its total against your quintessence, and the flare empties it. So each flare costs only what came in since the last, at most one feed's worth, and escalation is the commission's to author (a feed that grows), not the player's backlog.
+- **The spectrum.** Twelve lines, three to an element, low to high: earth the bass, water and air the mids, fire the treble. The distance is every line's gap from the chord, added up.
+- **The seal.** Charge must reach the seal's base (10) plus the distance. You win the moment it does.
+- **Two kinds of card, each played one of two ways.** You choose the way when you play.
+
+| | On instability | On the spectrum |
+| --- | --- | --- |
+| **Attenuate** (sigils inside: it draws in) | Takes up to 3 of each of its elements from the pool; charge rises by what it took | Lowers the line in each of its bands that stands furthest over the chord, by up to 3, stopping at the chord |
+| **Amplify** (sigils outside: it puts out) | Pours 3 of each of its elements into the pool; charge rises by 6 | Raises the line in each of its bands that stands furthest under the chord, by up to 3, stopping at the chord |
+
+- **So every card makes progress either way.** Charging raises charge; tuning lowers what charge must reach. Draining is limited by what instability there is to drain. Pouring in is risky, since it all flares unless something drains it first. Tuning is safe, and limited by how far off the spectrum is.
 - **Time.** Every card takes an eighth of the moon. You draw 4 at the new and full moons and discard your hand at the quarters.
 
 ## The opening deck
 
-Twelve cards: a drainer and a sculptor for each pair of elements. Each drainer takes up to 3 of each of its two elements, and each sculptor plays 3 of each of its two.
+Twelve cards: an Attenuate and an Amplify for each pair of elements.
 
-| Pair | Drainer | Sculptor |
+| Pair | Attenuate | Amplify |
 | --- | --- | --- |
 | Water and earth | Decant | Dissolve |
 | Water and air | Evaporate | Circulate |
@@ -26,63 +32,60 @@ Twelve cards: a drainer and a sculptor for each pair of elements. Each drainer t
 
 ## Mud
 
-Mud feeds 5 water and 2 earth at every new and full moon, and flares at 3/8 and 7/8 of the moon. Its material is 12 water to 8 earth: an attack of at least 20, at least an 80% match to that shape. You start with 40 quintessence.
+Mud feeds 5 water and 2 earth at every new and full moon, and flares at 3/8 and 7/8 of the moon. You start with 40 quintessence.
 
-Only Dissolve plays nothing but Mud's elements; the other sculptors bring air or fire, which is noise. So a mud needs both halves of the deck: sculptors for size, drainers for charge to smooth the noise away, and drainers again to keep the flares small.
+| Band | Raw spectrum, low to high | Chord of mud |
+| --- | --- | --- |
+| Earth | 2, 3, 3 | 5, 2, 1 |
+| Water | 5, 2, 2 | 3, 6, 3 |
+| Air | 2, 2, 0 | 0, 0, 0 |
+| Fire | 0, 1, 2 | 0, 0, 0 |
+
+The raw spectrum is 20 from the chord, so the seal starts at 30. Its earth is too bright, its water too low in the middle, and air and fire hiss where mud has none. The air and fire Attenuates can't drain Mud's pool, which holds only water and earth, but they are the cards that clear that hiss.
 
 ## Sound
 
-Each element is a band of three notes, all harmonics of one root (A, 55 Hz), together one A major sonority:
+Each line is a note, a harmonic of one root (A, 55 Hz), together one A major sonority:
 
-| Band | Element | Notes (Hz) |
+| Band | Element | Lines (Hz) |
 | --- | --- | --- |
 | Bass | Earth | 110, 165, 220 |
 | Low mid | Water | 275, 330, 440 |
 | High mid | Air | 550, 660, 825 |
 | Treble | Fire | 1320, 1650, 1980 |
 
-**Each material is its own chord:** how strongly it sounds each note. Mud's earth leans on its lowest note (5, 2, 1) and its water on the middle one (3, 6, 3); each element's notes add up to its share of the material. The chord is the material's voice. Play still matches elements only.
-
-The attack is voiced through the material's chord, each band as loud as its share of the attack, so an attack that matches sounds exactly like the material. A band the material lacks sounds its three notes evenly. A band holding more than the material's share gets detuned twins that beat against its notes, slow in the bass and harsh in the treble. The whole tone shudders and hisses as far as the shape is from the material's. Smoothing glides from the rough sound to the smoothed one; "Hear mud" in the menu plays the chord itself. The spectrum panel draws the same thing: each band's share of the attack against the material's outline, the chord's notes standing inside it as note heads, and noise ringed in red.
+Each line sounds as loud as its share of the spectrum, so a material's chord is its own voice, and a spectrum tuned to it sounds exactly like it. Each line standing above the chord gets a detuned twin that beats against it, slow in the bass and harsh in the treble, and the whole tone shudders and hisses in proportion to the distance. A tuning glides from the old sound to the new one; "Hear mud" in the menu plays the chord itself. The spectrum panel draws the same: each line in its element's colour up to the chord, a gilt bar and note head at the chord, excess ringed in red, missing amplitude dashed.
 
 ## First numbers
 
 `scripts/dsp-sim.ts` plays Mud 1000 times with each strategy (the lookahead 400):
 
-| Strategy | Won | Flares, 1st to 4th | Quintessence left, when won | Flares a fight | Cards played | Moons | Charge spent smoothing | Match before the last smoothing |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Random cards | 88% | 4.7, 4.7, 4.6, 4.7 | 22.7 | 4.3 | 10.0 | 2.32 | 10.5 | 51% |
-| Sculptors first | 7% | 6.2, 6.3, 6.3, 6.3 | 27.1 | 6.5 | 13.1 | 3.13 | 6.4 | 60% |
-| Drainers first | 64% | 3.2, 3.3, 3.2, 3.2 | 10.3 | 10.9 | 23.0 | 5.54 | 11.9 | 50% |
-| Lookahead | 100% | 4.1, 4.1, 4.3, 3.7 | 25.8 | 3.5 | 7.9 | 1.85 | 9.2 | 55% |
+| Strategy | Won | Flares, 1st to 4th | Quintessence left, when won | Cards played | Moons | At the seal: charge, distance | Plays: drain, pour in, lower, raise, wasted |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Random | 82% | 8.9, 8.6, 8.6, 7.8 | 9.8 | 9.0 | 1.96 | 20.4, 8.6 | 20%, 25%, 24%, 18%, 13% |
+| Charger: every card on instability | 100% | 5.6, 5.8, 5.7, 4.1 | 19.7 | 9.2 | 1.97 | 31.8, 20.0 | 73%, 23%, 0%, 0%, 5% |
+| Tuner: every card on the spectrum when it tunes anything | 79% | 7.0, 7.1, 7.1, 7.9 | 8.3 | 10.5 | 2.34 | 12.4, 0.2 | 9%, 13%, 43%, 34%, 2% |
+| Greedy: most progress now, the pool counted | 100% | 3.2, 3.3, 3.3, 3.2 | 27.4 | 9.2 | 1.99 | 19.4, 8.1 | 65%, 1%, 16%, 19%, 0% |
+| Lookahead | 100% | 5.9, 5.2, 3.5 | 26.8 | 7.0 | 1.40 | 24.6, 13.1 | 46%, 29%, 13%, 11%, 0% |
 
-- **The threat is flat.** Each flare is about the same size from the first to the fourth. When the pool stayed between flares, they grew with the backlog: 4.1, 7.8 and 11.4 for the lookahead, which lost 23 quintessence a Mud against 14 now.
-- **Neither half wins alone, but defense is a plan now.** Sculptors first still wins only 7%, because without charge it can't smooth the noise. Drainers first wins 64%, up from 2%.
-- **A mixed hand wins with room to spare.** The lookahead player wins every time and keeps about 26 of 40. Its playouts run on the real draw pile, so it knows the cards to come: take it as a ceiling.
-- **A won Mud takes about 8 cards over 1.85 moons and 3.5 flares,** spending about 9 charge to lift the match from the mid 50s past 80%.
-- **Charge works both ways.** Offense protects you by finishing sooner, which skips flares; defense powers offense, since drained instability becomes the charge that finishes the material.
-
-## Does note-level shape earn its place?
-
-`scripts/dsp-timbre.ts` plays Mud with three chords of the same material (12 water to 8 earth, voiced dark, even or bright within each band) under three rules: the match on elements (the game now); on notes with every sculptor spreading its elements evenly over a band; and on notes with sculptor timbres (Circulate and Coagulate dark, Digest and Sublime bright, Dissolve and Cupel even; dark plays each 3 units as 2, 1, 0 low to high, bright as 0, 1, 2). The lookahead plays 150 games of each. Whenever two or more sculptors are in hand, it judges which fits best, by the charge the attack would still need to reach the match, and checks whether another chord would pick a different one. (The lookahead's own moves can't answer this: 63% of them change with nothing but a reshuffle of its playouts, since most moves come out nearly tied.)
-
-| Rule | Bar | Best-fitting sculptor depends on the chord | Extra charge the wrong one costs | Charge spent a win | Quintessence left |
-| --- | --- | --- | --- | --- | --- |
-| Match on elements (now) | 80% | 0% | 0 | 9.2 | 25.8 |
-| Notes, spread evenly | 80% | 4 to 5% | 0 to 1.1 | 9.2 to 10.1 | 25.7 to 25.8 |
-| Notes, timbres | 80% | 31 to 32% | 0.5 to 1.3 | 9.4 to 10.3 | 25.6 to 26.0 |
-| Notes, spread evenly | 90% | 16 to 18% | 0.3 to 1.9 | 10.2 to 11.2 | 25.1 to 25.5 |
-| Notes, timbres | 90% | 30 to 34% | 0.8 to 1.5 | 10.4 to 11.3 | 24.9 to 25.3 |
-
-- **Timbres make a real choice.** In about a third of hands with two or more sculptors, which one fits best depends on the material's chord. Spreading evenly barely does (4 to 5%), and matching on elements never can.
-- **But it is worth about one charge.** Playing another chord's best fit costs about 1 more charge, against about 10 spent smoothing a win, so outcomes hardly move: the lookahead still wins every game with about 25 left, and note-level matching costs it about one more charge a fight. A 90% bar adds a charge and a quintessence, not much more.
-- **So shape stays a voice for now.** Note-level matching and timbres are in the engine behind settings (`match: 'notes'`, `Card.timbre`, `bar`), ready for when charge is scarcer, chords are sharper, or timbres differ more, any of which would raise the stakes.
+- **Both pure styles win.** Charging every card wins every Mud without tuning at all (sealing at 32 charge, distance still 20). Tuning every card wins 79%, sealing at 12 charge against a near-perfect chord.
+- **But draining is the strongest single play.** It charges and defends at once, so the charger keeps about 20 quintessence and the tuner about 8: tuning makes progress but leaves the pool to flare.
+- **Mixing does best.** The greedy and lookahead players keep about 27 of 40. The lookahead pours instability in on 29% of its plays and drains it back, finishing in 1.4 moons; the greedy player drains and tunes, and takes two moons with smaller flares.
 
 ## Prototype
 
-`dsp.html` (built to `dist/dsp.html` and `dist/dsp-artifact.html`) plays Mud on one screen: the dial with the pool and flares, the spectrum with the match, the size and the battery, the hand, and a note that explains whatever is picked. Picking a card or the battery shows the result as a ghost before you commit. Tap the spectrum to hear the attack.
+`dsp.html` (built to `dist/dsp.html` and `dist/dsp-artifact.html`) plays Mud on one screen: the dial with the pool, the flares and the charge toward the seal; the spectrum with the seal's charge and need; the hand; and a note that explains whatever is picked. Pick a card and both ways to play it show at once: the dial and the charge show it on instability, the spectrum and the seal show it on the spectrum; the two buttons say what each does. Tap the spectrum to hear it.
 
 ```
 npm run dev                                  # then open /dsp.html
 npx tsx scripts/dsp-sim.ts --games 1000      # the strategies above
 ```
+
+## Earlier versions
+
+The first DSP (in git history up to commit 4dc73e0) split cards into drainers (defense, charging a battery) and sculptors (offense, playing elements into an attack). The attack had to reach the material's size and an 80% match to its element shape, and charge smoothed it, moving a unit of the wrong element into the most-missing one.
+
+- **Flares that keep the pool run away.** Unanswered instability was paid at every flare after it, so flares grew 4, 8, 11 for the best player, who lost 23 quintessence a Mud. Emptying the pool at each flare held them near 4 and cut the loss to 14; drainers-first went from 2% to 64% wins. That rule carries over.
+- **Neither half won alone.** Sculptors-first won 7%, since without charge it couldn't smooth the noise.
+- **Materials became chords.** Each element's band held three notes, and each material its own chord, at first as its voice only.
+- **Note-level shape was a real choice, but a cheap one.** With sculptor timbres and matching note by note, the best-fitting sculptor depended on the chord in about a third of hands, but the wrong pick cost only about one charge of ten. That pointed toward the spectrum lines here: definite targets you push from both sides.

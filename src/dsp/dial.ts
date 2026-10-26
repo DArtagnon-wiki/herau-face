@@ -3,13 +3,14 @@
 // each phase brings marked outside it: a star where the commission feeds, a
 // red star where it flares, a card where you draw, a struck card where you
 // discard. The next flare carries a badge with what would flare now. In the
-// middle, the pool, one triangle per element. The inner ring fills with the
-// attack's size against the material's. A picked card shows as a ghost: where
-// the needle would land, what the pool would lose, how far the size would reach.
+// middle, the pool, one triangle per element. The inner ring fills with charge
+// toward what the seal needs, which is also the number in the middle. A picked
+// play shows as a ghost: where the needle would land, what the pool would lose
+// or gain, how far the ring would reach.
 
 import { DISCARD_PHASES, DRAW_PHASES, PHASE_CYCLE, PHASES } from '../circuits/engine'
 import { ELEMENT_COLOR, card as cardSig, element, moon, numeral, quintessence } from '../circuits/sigils'
-import { ELEMENTS, TICKS, poolTotal, threatOf, upcoming, type Fight, type Phase, type Pool } from './engine'
+import { ELEMENTS, TICKS, needOf, threatOf, upcoming, type Fight, type Phase, type Pool } from './engine'
 
 const rad = (deg: number) => (deg * Math.PI) / 180
 const angleOf = (pos: number) => -90 + ((pos % TICKS) * 360) / TICKS
@@ -40,18 +41,19 @@ function progressArc(r: number, from: number, to: number, stroke: string, width:
 
 export interface DialPreview {
   dial: number
-  /** The attack's size after the move. */
-  size: number
-  /** What the picked card would take from the pool, by element. */
-  drain: Pool
+  /** Charge, and what the seal needs, after the play. */
+  charge: number
+  need: number
+  /** What the play would do to the pool, by element: taken is negative, added positive. */
+  delta: Pool
 }
 
 export function dialSvg(f: Fight, preview?: DialPreview | null, flareFx = false): string {
   const parts: string[] = []
   const R = 136
   const c = f.commission
-  const need = poolTotal(c.target)
-  const size = poolTotal(f.attack)
+  const need = needOf(f)
+  const charge = f.charge
   parts.push(`<circle r="${R}" fill="var(--well)" stroke="var(--line)" stroke-opacity="0.55" stroke-width="1.3"/>`)
   for (let i = 0; i < TICKS * 2; i++) {
     const a = rad(-90 + (i * 360) / (TICKS * 2))
@@ -90,11 +92,11 @@ export function dialSvg(f: Fight, preview?: DialPreview | null, flareFx = false)
       parts.push(`<g class="threat${flareFx ? ' hit' : ''}"><circle cx="${r2(bx + off[0])}" cy="${r2(by + off[1])}" r="10.5" fill="var(--fire)"/><text x="${r2(bx + off[0])}" y="${r2(by + off[1] + 0.8)}" font-size="12.5" text-anchor="middle" dominant-baseline="central" class="badge-num" fill="var(--night)">${threat}</text></g>`)
     }
   })
-  // The attack's size against the material's.
+  // Charge toward the seal.
   const pr = 114
-  const frac = Math.min(1, size / need)
+  const frac = Math.min(1, charge / need)
   parts.push(`<circle r="${pr}" fill="none" stroke="var(--line)" stroke-opacity="0.16" stroke-width="8"/>`)
-  if (preview) parts.push(progressArc(pr, frac, Math.min(1, preview.size / need), 'var(--ghost)', 8))
+  if (preview) parts.push(progressArc(pr, frac, Math.min(1, preview.charge / preview.need), 'var(--ghost)', 8))
   parts.push(progressArc(pr, 0, frac, 'var(--lit)', 8))
   if (preview && preview.dial !== f.dial) {
     const [gx, gy] = at(preview.dial, R)
@@ -116,12 +118,13 @@ export function dialSvg(f: Fight, preview?: DialPreview | null, flareFx = false)
     const down = e === 'water' || e === 'earth'
     parts.push(element(e, x, y, 25, { stroke: n ? color : 'var(--dim)', fill, width: 2 }))
     parts.push(numeral(n, x, y + (down ? -4 : 6), 21, n ? 'var(--ink)' : 'var(--ink-faint)'))
-    if (preview?.drain[e]) parts.push(numeral(`−${preview.drain[e]}`, x + (x < 0 ? -33 : 33), y + (down ? -4 : 6), 14, 'var(--lit)'))
+    const d = preview?.delta[e] ?? 0
+    if (d) parts.push(numeral(d < 0 ? `−${-d}` : `+${d}`, x + (x < 0 ? -33 : 33), y + (down ? -4 : 6), 14, d < 0 ? 'var(--lit)' : 'var(--warn)'))
     if (feed[e]) parts.push(numeral(`+${feed[e]}`, x, down ? y + 33 : y - 32, 11, 'var(--ink-faint)'))
   }
-  parts.push(numeral(preview ? preview.size : size, 0, -4, 22, preview ? 'var(--lit)' : 'var(--ink)'))
-  parts.push(numeral(`/${need}`, 0, 15, 11, 'var(--ink-faint)'))
-  return `<svg class="dial${flareFx ? ' flared' : ''}" viewBox="-182 -182 364 364" role="img" aria-label="Moon dial: attack ${size} of ${need}; pool ${ELEMENTS.map((e) => `${f.pool[e]} ${e}`).join(', ')}">${parts.join('')}</svg>`
+  parts.push(numeral(preview ? preview.charge : charge, 0, -4, 22, preview ? 'var(--lit)' : 'var(--ink)'))
+  parts.push(numeral(`/${preview ? preview.need : need}`, 0, 15, 11, preview ? 'var(--lit)' : 'var(--ink-faint)'))
+  return `<svg class="dial${flareFx ? ' flared' : ''}" viewBox="-182 -182 364 364" role="img" aria-label="Moon dial: charge ${charge} of ${need} to seal; pool ${ELEMENTS.map((e) => `${f.pool[e]} ${e}`).join(', ')}">${parts.join('')}</svg>`
 }
 
 export const waitIcon = () => `<svg class="sig" viewBox="-12 -12 24 24" width="18" height="18" aria-hidden="true">${moon(0, 0, 8, { stroke: 'var(--moon)' })}</svg>`
