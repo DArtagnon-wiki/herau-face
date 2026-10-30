@@ -3,14 +3,14 @@
 // each phase brings marked outside it: a star where the commission feeds, a
 // red star where it flares, a card where you draw, a struck card where you
 // discard. The next flare carries a badge with what would flare now. In the
-// middle, the pool, one triangle per element, and Ward under it. The inner
+// middle, the pool, one triangle per element. The inner
 // ring fills as the spectrum closes on the chord: the number in the middle is
 // how much of the starting distance is closed. A picked card shows as a ghost:
 // where the needle would land, what the pool would lose to a drain, how far the
-// ring would reach on the spectrum.
+// ring would reach.
 
 import { DISCARD_PHASES, DRAW_PHASES, PHASE_CYCLE, PHASES } from '../circuits/engine'
-import { ELEMENT_COLOR, card as cardSig, element, moon, numeral, quintessence, ward as wardSig } from '../circuits/sigils'
+import { ELEMENT_COLOR, card as cardSig, element, moon, numeral, quintessence } from '../circuits/sigils'
 import { ELEMENTS, TICKS, distance, distanceOf, threatOf, upcoming, type Fight, type Phase, type Pool } from './engine'
 
 const rad = (deg: number) => (deg * Math.PI) / 180
@@ -42,12 +42,10 @@ function progressArc(r: number, from: number, to: number, stroke: string, width:
 
 export interface DialPreview {
   dial: number
-  /** The distance after the card is played on the spectrum. */
+  /** The distance after the play. */
   distance: number
   /** What a drain would take from the pool, by element (negative). */
   delta: Pool
-  /** Ward after the card raises it, if it can. */
-  ward: number
 }
 
 export function dialSvg(f: Fight, preview?: DialPreview | null, flareFx = false): string {
@@ -125,15 +123,9 @@ export function dialSvg(f: Fight, preview?: DialPreview | null, flareFx = false)
     if (feed[e]) parts.push(numeral(`+${feed[e]}`, x, down ? y + 33 : y - 32, 11, 'var(--ink-faint)'))
   }
   const shown = preview ? start - preview.distance : closed
-  parts.push(numeral(shown, 0, -4, 22, preview && shown !== closed ? 'var(--lit)' : 'var(--ink)'))
+  parts.push(numeral(Math.max(0, shown), 0, -4, 22, preview && shown > closed ? 'var(--lit)' : preview && shown < closed ? 'var(--warn)' : 'var(--ink)'))
   parts.push(numeral(`/${start}`, 0, 15, 11, 'var(--ink-faint)'))
-  // Ward, under the pool, when there is any or a play would raise it.
-  const wardShown = preview && preview.ward !== f.ward ? preview.ward : f.ward
-  if (wardShown) {
-    parts.push(wardSig(-9, 78, 10, { stroke: 'var(--glass)', fill: 'color-mix(in srgb, var(--glass) 18%, transparent)', width: 1.6 }))
-    parts.push(numeral(wardShown, 11, 79, 16, wardShown !== f.ward ? 'var(--lit)' : 'var(--ink)'))
-  }
-  return `<svg class="dial${flareFx ? ' flared' : ''}" viewBox="-182 -182 364 364" role="img" aria-label="Moon dial: ${closed} of ${start} closed; Ward ${f.ward}; pool ${ELEMENTS.map((e) => `${f.pool[e]} ${e}`).join(', ')}">${parts.join('')}</svg>`
+  return `<svg class="dial${flareFx ? ' flared' : ''}" viewBox="-182 -182 364 364" role="img" aria-label="Moon dial: ${closed} of ${start} closed; pool ${ELEMENTS.map((e) => `${f.pool[e]} ${e}`).join(', ')}">${parts.join('')}</svg>`
 }
 
 export const waitIcon = () => `<svg class="sig" viewBox="-12 -12 24 24" width="18" height="18" aria-hidden="true">${moon(0, 0, 8, { stroke: 'var(--moon)' })}</svg>`

@@ -1,20 +1,22 @@
 // DSP: a material is a spectrum. Each element is a band of three spectral
 // lines, harmonics of one root (earth the bass, water and air the mids, fire
-// the treble); the commission hands you a raw spectrum and names the chord to
-// transmute it into. It also feeds instability into a pool on the moon dial,
-// and the pool flares against your quintessence; a flare discharges the pool.
+// the treble), twelve lines in all, low to high. The commission hands you a raw
+// spectrum and names the chord to transmute it into; the work is done when the
+// spectrum is within the commission's tolerance of the chord (Mud: 2). It also
+// feeds instability into a pool on
+// the moon dial, and the pool flares against your quintessence; a flare
+// discharges the pool.
 //
-// Two kinds of card, each played one of two ways:
-// - Attenuate: drain the incoming flare, taking its elements out of the pool,
-//   and charge rises by what it took; or lower the line in each of its bands
-//   that stands furthest over the chord.
-// - Amplify: spend charge to raise Ward, which catches flares; or raise the
-//   line in each of its bands that stands furthest under the chord.
-//
-// The transmutation is done when the spectrum matches the chord exactly:
-// every line's gap from it, added up (the distance), is zero. So the spectrum
-// is offense, and charge and Ward are defense: Attenuate turns the flare
-// coming now into charge, and Amplify turns charge into Ward for the next.
+// Three kinds of card:
+// - Drains take their elements out of the pool before it flares, and bank
+//   what they take as charge of that element. Charge keeps through the fight.
+// - Attacks are kernels: a short row of taps, each an operation on the line
+//   beneath it (+3 adds 3, −1 takes 1 away, ×⅓ cuts to a third). You line a
+//   kernel up on the spectrum, and every tap works on its own line. Amplitudes
+//   stay whole (fractions drop) and never go below zero.
+// - Powers stay in play once played, and draw on their element's charge; with
+//   none left a power goes quiet until charge returns. Resonance makes every
+//   attack one step stronger, for one charge of its element an attack.
 // See DSP.md.
 
 import { makeRng } from '../sim/rng'
@@ -28,13 +30,11 @@ export const BANDS: Elemental[] = ['earth', 'water', 'air', 'fire']
 
 /** An eighth of the moon, the time every card takes. */
 export const EIGHTH = 2
-/** What a card moves of each of its elements, in either mode. */
-export const POWER = 3
-/** Ward raised for each charge an Amplify spends. */
-export const WARD_PER_CHARGE = 1
+/** What a drain takes of each of its elements. */
+export const DRAIN = 3
 
 // ---------------------------------------------------------------------------
-// The spectrum: three lines per element
+// The spectrum: twelve lines, three per element
 
 /** The root every line is a harmonic of: A1. */
 export const ROOT_HZ = 55
@@ -45,6 +45,7 @@ export const ROOT_HZ = 55
  */
 export const NOTE_HARMONICS: Record<Elemental, number[]> = { earth: [2, 3, 4], water: [5, 6, 8], air: [10, 12, 15], fire: [24, 30, 36] }
 export const LINE_NAMES = ['low', 'middle', 'high']
+export const LINES = 12
 /** A spectrum: each element's three line amplitudes, low to high. */
 export type Spectrum = Record<Elemental, number[]>
 export const emptySpectrum = (): Spectrum => ({ water: [0, 0, 0], earth: [0, 0, 0], air: [0, 0, 0], fire: [0, 0, 0] })
@@ -52,45 +53,71 @@ export const copySpectrum = (s: Spectrum): Spectrum => ({ water: s.water.slice()
 export const spectrumTotal = (s: Spectrum) => ELEMENTS.reduce((n, e) => n + s[e][0] + s[e][1] + s[e][2], 0)
 /** How far a spectrum is from a chord: every line's gap, added up. */
 export const distanceOf = (s: Spectrum, chord: Spectrum) => ELEMENTS.reduce((n, e) => n + [0, 1, 2].reduce((m, i) => m + Math.abs(s[e][i] - chord[e][i]), 0), 0)
+/** Line k of twelve, low to high: its element and which of the element's three lines. */
+export const lineAt = (k: number): { element: Elemental; i: number } => ({ element: BANDS[Math.floor(k / 3)], i: k % 3 })
+export const lineName = (k: number) => `${lineAt(k).element} ${LINE_NAMES[lineAt(k).i]}`
 
 // ---------------------------------------------------------------------------
 // Cards
 
-export type Kind = 'attenuate' | 'amplify'
-/** The ways to play a card: on the spectrum (either kind), draining the pool (Attenuate), raising Ward (Amplify). */
-export type Mode = 'spectrum' | 'drain' | 'ward'
-export const modesOf = (c: Card): Mode[] => (c.kind === 'attenuate' ? ['drain', 'spectrum'] : ['ward', 'spectrum'])
+/** One tap of a kernel: add (or take away) a number, or multiply. */
+export type Tap = { op: 'add'; v: number } | { op: 'times'; v: number }
 
-export interface Card {
+export interface DrainCard {
   id: number
   name: string
-  kind: Kind
-  /** Its elements: the pool's elements it works on, and the bands of the spectrum it works in. */
+  kind: 'drain'
   elements: Elemental[]
-  /** What it moves of each element. */
-  power: number
-  /** Time on the dial, in ticks. */
   time: number
 }
-
-type Pair = [Elemental, Elemental]
-const PAIRS: Pair[] = [
-  ['water', 'earth'],
-  ['water', 'air'],
-  ['water', 'fire'],
-  ['earth', 'air'],
-  ['earth', 'fire'],
-  ['air', 'fire'],
-]
-const ATTENUATE_NAMES = ['Decant', 'Evaporate', 'Quench', 'Sift', 'Smother', 'Snuff']
-const AMPLIFY_NAMES = ['Dissolve', 'Circulate', 'Digest', 'Sublime', 'Coagulate', 'Cupel']
-
-/** The opening deck: an Attenuate and an Amplify for each pair of elements. */
-export function startingDeck(): Card[] {
-  const att = PAIRS.map((pair, i): Card => ({ id: i + 1, name: ATTENUATE_NAMES[i], kind: 'attenuate', elements: pair, power: POWER, time: EIGHTH }))
-  const amp = PAIRS.map((pair, i): Card => ({ id: i + 7, name: AMPLIFY_NAMES[i], kind: 'amplify', elements: pair, power: POWER, time: EIGHTH }))
-  return [...att, ...amp]
+export interface AttackCard {
+  id: number
+  name: string
+  kind: 'attack'
+  kernel: Tap[]
+  /** The tap you line up on the line you pick. */
+  anchor: number
+  time: number
 }
+export interface PowerCard {
+  id: number
+  name: string
+  kind: 'power'
+  /** The element whose charge it draws on. */
+  element: Elemental
+  /** What it does while it has charge: Resonance makes every attack one step stronger. */
+  effect: 'resonance'
+  time: number
+}
+export type Card = DrainCard | AttackCard | PowerCard
+
+const add = (v: number): Tap => ({ op: 'add', v })
+const times = (v: number): Tap => ({ op: 'times', v })
+
+/** The opening deck: five drains, six attacks, and a power. */
+export function startingDeck(): Card[] {
+  const drain = (id: number, name: string, elements: Elemental[]): DrainCard => ({ id, name, kind: 'drain', elements, time: EIGHTH })
+  const attack = (id: number, name: string, kernel: Tap[], anchor: number): AttackCard => ({ id, name, kind: 'attack', kernel, anchor, time: EIGHTH })
+  return [
+    drain(1, 'Decant', ['water', 'earth']),
+    drain(2, 'Evaporate', ['water']),
+    drain(3, 'Quench', ['water']),
+    drain(4, 'Sift', ['earth']),
+    drain(5, 'Smother', ['earth']),
+    attack(6, 'Sharpen', [add(-1), add(3), add(-1)], 1),
+    attack(7, 'Sharpen', [add(-1), add(3), add(-1)], 1),
+    attack(8, 'Lift', [add(2), add(2)], 0),
+    attack(9, 'Lift', [add(2), add(2)], 0),
+    attack(10, 'Cut', [add(-2), add(-2)], 0),
+    attack(11, 'Damp', [times(1 / 3), times(1 / 3), times(1 / 3)], 1),
+    { id: 12, name: 'Resonance of water', kind: 'power', element: 'water', effect: 'resonance', time: EIGHTH },
+  ]
+}
+
+/** A tap one step stronger: adds and takes away 1 more, a cut cuts deeper (×⅓ to ×¼). */
+export const boostTap = (t: Tap): Tap => (t.op === 'add' ? add(t.v > 0 ? t.v + 1 : t.v - 1) : times(t.v < 1 ? t.v / (1 + t.v) : t.v + 1))
+const third = (v: number) => (Math.abs(v - 1 / 3) < 1e-9 ? '⅓' : Math.abs(v - 1 / 4) < 1e-9 ? '¼' : Math.abs(v - 1 / 2) < 1e-9 ? '½' : String(Math.round(v * 100) / 100))
+export const tapWords = (t: Tap) => (t.op === 'add' ? (t.v > 0 ? `+${t.v}` : `−${-t.v}`) : `×${third(t.v)}`)
 
 // ---------------------------------------------------------------------------
 // Commissions
@@ -101,8 +128,10 @@ export interface Commission {
   blurb: string
   /** The raw material: the spectrum you start from. */
   start: Spectrum
-  /** The material to make: the chord the spectrum must match exactly. */
+  /** The material to make: the chord the spectrum must match. */
   chord: Spectrum
+  /** How close counts as a match: the distance at or under which the work is done (0 is exact). */
+  tolerance: number
   /** Instability fed into the pool in one bulk at each feeding phase. */
   feed: Partial<Pool>
   feedAt: Phase[]
@@ -113,11 +142,12 @@ export interface Commission {
 export const MUD: Commission = {
   key: 'mud',
   name: 'Mud',
-  blurb: 'Feeds 5 water and 2 earth at every new and full moon, and flares at 3/8 and 7/8 of the moon. Its raw spectrum is 20 from the chord of mud; match it exactly.',
+  blurb: 'Feeds 5 water and 2 earth at every new and full moon, and flares at 3/8 and 7/8 of the moon. Its raw spectrum is 20 from the chord of mud; bring it within 2.',
   // Earth too bright, water too low in the middle, and a hiss of air and fire.
   start: { earth: [2, 3, 3], water: [5, 2, 2], air: [2, 2, 0], fire: [0, 1, 2] },
   // Earth leaning on its lowest line, water on its middle one.
   chord: { earth: [5, 2, 1], water: [3, 6, 3], air: [0, 0, 0], fire: [0, 0, 0] },
+  tolerance: 2,
   feed: { water: 5, earth: 2 },
   feedAt: ['new', 'full'],
   attacks: ['waxing-gibbous', 'waning-crescent'],
@@ -132,6 +162,8 @@ export interface Settings {
   stock: number
   /** How many you draw at each new and full moon. */
   hand: number
+  /** How close counts as a match, for experiments; the commission's tolerance when not given. */
+  tolerance?: number
   /** What a flare does to the pool: it empties (the rule), or, for experiments, stays or keeps half. */
   flare?: 'stays' | 'empties' | 'halves'
 }
@@ -143,10 +175,10 @@ export interface Fight {
   pool: Pool
   /** The material's spectrum as it stands. */
   spectrum: Spectrum
-  /** Charge, from draining; Amplify spends it on Ward. */
-  charge: number
-  /** Ward: it catches flares before they reach your quintessence, and stays until used. */
-  ward: number
+  /** Charge, by element: drains bank it, powers draw on it. */
+  charge: Pool
+  /** Powers in play. */
+  powers: PowerCard[]
   hand: Card[]
   draw: Card[]
   discard: Card[]
@@ -176,8 +208,8 @@ export function newGame(seed = Date.now(), settings: Settings = DEFAULT_SETTINGS
     dial: 0,
     pool: emptyPool(),
     spectrum: copySpectrum(commission.start),
-    charge: 0,
-    ward: 0,
+    charge: emptyPool(),
+    powers: [],
     hand: [],
     draw: rng.shuffle(deck),
     discard: [],
@@ -205,7 +237,7 @@ function drawCards(g: Game, n: number): Game {
   return { ...g, seed: rng.state(), fight: { ...g.fight, hand, draw, discard } }
 }
 
-const pairWords = (p: Partial<Pool>) => BANDS.filter((e) => p[e]).map((e) => `${p[e]} ${e}`).join(' and ') || 'nothing'
+const poolWords = (p: Partial<Pool>) => BANDS.filter((e) => p[e]).map((e) => `${p[e]} ${e}`).join(' and ') || 'nothing'
 
 /** What happens at a phase: the pool flares, the commission feeds, you discard at the quarters and draw at the new and full moons. */
 function phaseEvents(g: Game, pos: number, opening = false): Game {
@@ -216,22 +248,19 @@ function phaseEvents(g: Game, pos: number, opening = false): Game {
   let paid = 0
   if (!opening && c.attacks.includes(phase)) {
     const flare = poolTotal(f.pool)
-    const caught = Math.min(f.ward, flare)
-    paid = flare - caught
-    f.ward -= caught
+    paid = flare
     f.flares = [...f.flares, flare]
     f.paid += paid
-    // A flare discharges the pool: Ward catches what it can, the rest costs quintessence, and the pool empties
-    // (experiments can keep it, or half).
+    // A flare discharges the pool: it costs what is in it, and the pool empties (experiments can keep it, or half).
     const rule = g.settings.flare ?? 'empties'
     if (rule === 'empties') f.pool = emptyPool()
     if (rule === 'halves') for (const e of ELEMENTS) f.pool[e] = Math.floor(f.pool[e] / 2)
-    notes.push(flare ? `${c.name} flares ${flare}${caught ? `, Ward catches ${caught}` : ''}${paid ? `: pay ${paid}` : ''}` : `${c.name} flares, but the pool is empty`)
+    notes.push(flare ? `${c.name} flares: pay ${flare}` : `${c.name} flares, but the pool is empty`)
   }
   if (opening || c.feedAt.includes(phase)) {
     const feed = feedOf(c)
     for (const e of ELEMENTS) f.pool[e] += feed[e]
-    notes.push(`${c.name} feeds ${pairWords(feed)}`)
+    notes.push(`${c.name} feeds ${poolWords(feed)}`)
   }
   if (!opening && DISCARD_PHASES.includes(phase) && f.hand.length) {
     notes.push(`you discard ${f.hand.length}`)
@@ -256,9 +285,9 @@ function advance(g: Game, ticks: number): Game {
   return next
 }
 
-/** Matched: the spectrum is the chord, line for line. */
-export const matched = (f: Fight) => distance(f) === 0
-const check = (g: Game): Game => (g.stage === 'fight' && matched(g.fight) ? { ...g, stage: 'won' } : g)
+/** Matched: the spectrum is within the commission's tolerance of the chord (or an experiment's). */
+export const matched = (f: Fight, tolerance = f.commission.tolerance) => distance(f) <= tolerance
+const check = (g: Game): Game => (g.stage === 'fight' && matched(g.fight, g.settings.tolerance ?? g.fight.commission.tolerance) ? { ...g, stage: 'won' } : g)
 
 /** With no cards in hand, the moon moves on by itself to the next draw. */
 function settle(g: Game): Game {
@@ -270,93 +299,112 @@ function settle(g: Game): Game {
   return next
 }
 
-/** A line a spectrum play moves: which, and by how much (down is negative). */
+/** A line an attack moves. */
 export interface LineMove {
-  element: Elemental
   line: number
   from: number
   to: number
 }
 
-/** What a card would do, played one way, now. */
+/** What a card would do now (an attack, lined up on a line). */
 export interface Effect {
   /** Taken from the pool by a drain, by element. */
   took: Pool
-  /** Charge it raises (a drain) or spends (Ward, negative). */
-  charge: number
-  /** Ward it raises. */
-  ward: number
-  /** The lines it moves (spectrum plays). */
+  /** Charge by element: banked by a drain (positive), spent by powers (negative). */
+  charge: Pool
+  /** The kernel as it lands, after any power has strengthened it. */
+  kernel: Tap[]
+  /** Powers that strengthened it. */
+  boosted: PowerCard[]
+  /** The lines it moves, and the spectrum after. */
   moves: LineMove[]
-  /** The spectrum after. */
   spectrum: Spectrum
 }
 
+/** The lines a kernel covers when lined up on a line: the lines under each tap, off the ends included as null. */
+export const footprint = (c: AttackCard, line: number): (number | null)[] => c.kernel.map((_, j) => {
+  const k = line - c.anchor + j
+  return k >= 0 && k < LINES ? k : null
+})
+
+/** Powers that would work now: in play, with charge of their element left. */
+export const livePowers = (f: Fight) => f.powers.filter((p) => f.charge[p.element] > 0)
+
 /**
- * What a card does played one way. A drain (Attenuate) takes up to its power
- * of each of its elements from the pool, and charge rises by what it took.
- * Ward (Amplify) spends up to its power for each of its elements in charge,
- * and raises that much Ward. On the spectrum, each of its bands has its line
- * furthest from the chord in the card's direction moved toward the chord by up
- * to its power, stopping at the chord.
+ * What a card does now. A drain takes up to 3 of each of its elements from
+ * the pool and banks it as that element's charge. An attack, lined up so its
+ * anchor tap sits on the line given, works every tap on its own line; each
+ * live Resonance makes every tap one step stronger, for one charge of its
+ * element. A power does nothing at once: it goes into play.
  */
-export function resolve(f: Fight, c: Card, mode: Mode): Effect {
-  if (!modesOf(c).includes(mode)) throw new Error(`${c.name} can't be played that way.`)
+export function resolve(f: Fight, c: Card, line = 0): Effect {
   const took = emptyPool()
+  const charge = emptyPool()
   const spectrum = copySpectrum(f.spectrum)
   const moves: LineMove[] = []
-  let charge = 0
-  let ward = 0
-  if (mode === 'drain') {
+  let kernel: Tap[] = []
+  let boosted: PowerCard[] = []
+  if (c.kind === 'drain') {
     for (const e of c.elements) {
-      took[e] = Math.min(f.pool[e], c.power)
-      charge += took[e]
+      took[e] = Math.min(f.pool[e], DRAIN)
+      charge[e] += took[e]
     }
-  } else if (mode === 'ward') {
-    const spend = Math.min(f.charge, c.power * c.elements.length)
-    charge = -spend
-    ward = spend * WARD_PER_CHARGE
-  } else {
-    const chord = f.commission.chord
-    for (const e of c.elements) {
-      const gap = (i: number) => (c.kind === 'attenuate' ? spectrum[e][i] - chord[e][i] : chord[e][i] - spectrum[e][i])
-      const i = [0, 1, 2].reduce((a, b) => (gap(b) > gap(a) ? b : a))
-      if (gap(i) <= 0) continue
-      const by = Math.min(c.power, gap(i))
-      const from = spectrum[e][i]
-      spectrum[e][i] += c.kind === 'attenuate' ? -by : by
-      moves.push({ element: e, line: i, from, to: spectrum[e][i] })
-    }
+  } else if (c.kind === 'attack') {
+    boosted = livePowers(f).filter((p) => p.effect === 'resonance')
+    kernel = boosted.reduce((k) => k.map(boostTap), c.kernel)
+    for (const p of boosted) charge[p.element] -= 1
+    footprint(c, line).forEach((k, j) => {
+      if (k === null) return
+      const { element, i } = lineAt(k)
+      const from = spectrum[element][i]
+      const t = kernel[j]
+      const to = Math.max(0, Math.floor((t.op === 'add' ? from + t.v : from * t.v) + 1e-9))
+      spectrum[element][i] = to
+      if (to !== from) moves.push({ line: k, from, to })
+    })
   }
-  return { took, charge, ward, moves, spectrum }
+  return { took, charge, kernel, boosted, moves, spectrum }
 }
 
-/** Play a card one way: it acts at once, then the moon moves on by its time. */
-export function playCard(g: Game, id: number, mode: Mode): Game {
+/** Where an attack would close the spectrum on the chord most, and by how much (ties go to the lowest line). */
+export function bestLine(f: Fight, c: AttackCard): { line: number; closed: number } {
+  const d0 = distance(f)
+  let best = { line: c.anchor, closed: -Infinity }
+  for (let k = 0; k < LINES; k++) {
+    const closed = d0 - distanceOf(resolve(f, c, k).spectrum, f.commission.chord)
+    if (closed > best.closed) best = { line: k, closed }
+  }
+  return best
+}
+
+/** Play a card (an attack lined up on a line): it acts at once, then the moon moves on by its time. */
+export function playCard(g: Game, id: number, line?: number): Game {
   if (g.stage !== 'fight') return g
   const c = g.fight.hand.find((x) => x.id === id)
   if (!c) throw new Error('That card is not in hand.')
   const f0 = g.fight
-  const r = resolve(f0, c, mode)
+  const at = c.kind === 'attack' ? (line ?? bestLine(f0, c).line) : 0
+  const r = resolve(f0, c, at)
   const pool = { ...f0.pool }
-  for (const e of ELEMENTS) pool[e] -= r.took[e]
+  const charge = { ...f0.charge }
+  for (const e of ELEMENTS) {
+    pool[e] -= r.took[e]
+    charge[e] += r.charge[e]
+  }
   const d0 = distance(f0)
-  const fight0: Fight = { ...f0, pool, spectrum: r.spectrum, charge: f0.charge + r.charge, ward: f0.ward + r.ward }
-  const d1 = distance(fight0)
+  const next: Fight = { ...f0, pool, charge, spectrum: r.spectrum }
+  const d1 = distance(next)
   const what =
-    mode === 'drain'
-      ? `takes ${pairWords(r.took)} from the pool, charge +${r.charge}`
-      : mode === 'ward'
-        ? r.ward
-          ? `spends ${-r.charge} charge, Ward +${r.ward}`
-          : 'has no charge to spend'
-        : r.moves.length
-          ? `${c.kind === 'attenuate' ? 'lowers' : 'raises'} ${r.moves.map((m) => `${m.element}'s ${LINE_NAMES[m.line]} line ${m.from} → ${m.to}`).join(' and ')}; ${d1 ? `${d1} from the chord, from ${d0}` : 'the spectrum matches the chord'}`
-          : 'finds nothing to move'
+    c.kind === 'drain'
+      ? `takes ${poolWords(r.took)} from the pool, banked as charge`
+      : c.kind === 'power'
+        ? `${c.name} comes into play`
+        : `${r.kernel.map(tapWords).join(' ')} on ${lineName(at)}${r.boosted.length ? ` (strengthened by ${r.boosted.map((p) => p.name).join(' and ')})` : ''}: ${r.moves.length ? `${d1 ? `${d1} from the chord, from ${d0}` : 'the spectrum matches the chord'}` : 'nothing moves'}`
   const fight: Fight = {
-    ...fight0,
+    ...next,
     hand: f0.hand.filter((x) => x.id !== id),
-    discard: [...f0.discard, c],
+    discard: c.kind === 'power' ? f0.discard : [...f0.discard, c],
+    powers: c.kind === 'power' ? [...f0.powers, c] : f0.powers,
     log: [`${c.name}: ${what}.`, ...f0.log],
   }
   const played = check({ ...g, fight })
@@ -369,8 +417,8 @@ export function wait(g: Game): Game {
   return settle(advance({ ...g, fight: { ...g.fight, log: ['Waits an eighth.', ...g.fight.log] } }, EIGHTH))
 }
 
-/** What would flare now: the whole pool, less what Ward would catch. */
-export const threatOf = (f: Fight) => Math.max(0, poolTotal(f.pool) - f.ward)
+/** What would flare now: the whole pool. */
+export const threatOf = (f: Fight) => poolTotal(f.pool)
 
 /** The next phases and what they bring, for the dial and the notes. */
 export function upcoming(f: Fight, count = 4): { pos: number; phase: Phase; attack: boolean; feed: boolean; draw: boolean; discard: boolean }[] {

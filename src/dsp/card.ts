@@ -1,13 +1,12 @@
 // A DSP card drawn on the circuit schema: a stage with its time stage up to
-// the right. An Attenuate's sigils are inside the stage, each with a lead to
-// the rim: what it draws in (from the pool, or out of the spectrum's lines),
-// with the cell below that charges with what it drains. An Amplify's are
-// outside, on leads from the rim: what it puts out (into the lines), with the
-// shield below that it raises from charge. Each triangle carries the amount
-// it moves of that element.
+// the right. A drain's element triangles are inside the stage, each with a
+// lead to the rim (what it draws in), with the cell below that charges with
+// what it takes. An attack's kernel hangs below the stage as a row of taps,
+// its anchor tap underlined. A power holds its element inside, draws on that
+// element's charge (the cell below), and gives out what it adds (at the right).
 
-import { moon, numeral, element, ward as wardSig, ELEMENT_COLOR } from '../circuits/sigils'
-import { type Card } from './engine'
+import { moon, numeral, element, ELEMENT_COLOR } from '../circuits/sigils'
+import { DRAIN, tapWords, type Card, type Tap } from './engine'
 import type { Elemental } from '../sim/types'
 
 const LIT = 'var(--lit)'
@@ -48,11 +47,25 @@ export function batteryIcon(x: number, y: number, s: number, stroke: string, lev
 const down = (e: Elemental) => e === 'water' || e === 'earth'
 
 export interface CardArtOptions {
-  /** What an Attenuate would take from the pool now, to light its sigils; omit to draw it plain. */
+  /** What a drain would take from the pool now, to light its sigils; omit to draw it plain. */
   took?: Partial<Record<Elemental, number>> | null
-  /** For an Amplify drawn live: whether there is charge to raise Ward from. */
+  /** For a power drawn live: whether its element has charge to draw on. */
   charged?: boolean
   size?: number
+}
+
+/** A kernel's taps as a row of cells, the anchor tap underlined: adds in gold, takes in warning, cuts in glass. */
+export function kernelStrip(kernel: Tap[], anchor: number, cx: number, cy: number, cell = 12): string {
+  const parts: string[] = []
+  const w = kernel.length * cell
+  kernel.forEach((t, j) => {
+    const x = cx - w / 2 + j * cell
+    const color = t.op === 'times' ? 'var(--glass)' : t.v > 0 ? 'var(--lit)' : 'var(--warn)'
+    parts.push(`<rect x="${r2(x + 0.6)}" y="${r2(cy - cell / 2)}" width="${r2(cell - 1.2)}" height="${r2(cell)}" rx="2" fill="color-mix(in srgb, ${color} 16%, var(--stage))" stroke="${color}" stroke-width="1.1"/>`)
+    parts.push(`<text x="${r2(x + cell / 2)}" y="${r2(cy + 0.4)}" font-size="${r2(cell * 0.56)}" text-anchor="middle" dominant-baseline="central" class="sig-num" fill="var(--ink)">${tapWords(t)}</text>`)
+    if (j === anchor) parts.push(`<path d="M${r2(x + 2.5)} ${r2(cy + cell / 2 + 2.2)}H${r2(x + cell - 2.5)}" stroke="var(--gilt-bright)" stroke-width="1.6" stroke-linecap="round"/>`)
+  })
+  return parts.join('')
 }
 
 /** A card's circuit as an SVG. */
@@ -72,52 +85,49 @@ export function cardSvg(c: Card, opts: CardArtOptions = {}): string {
   parts.push(line(T.x + ms * 0.2, T.y + 1.5 - ms, T.x + ms * 0.2, rimTop(T.x, T.y, T.r, T.x + ms * 0.2), 'var(--moon)', 1.1))
   parts.push(moon(T.x, T.y + 1.5, ms, { stroke: 'var(--moon)' }))
 
-  const takes = c.kind === 'attenuate' ? c.elements : []
-  const gives = c.kind === 'amplify' ? c.elements : []
-
-  // Below: an Attenuate's cell, charging with what it drains; an Amplify's shield, raised from charge.
-  if (c.kind === 'attenuate') {
-    const charging = !live || takes.some((e) => (opts.took![e] ?? 0) > 0)
+  if (c.kind === 'drain') {
+    // Below: the cell, charging with what it drains.
+    const charging = !live || c.elements.some((e) => (opts.took![e] ?? 0) > 0)
     const color = live ? (charging ? LIT : DIM) : LIT
     parts.push(line(0, C.r, 0, C.r + 6, color))
     parts.push(battery(0, C.r + 13, 7, { stroke: color, width: 1.5 }))
+    parts.push(ring(C.x, C.y, C.r, LINE, 1.7))
+    // Inside: what it draws in, each with a lead to the rim.
+    const ys = c.elements.length === 1 ? [0] : [-8, 8]
+    const tx = -C.r * 0.3
+    c.elements.forEach((e, i) => {
+      const ty = ys[i]
+      const ecolor = ELEMENT_COLOR[e]
+      const took = live ? (opts.took![e] ?? 0) : 0
+      const fill = live && took ? `color-mix(in srgb, ${ecolor} ${Math.round(25 + 60 * Math.min(1, took / DRAIN))}%, transparent)` : 'var(--stage)'
+      const stroke = live && !took ? DIM : ecolor
+      const sz = 7.2
+      parts.push(line(rimLeft(C.x, C.y, C.r, ty), ty, tx - sz * 0.5, ty, stroke, 1.3))
+      parts.push(element(e, tx, ty, sz, { stroke, fill, width: 1.5 }))
+      parts.push(numeral(DRAIN, tx, ty + (down(e) ? -1.1 : 1.4), 7, live && !took ? 'var(--ink-faint)' : 'var(--ink)'))
+    })
+  } else if (c.kind === 'attack') {
+    // The kernel itself, below the stage, on a lead from its rim: what it puts out onto the lines.
+    parts.push(ring(C.x, C.y, C.r, LINE, 1.7))
+    parts.push(line(0, C.r, 0, C.r + 5, LIT))
+    parts.push(kernelStrip(c.kernel, c.anchor, 0, C.r + 13, 12.5))
+    // Inside: a wave, the spectrum it works on.
+    parts.push(`<path d="M-13 2C-9 -9 -5 -9 -1 2S7 13 11 2" fill="none" stroke="var(--lit)" stroke-width="1.6" stroke-linecap="round"/>`)
   } else {
-    const color = live && !opts.charged ? DIM : LIT
-    parts.push(line(0, C.r, 0, C.r + 5, color))
-    parts.push(wardSig(0, C.r + 13, 7.5, { stroke: color, width: 1.5 }))
+    // A power: its element inside, drawing on that element's charge (the cell at the left, a lead in);
+    // what it gives out at the right: +1 on every tap.
+    const color = opts.charged === false ? DIM : LIT
+    parts.push(line(0, C.r, 0, C.r + 6, color))
+    parts.push(battery(0, C.r + 13, 7, { stroke: color, width: 1.5 }))
+    parts.push(ring(C.x, C.y, C.r, LINE, 1.7))
+    parts.push(element(c.element, 0, -1, 10, { stroke: ELEMENT_COLOR[c.element], fill: `color-mix(in srgb, ${ELEMENT_COLOR[c.element]} 22%, transparent)`, width: 1.7 }))
+    const [ox, oy] = polar(C.x, C.y, C.r + 13, 18)
+    parts.push(line(...polar(C.x, C.y, C.r, 18), ...polar(C.x, C.y, C.r + 6, 18), color))
+    parts.push(`<rect x="${r2(ox - 7)}" y="${r2(oy - 6.5)}" width="14" height="13" rx="2.5" fill="var(--stage)" stroke="${color}" stroke-width="1.2"/>`)
+    parts.push(numeral('+1', ox, oy + 0.4, 7.5, opts.charged === false ? 'var(--ink-faint)' : 'var(--ink)'))
   }
 
-  // Offense: outer sigils to the right, each on a lead from the rim.
-  const angles = gives.length === 1 ? [10] : [-14, 30]
-  gives.forEach((e, j) => {
-    const a = angles[j]
-    const color = ELEMENT_COLOR[e]
-    const [lx0, ly0] = polar(C.x, C.y, C.r, a)
-    const [lx1, ly1] = polar(C.x, C.y, C.r + 7, a)
-    const [ox, oy] = polar(C.x, C.y, C.r + 15.5, a)
-    parts.push(line(lx0, ly0, lx1, ly1, color, 1.3))
-    parts.push(element(e, ox, oy, 8.5, { stroke: color, fill: 'var(--stage)', width: 1.6 }))
-    parts.push(numeral(c.power, ox, oy + (down(e) ? -1.3 : 1.7), 7.5))
-  })
-
-  // The collecting stage itself, its inner sigils in a column, each with a lead to the rim.
-  parts.push(ring(C.x, C.y, C.r, LINE, 1.7))
-  const ys = takes.length === 1 ? [0] : [-8, 8]
-  const tx = -C.r * 0.3
-  takes.forEach((e, i) => {
-    const ty = ys[i]
-    const color = ELEMENT_COLOR[e]
-    const cap = c.power
-    const took = live ? (opts.took![e] ?? 0) : 0
-    const fill = live && took ? `color-mix(in srgb, ${color} ${Math.round(25 + 60 * Math.min(1, took / cap))}%, transparent)` : 'var(--stage)'
-    const stroke = live && !took ? DIM : color
-    const s = 7.2
-    parts.push(line(rimLeft(C.x, C.y, C.r, ty), ty, tx - s * 0.5, ty, stroke, 1.3))
-    parts.push(element(e, tx, ty, s, { stroke, fill, width: 1.5 }))
-    parts.push(numeral(cap, tx, ty + (down(e) ? -1.1 : 1.4), 7, live && !took ? 'var(--ink-faint)' : 'var(--ink)'))
-  })
-
-  // One frame for every card, so both kinds sit alike in a hand.
+  // One frame for every card, so all kinds sit alike in a hand.
   const [x0, y0, w, hh] = [-27, -55, 75, 99]
   const size = opts.size ?? 96
   return `<svg class="circuit" viewBox="${x0} ${y0} ${w} ${hh}" width="${size}" height="${r2((size * hh) / w)}" aria-hidden="true">${parts.join('')}</svg>`

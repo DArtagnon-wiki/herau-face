@@ -57,3 +57,25 @@
 }
 .seal .row .sig { display: inline-block; align-self: center; }
 .seal .row .gap { flex: 0 0 14px; }
+
+/* Charge by element, and the powers in play. */
+.seal .row.chips { gap: 8px; flex-wrap: wrap; white-space: normal; }
+.seal .chg { display: inline-flex; align-items: center; gap: 2px; }
+.seal .chg b { font-size: 16px; }
+.seal .chg.none { opacity: 0.45; }
+.seal .chg .to { font-size: 13px; }
+.seal .row.pows { gap: 6px; flex-wrap: wrap; white-space: normal; }
+.seal .pow { font-family: var(--font-display); font-size: 11px; letter-spacing: 0.06em; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--gilt); color: var(--gilt-bright); }
+.seal .pow.quiet { border-color: var(--dim); color: var(--ink-faint); }
+.spec-art.aiming { border-color: var(--gilt); cursor: crosshair; }
+.spec-art .aim-spot { cursor: pointer; }
+.dsp .start-art .circuit { width: min(28vw, 140px); }
+.dsp .ccard.drain { box-shadow: inset 0 2px 0 rgba(239, 228, 255, 0.2); }
+.dsp .ccard.attack { box-shadow: inset 0 2px 0 rgba(246, 227, 168, 0.36); }
+.dsp .ccard.power { box-shadow: inset 0 2px 0 rgba(91, 140, 255, 0.5); }
+.dsp .hand-row { padding-top: 6px; }
+@media (max-width: 460px) {
+  .seal { grid-template-columns: auto minmax(0, 1fr); }
+  .seal .row.chips { grid-column: 2; grid-row: 1; justify-content: flex-end; flex-wrap: nowrap; gap: 6px; }
+  .seal .row.pows { grid-column: 1 / -1; grid-row: 3; }
+}
