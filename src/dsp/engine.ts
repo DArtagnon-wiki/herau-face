@@ -1,11 +1,10 @@
-// DSP: a material is a spectrum. Each element is a band of three spectral
-// lines, harmonics of one root (earth the bass, water and air the mids, fire
-// the treble), twelve lines in all, low to high. The commission hands you a raw
-// spectrum and names the chord to transmute it into; the work is done when the
-// spectrum is within the commission's tolerance of the chord (Mud: 2). It also
-// feeds instability into a pool on
-// the moon dial, and the pool flares against your quintessence; a flare
-// discharges the pool.
+// DSP: a material is a spectrum. Each element is a band of spectral lines
+// (three for most commissions, up to five for the hardest), notes in A major
+// (earth the bass, water and air the mids, fire the treble), low to high. The
+// commission hands you a raw spectrum and names the chord to transmute it into;
+// the work is done when the spectrum is within the commission's tolerance of the
+// chord (2). It also feeds instability into a pool on the moon dial, and the
+// pool flares against your quintessence; a flare discharges the pool.
 //
 // Three kinds of card:
 // - Drains take their elements out of the pool before it flares, and bank
@@ -13,7 +12,8 @@
 // - Attacks are kernels: a short row of taps, each an operation on the line
 //   beneath it (+3 adds 3, −1 takes 1 away, ×⅓ cuts to a third). You line a
 //   kernel up on the spectrum, and every tap works on its own line. Amplitudes
-//   stay whole (fractions drop) and never go below zero.
+//   stay whole (fractions drop) and never go below zero. A line that matches
+//   the chord is locked: no tap moves it again, so progress is never lost.
 // - Powers stay in play once played, and draw on their element's charge; with
 //   none left a power goes quiet until charge returns. Resonance makes every
 //   attack one step stronger, for one charge of its element an attack.
@@ -34,28 +34,59 @@ export const EIGHTH = 2
 export const DRAIN = 3
 
 // ---------------------------------------------------------------------------
-// The spectrum: twelve lines, three per element
+// The spectrum: a band of lines per element, the same number in every band
 
 /** The root every line is a harmonic of: A1. */
 export const ROOT_HZ = 55
 /**
- * Each band's three lines, low to high, as harmonics of the root: earth 110,
- * 165 and 220 Hz; water 275, 330 and 440; air 550, 660 and 825; fire 1320,
- * 1650 and 1980. Together they spell one A major sonority.
+ * With three lines a band, each line is a harmonic of the root: earth 110, 165
+ * and 220 Hz; water 275, 330 and 440; air 550, 660 and 825; fire 1320, 1650
+ * and 1980. Together they spell one A major sonority.
  */
 export const NOTE_HARMONICS: Record<Elemental, number[]> = { earth: [2, 3, 4], water: [5, 6, 8], air: [10, 12, 15], fire: [24, 30, 36] }
-export const LINE_NAMES = ['low', 'middle', 'high']
-export const LINES = 12
-/** A spectrum: each element's three line amplitudes, low to high. */
+/** Each band's reach, lowest note to highest. */
+const BAND_RANGE: Record<Elemental, [number, number]> = { earth: [110, 220], water: [275, 440], air: [550, 825], fire: [1320, 1980] }
+/** The A major scale in just intonation. */
+const SCALE = [1, 9 / 8, 5 / 4, 4 / 3, 3 / 2, 5 / 3, 15 / 8]
+/** The most lines a band can hold: air and fire reach only five notes of the scale. */
+export const MOST_PER_BAND = 5
+/**
+ * The notes of a band of `per` lines, in Hz, low to high. Three lines are the
+ * harmonics above; four and five are spread evenly over the band's notes of
+ * the A major scale, keeping its lowest and highest.
+ */
+export function bandNotes(e: Elemental, per: number): number[] {
+  if (per === 3) return NOTE_HARMONICS[e].map((h) => h * ROOT_HZ)
+  const [lo, hi] = BAND_RANGE[e]
+  const notes: number[] = []
+  for (let a = ROOT_HZ; a <= hi; a *= 2) for (const r of SCALE) if (a * r >= lo - 0.5 && a * r <= hi + 0.5) notes.push(a * r)
+  notes.sort((x, y) => x - y)
+  if (per <= 1) return [notes[0]]
+  return Array.from({ length: per }, (_, i) => notes[Math.round((i * (notes.length - 1)) / (per - 1))])
+}
+const LINE_NAMES: Record<number, string[]> = {
+  3: ['low', 'middle', 'high'],
+  4: ['low', 'low middle', 'high middle', 'high'],
+  5: ['lowest', 'low', 'middle', 'high', 'highest'],
+}
+/** A spectrum: each element's line amplitudes, low to high. */
 export type Spectrum = Record<Elemental, number[]>
-export const emptySpectrum = (): Spectrum => ({ water: [0, 0, 0], earth: [0, 0, 0], air: [0, 0, 0], fire: [0, 0, 0] })
+export const emptySpectrum = (per = 3): Spectrum => ({ water: Array(per).fill(0), earth: Array(per).fill(0), air: Array(per).fill(0), fire: Array(per).fill(0) })
 export const copySpectrum = (s: Spectrum): Spectrum => ({ water: s.water.slice(), earth: s.earth.slice(), air: s.air.slice(), fire: s.fire.slice() })
-export const spectrumTotal = (s: Spectrum) => ELEMENTS.reduce((n, e) => n + s[e][0] + s[e][1] + s[e][2], 0)
+/** Lines in each band, and in the whole spectrum. */
+export const perBand = (s: Spectrum) => s.earth.length
+export const linesOf = (s: Spectrum) => BANDS.length * perBand(s)
+export const spectrumTotal = (s: Spectrum) => ELEMENTS.reduce((n, e) => n + s[e].reduce((a, b) => a + b, 0), 0)
 /** How far a spectrum is from a chord: every line's gap, added up. */
-export const distanceOf = (s: Spectrum, chord: Spectrum) => ELEMENTS.reduce((n, e) => n + [0, 1, 2].reduce((m, i) => m + Math.abs(s[e][i] - chord[e][i]), 0), 0)
-/** Line k of twelve, low to high: its element and which of the element's three lines. */
-export const lineAt = (k: number): { element: Elemental; i: number } => ({ element: BANDS[Math.floor(k / 3)], i: k % 3 })
-export const lineName = (k: number) => `${lineAt(k).element} ${LINE_NAMES[lineAt(k).i]}`
+export const distanceOf = (s: Spectrum, chord: Spectrum) => ELEMENTS.reduce((n, e) => n + chord[e].reduce((m, t, i) => m + Math.abs((s[e][i] ?? 0) - t), 0), 0)
+/** A line that matches the chord is locked: no tap moves it. */
+export const isLocked = (s: Spectrum, chord: Spectrum, e: Elemental, i: number) => s[e][i] === chord[e][i]
+/** Line k, low to high, in a spectrum of `per` lines a band: its element and which of the element's lines. */
+export const lineAt = (k: number, per = 3): { element: Elemental; i: number } => ({ element: BANDS[Math.floor(k / per)], i: k % per })
+export const lineName = (k: number, per = 3) => {
+  const { element, i } = lineAt(k, per)
+  return `${element} ${LINE_NAMES[per]?.[i] ?? i + 1}`
+}
 
 // ---------------------------------------------------------------------------
 // Cards
@@ -94,23 +125,24 @@ export type Card = DrainCard | AttackCard | PowerCard
 const add = (v: number): Tap => ({ op: 'add', v })
 const times = (v: number): Tap => ({ op: 'times', v })
 
-/** The opening deck: five drains, six attacks, and a power. */
+/** The opening deck: a drain for each pair of elements, six attacks, and a power. */
 export function startingDeck(): Card[] {
   const drain = (id: number, name: string, elements: Elemental[]): DrainCard => ({ id, name, kind: 'drain', elements, time: EIGHTH })
   const attack = (id: number, name: string, kernel: Tap[], anchor: number): AttackCard => ({ id, name, kind: 'attack', kernel, anchor, time: EIGHTH })
   return [
     drain(1, 'Decant', ['water', 'earth']),
-    drain(2, 'Evaporate', ['water']),
-    drain(3, 'Quench', ['water']),
-    drain(4, 'Sift', ['earth']),
-    drain(5, 'Smother', ['earth']),
-    attack(6, 'Sharpen', [add(-1), add(3), add(-1)], 1),
+    drain(2, 'Evaporate', ['water', 'air']),
+    drain(3, 'Quench', ['water', 'fire']),
+    drain(4, 'Sift', ['earth', 'air']),
+    drain(5, 'Smother', ['earth', 'fire']),
+    drain(6, 'Snuff', ['air', 'fire']),
     attack(7, 'Sharpen', [add(-1), add(3), add(-1)], 1),
-    attack(8, 'Lift', [add(2), add(2)], 0),
+    attack(8, 'Sharpen', [add(-1), add(3), add(-1)], 1),
     attack(9, 'Lift', [add(2), add(2)], 0),
-    attack(10, 'Cut', [add(-2), add(-2)], 0),
-    attack(11, 'Damp', [times(1 / 3), times(1 / 3), times(1 / 3)], 1),
-    { id: 12, name: 'Resonance of water', kind: 'power', element: 'water', effect: 'resonance', time: EIGHTH },
+    attack(10, 'Lift', [add(2), add(2)], 0),
+    attack(11, 'Cut', [add(-2), add(-2)], 0),
+    attack(12, 'Damp', [times(1 / 3), times(1 / 3), times(1 / 3)], 1),
+    { id: 13, name: 'Resonance of water', kind: 'power', element: 'water', effect: 'resonance', time: EIGHTH },
   ]
 }
 
@@ -125,8 +157,11 @@ export const tapWords = (t: Tap) => (t.op === 'add' ? (t.v > 0 ? `+${t.v}` : `�
 export interface Commission {
   key: string
   name: string
+  /** How hard it is, in a word. */
+  rank: string
+  /** What the material is like, in a line. */
   blurb: string
-  /** The raw material: the spectrum you start from. */
+  /** The raw material: the spectrum you start from. Every band holds as many lines as the chord's. */
   start: Spectrum
   /** The material to make: the chord the spectrum must match. */
   chord: Spectrum
@@ -139,18 +174,110 @@ export interface Commission {
   attacks: Phase[]
 }
 
+const S = (earth: number[], water: number[], air: number[], fire: number[]): Spectrum => ({ earth, water, air, fire })
+const HALVES: Phase[] = ['new', 'full']
+
+export const BRINE: Commission = {
+  key: 'brine',
+  name: 'Brine',
+  rank: 'Easy',
+  blurb: 'Sea water and a little salt: a broad, low water and a grain of earth.',
+  start: S([3, 3, 0], [3, 3, 2], [2, 2, 1], [0, 0, 0]),
+  chord: S([1, 1, 0], [5, 5, 2], [0, 0, 0], [0, 0, 0]),
+  tolerance: 2,
+  feed: { water: 4 },
+  feedAt: HALVES,
+  attacks: ['waxing-gibbous', 'waning-crescent'],
+}
+
 export const MUD: Commission = {
   key: 'mud',
   name: 'Mud',
-  blurb: 'Feeds 5 water and 2 earth at every new and full moon, and flares at 3/8 and 7/8 of the moon. Its raw spectrum is 20 from the chord of mud; bring it within 2.',
-  // Earth too bright, water too low in the middle, and a hiss of air and fire.
-  start: { earth: [2, 3, 3], water: [5, 2, 2], air: [2, 2, 0], fire: [0, 1, 2] },
-  // Earth leaning on its lowest line, water on its middle one.
-  chord: { earth: [5, 2, 1], water: [3, 6, 3], air: [0, 0, 0], fire: [0, 0, 0] },
+  rank: 'Fair',
+  blurb: 'Earth leaning on its lowest line, water on its middle one. The raw stuff is too bright, and hisses.',
+  start: S([2, 3, 3], [5, 2, 2], [2, 2, 0], [0, 1, 2]),
+  chord: S([5, 2, 1], [3, 6, 3], [0, 0, 0], [0, 0, 0]),
   tolerance: 2,
   feed: { water: 5, earth: 2 },
-  feedAt: ['new', 'full'],
+  feedAt: HALVES,
   attacks: ['waxing-gibbous', 'waning-crescent'],
+}
+
+export const FOG: Commission = {
+  key: 'fog',
+  name: 'Fog',
+  rank: 'Testing',
+  blurb: 'Water hung in air, four lines to an element: air must swell where earth and fire fall silent.',
+  start: S([3, 1, 1, 0], [5, 2, 1, 0], [1, 1, 2, 0], [1, 0, 2, 1]),
+  chord: S([0, 0, 0, 0], [2, 4, 3, 1], [3, 5, 4, 2], [0, 0, 0, 0]),
+  tolerance: 2,
+  feed: { water: 4, air: 3 },
+  feedAt: HALVES,
+  attacks: ['waxing-gibbous', 'waning-crescent'],
+}
+
+export const GLASS: Commission = {
+  key: 'glass',
+  name: 'Glass',
+  rank: 'Hard',
+  blurb: 'Sand through fire, four lines to an element: earth peaks low, fire peaks high, and the water must go.',
+  start: S([5, 3, 3, 4], [2, 3, 1, 0], [2, 1, 3, 1], [0, 1, 1, 0]),
+  chord: S([3, 6, 4, 1], [0, 0, 0, 0], [0, 0, 1, 0], [2, 4, 6, 3]),
+  tolerance: 2,
+  feed: { fire: 5, earth: 3 },
+  feedAt: HALVES,
+  attacks: ['waxing-gibbous', 'waning-crescent'],
+}
+
+export const QUICKSILVER: Commission = {
+  key: 'quicksilver',
+  name: 'Quicksilver',
+  rank: 'Brutal',
+  blurb: 'Cold water with a fire in it, five lines to an element: water peaks in the middle, fire high, and earth must go.',
+  start: S([2, 3, 1, 2, 1], [4, 1, 2, 1, 3], [3, 0, 1, 4, 1], [3, 2, 0, 1, 0]),
+  chord: S([0, 0, 0, 0, 0], [1, 3, 6, 3, 1], [0, 2, 3, 2, 0], [0, 1, 2, 4, 2]),
+  tolerance: 2,
+  feed: { water: 4, fire: 3, air: 1 },
+  feedAt: HALVES,
+  attacks: ['waxing-gibbous', 'waning-crescent'],
+}
+
+export const STONE: Commission = {
+  key: 'stone',
+  name: 'The Stone',
+  rank: 'Virtually impossible',
+  blurb: 'Every element in perfect balance, five lines each, from a spectrum that is nothing like it. It flares an eighth after every feed, before you can drain much.',
+  start: S([5, 1, 2, 6, 0], [0, 6, 1, 0, 4], [4, 0, 7, 1, 3], [2, 5, 0, 4, 6]),
+  chord: S([1, 3, 5, 3, 1], [1, 3, 5, 3, 1], [1, 3, 5, 3, 1], [1, 3, 5, 3, 1]),
+  tolerance: 2,
+  feed: { earth: 1, water: 1, air: 1, fire: 1 },
+  feedAt: HALVES,
+  attacks: ['waxing-crescent', 'waning-gibbous'],
+}
+
+/** The commissions, easiest first. */
+export const COMMISSIONS: Commission[] = [BRINE, MUD, FOG, GLASS, QUICKSILVER, STONE]
+
+const PHASE_AT: Record<Phase, string> = {
+  new: 'the new moon',
+  'waxing-crescent': '1/8',
+  first: 'the first quarter',
+  'waxing-gibbous': '3/8',
+  full: 'the full moon',
+  'waning-gibbous': '5/8',
+  last: 'the last quarter',
+  'waning-crescent': '7/8',
+}
+const listed = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`)
+const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four', 'five']
+
+/** A commission's terms in words: feed, flares, lines and distance. */
+export function termsOf(c: Commission): string {
+  const feed = BANDS.filter((e) => c.feed[e])
+    .sort((x, y) => (c.feed[y] ?? 0) - (c.feed[x] ?? 0))
+    .map((e) => `${c.feed[e]} ${e}`)
+  const when = c.feedAt.length === 4 ? 'every quarter of the moon' : c.feedAt.length === 2 && c.feedAt.includes('new') && c.feedAt.includes('full') ? 'every new and full moon' : listed(c.feedAt.map((p) => PHASE_AT[p]))
+  return `Feeds ${listed(feed)} at ${when}, and flares at ${listed(c.attacks.map((p) => PHASE_AT[p]))} of the moon. ${NUMBER_WORDS[perBand(c.chord)] ?? perBand(c.chord)} lines to an element; the raw spectrum is ${distanceOf(c.start, c.chord)} from the chord: bring it within ${c.tolerance}.`.replace(/^(.)/, (m) => m.toUpperCase()).replace(/\. (.)/g, (_m, x) => `. ${x.toUpperCase()}`)
 }
 
 export const feedOf = (c: Commission): Pool => ({ ...emptyPool(), ...c.feed })
@@ -213,7 +340,7 @@ export function newGame(seed = Date.now(), settings: Settings = DEFAULT_SETTINGS
     hand: [],
     draw: rng.shuffle(deck),
     discard: [],
-    log: [`${commission.name}: ${commission.blurb}`],
+    log: [`${commission.name}: ${termsOf(commission)}`],
     paid: 0,
     flares: [],
   }
@@ -322,10 +449,11 @@ export interface Effect {
 }
 
 /** The lines a kernel covers when lined up on a line: the lines under each tap, off the ends included as null. */
-export const footprint = (c: AttackCard, line: number): (number | null)[] => c.kernel.map((_, j) => {
-  const k = line - c.anchor + j
-  return k >= 0 && k < LINES ? k : null
-})
+export const footprint = (c: AttackCard, line: number, lines = 12): (number | null)[] =>
+  c.kernel.map((_, j) => {
+    const k = line - c.anchor + j
+    return k >= 0 && k < lines ? k : null
+  })
 
 /** Powers that would work now: in play, with charge of their element left. */
 export const livePowers = (f: Fight) => f.powers.filter((p) => f.charge[p.element] > 0)
@@ -353,10 +481,13 @@ export function resolve(f: Fight, c: Card, line = 0): Effect {
     boosted = livePowers(f).filter((p) => p.effect === 'resonance')
     kernel = boosted.reduce((k) => k.map(boostTap), c.kernel)
     for (const p of boosted) charge[p.element] -= 1
-    footprint(c, line).forEach((k, j) => {
+    const per = perBand(f.spectrum)
+    footprint(c, line, linesOf(f.spectrum)).forEach((k, j) => {
       if (k === null) return
-      const { element, i } = lineAt(k)
+      const { element, i } = lineAt(k, per)
       const from = spectrum[element][i]
+      // A line that matches the chord is locked: nothing moves it again.
+      if (from === f.commission.chord[element][i]) return
       const t = kernel[j]
       const to = Math.max(0, Math.floor((t.op === 'add' ? from + t.v : from * t.v) + 1e-9))
       spectrum[element][i] = to
@@ -370,7 +501,7 @@ export function resolve(f: Fight, c: Card, line = 0): Effect {
 export function bestLine(f: Fight, c: AttackCard): { line: number; closed: number } {
   const d0 = distance(f)
   let best = { line: c.anchor, closed: -Infinity }
-  for (let k = 0; k < LINES; k++) {
+  for (let k = 0; k < linesOf(f.spectrum); k++) {
     const closed = d0 - distanceOf(resolve(f, c, k).spectrum, f.commission.chord)
     if (closed > best.closed) best = { line: k, closed }
   }
@@ -399,7 +530,7 @@ export function playCard(g: Game, id: number, line?: number): Game {
       ? `takes ${poolWords(r.took)} from the pool, banked as charge`
       : c.kind === 'power'
         ? `${c.name} comes into play`
-        : `${r.kernel.map(tapWords).join(' ')} on ${lineName(at)}${r.boosted.length ? ` (strengthened by ${r.boosted.map((p) => p.name).join(' and ')})` : ''}: ${r.moves.length ? `${d1 ? `${d1} from the chord, from ${d0}` : 'the spectrum matches the chord'}` : 'nothing moves'}`
+        : `${r.kernel.map(tapWords).join(' ')} on ${lineName(at, perBand(f0.spectrum))}${r.boosted.length ? ` (strengthened by ${r.boosted.map((p) => p.name).join(' and ')})` : ''}: ${r.moves.length ? `${d1 ? `${d1} from the chord, from ${d0}` : 'the spectrum matches the chord'}` : 'nothing moves'}`
   const fight: Fight = {
     ...next,
     hand: f0.hand.filter((x) => x.id !== id),

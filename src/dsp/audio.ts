@@ -1,5 +1,5 @@
-// The spectrum as sound. Each of the twelve lines is a note, a harmonic of one
-// root (earth the bass, water and air the mids, fire the treble), as loud as
+// The spectrum as sound. Each line is a note in A major (earth the bass, water
+// and air the mids, fire the treble), as loud as
 // its share of the spectrum, so the chord of a material sounds as its own
 // voice and a spectrum tuned to it sounds exactly like it. What is wrong makes
 // it rough: each line standing above the chord gets a detuned twin that beats
@@ -9,7 +9,7 @@
 // tap, and muted with the rest of the game's sound.
 
 import { sound } from '../ui/sound'
-import { BANDS, NOTE_HARMONICS, ROOT_HZ, distanceOf, spectrumTotal, type Spectrum } from './engine'
+import { BANDS, bandNotes, distanceOf, perBand, spectrumTotal, type Spectrum } from './engine'
 import type { Elemental } from '../sim/types'
 
 const WAVE: Record<Elemental, OscillatorType> = { earth: 'triangle', water: 'sine', air: 'sine', fire: 'sine' }
@@ -19,6 +19,8 @@ const DETUNE = 1.035
 const SHUDDER_HZ = 23
 
 interface Shape {
+  /** Each band's notes, in Hz. */
+  notes: Record<Elemental, number[]>
   /** Each line's level, and its rough twin's. */
   level: Record<Elemental, number[]>
   rough: Record<Elemental, number[]>
@@ -28,17 +30,22 @@ interface Shape {
 
 function shapeOf(s: Spectrum, chord: Spectrum): Shape {
   const total = spectrumTotal(s)
-  const level: Record<Elemental, number[]> = { earth: [0, 0, 0], water: [0, 0, 0], air: [0, 0, 0], fire: [0, 0, 0] }
-  const rough: Record<Elemental, number[]> = { earth: [0, 0, 0], water: [0, 0, 0], air: [0, 0, 0], fire: [0, 0, 0] }
+  const per = perBand(chord)
+  const level = { earth: [], water: [], air: [], fire: [] } as Record<Elemental, number[]>
+  const rough = { earth: [], water: [], air: [], fire: [] } as Record<Elemental, number[]>
+  const notes = { earth: [], water: [], air: [], fire: [] } as Record<Elemental, number[]>
+  // More lines share the same loudness, so each sounds a little softer.
+  const spread = Math.sqrt(3 / per)
   for (const e of BANDS) {
-    for (let i = 0; i < 3; i++) {
+    notes[e] = bandNotes(e, per)
+    for (let i = 0; i < per; i++) {
       const share = total ? s[e][i] / total : 0
-      level[e][i] = Math.sqrt(share) * LOUDNESS[e] * 1.2
-      rough[e][i] = total ? Math.min(1, (Math.max(0, s[e][i] - chord[e][i]) / total) * 4) * LOUDNESS[e] : 0
+      level[e][i] = Math.sqrt(share) * LOUDNESS[e] * 1.2 * spread
+      rough[e][i] = total ? Math.min(1, (Math.max(0, s[e][i] - chord[e][i]) / total) * 4) * LOUDNESS[e] * spread : 0
     }
   }
   const scale = total + spectrumTotal(chord)
-  return { level, rough, wrong: scale ? Math.min(1, (1.6 * distanceOf(s, chord)) / scale) : 0 }
+  return { notes, level, rough, wrong: scale ? Math.min(1, (1.6 * distanceOf(s, chord)) / scale) : 0 }
 }
 
 class SpectrumVoice {
@@ -106,7 +113,7 @@ class SpectrumVoice {
     lfo.stop(end)
     // Each line, and its rough twin.
     for (const e of BANDS) {
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < to.notes[e].length; i++) {
         for (const [mult, g0, g1] of [
           [1, from.level[e][i], to.level[e][i]],
           [DETUNE, from.rough[e][i], to.rough[e][i]],
@@ -114,7 +121,7 @@ class SpectrumVoice {
           if (g0 < 0.001 && g1 < 0.001) continue
           const o = ctx.createOscillator()
           o.type = WAVE[e]
-          o.frequency.value = ROOT_HZ * NOTE_HARMONICS[e][i] * mult
+          o.frequency.value = to.notes[e][i] * mult
           const g = ctx.createGain()
           g.gain.setValueAtTime(g0, t0)
           g.gain.setValueAtTime(g0, t1)

@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  COMMISSIONS,
   DEFAULT_SETTINGS,
+  ELEMENTS,
+  FOG,
   MUD,
+  bandNotes,
+  isLocked,
+  lineName,
+  perBand,
   bestLine,
   boostTap,
   distance,
@@ -38,12 +45,48 @@ function rigged(hand: string[], draw: string[] = [], over: Partial<Game['fight']
 }
 
 describe('the opening deck', () => {
-  it('is five drains, six attacks and a power', () => {
-    expect(deck).toHaveLength(12)
-    expect(deck.filter((c) => c.kind === 'drain')).toHaveLength(5)
+  it('is a drain for each pair of elements, six attacks and a power', () => {
+    expect(deck).toHaveLength(13)
+    const drains = deck.filter((c) => c.kind === 'drain')
+    expect(drains).toHaveLength(6)
+    expect(new Set(drains.map((c) => (c.kind === 'drain' ? c.elements.slice().sort().join('+') : ''))).size).toBe(6)
+    for (const e of ELEMENTS) expect(drains.filter((c) => c.kind === 'drain' && c.elements.includes(e))).toHaveLength(3)
     expect(deck.filter((c) => c.kind === 'attack')).toHaveLength(6)
     expect(deck.filter((c) => c.kind === 'power')).toHaveLength(1)
-    expect(new Set(deck.map((c) => c.id)).size).toBe(12)
+    expect(new Set(deck.map((c) => c.id)).size).toBe(13)
+  })
+})
+
+describe('the commissions', () => {
+  it('run easiest first, each with as many lines in its start as in its chord, within 2 to win', () => {
+    let last = 0
+    for (const c of COMMISSIONS) {
+      const per = perBand(c.chord)
+      for (const e of ELEMENTS) {
+        expect(c.chord[e]).toHaveLength(per)
+        expect(c.start[e]).toHaveLength(per)
+      }
+      expect(distanceOf(c.start, c.chord)).toBeGreaterThan(last)
+      last = distanceOf(c.start, c.chord)
+      expect(c.tolerance).toBe(2)
+      expect(newGame(1, DEFAULT_SETTINGS, c).fight.hand).toHaveLength(4)
+    }
+    expect(COMMISSIONS.map((c) => perBand(c.chord))).toEqual([3, 3, 4, 4, 5, 5])
+  })
+
+  it('put their notes in A major, as many to a band as it has lines', () => {
+    expect(bandNotes('earth', 3)).toEqual([110, 165, 220])
+    expect(bandNotes('fire', 5).map(Math.round)).toEqual([1320, 1467, 1650, 1760, 1980])
+    expect(bandNotes('water', 4)).toHaveLength(4)
+  })
+
+  it('line kernels up across bands of any size', () => {
+    expect(lineAt(4, 4)).toEqual({ element: 'water', i: 0 })
+    expect(lineName(9, 5)).toBe('water highest')
+    expect(footprint(attack('Sharpen'), 19, 20)).toEqual([18, 19, null])
+    const f = newGame(1, DEFAULT_SETTINGS, FOG).fight
+    // Lift on water's high middle line (line 6 of 16): water 1 → 3 and 0 → 2.
+    expect(resolve(f, attack('Lift'), 6).spectrum.water).toEqual([5, 2, 3, 2])
   })
 })
 
@@ -64,6 +107,19 @@ describe('kernels', () => {
     expect(resolve(f, attack('Damp'), 7).spectrum.air).toEqual([0, 0, 0])
     // Cut on fire's middle line: 1 and 2 less 2 is 0 and 0.
     expect(resolve(f, attack('Cut'), 10).spectrum.fire).toEqual([0, 0, 0])
+  })
+
+  it('leave a line that matches the chord locked', () => {
+    const f = newGame(1).fight
+    // Sharpen on Mud's earth low line lifts it 2 → 5 and takes earth middle 3 → 2: both now match the chord.
+    const g = rigged(['Sharpen', 'Cut'])
+    const a = playCard(g, attack('Sharpen').id, 0)
+    expect(a.fight.spectrum.earth).toEqual([5, 2, 3])
+    // Now Cut on earth low and middle moves neither: both are locked. Earth high is not.
+    const r = resolve(a.fight, attack('Cut'), 1)
+    expect(r.spectrum.earth).toEqual([5, 2, 1])
+    expect(r.moves.map((m) => m.line)).toEqual([2])
+    expect(isLocked(a.fight.spectrum, f.commission.chord, 'earth', 0)).toBe(true)
   })
 
   it('find where they close the spectrum on the chord most', () => {

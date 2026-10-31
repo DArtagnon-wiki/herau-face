@@ -79,3 +79,24 @@
   .seal .row.chips { grid-column: 2; grid-row: 1; justify-content: flex-end; flex-wrap: nowrap; gap: 6px; }
   .seal .row.pows { grid-column: 1 / -1; grid-row: 3; }
 }
+
+/* An attack waiting to be lined up. */
+.spec-art { position: relative; }
+.spec-art .aim-hint { position: absolute; top: 4px; right: 8px; font-family: var(--font-display); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gilt-bright); pointer-events: none; animation: aim-pulse 1.6s ease-in-out infinite; }
+@keyframes aim-pulse { 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .spec-art .aim-hint { animation: none; } }
+
+/* The fights, easiest first. */
+.dsp.cx.start { grid-template-rows: auto minmax(0, 1fr) auto; gap: 12px; }
+.dsp .start-words { gap: 4px; }
+.dsp .start-words .lede { font-size: 16px; }
+.fights { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; overflow-y: auto; min-height: 0; align-content: start; }
+.fight-pick { width: 100%; display: grid; grid-template-columns: minmax(0, 118px) minmax(0, 1fr); align-items: center; gap: 12px; padding: 8px 12px 8px 8px; text-align: left; text-transform: none; letter-spacing: 0; background: var(--panel); }
+.fight-pick .fp-art .spectrum { max-height: 52px; }
+.fight-pick .fp-words { display: grid; gap: 1px; min-width: 0; }
+.fight-pick .fp-rank { font-family: var(--font-display); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); }
+.fight-pick .fp-made { color: var(--good); letter-spacing: 0.06em; }
+.fight-pick .fp-name { font-family: var(--font-display); font-size: 19px; letter-spacing: 0.04em; color: var(--gilt-bright); }
+.fight-pick .fp-terms { font-family: var(--font-text); font-size: 14px; color: var(--ink-soft); }
+.fights li:nth-child(5) .fp-rank, .fights li:nth-child(6) .fp-rank { color: var(--warn); }
+.cx-actions.three { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.4fr); }

@@ -120,7 +120,8 @@ export function dialSvg(f: Fight, preview?: DialPreview | null, flareFx = false)
     parts.push(numeral(n, x, y + (down ? -4 : 6), 21, n ? 'var(--ink)' : 'var(--ink-faint)'))
     const d = preview?.delta[e] ?? 0
     if (d) parts.push(numeral(d < 0 ? `−${-d}` : `+${d}`, x + (x < 0 ? -33 : 33), y + (down ? -4 : 6), 14, d < 0 ? 'var(--lit)' : 'var(--warn)'))
-    if (feed[e]) parts.push(numeral(`+${feed[e]}`, x, down ? y + 33 : y - 32, 11, 'var(--ink-faint)'))
+    // What the next feed adds: off the triangle's outer corner, clear of its neighbours.
+    if (feed[e]) parts.push(numeral(`+${feed[e]}`, x + (x < 0 ? -31 : 31), down ? y - 21 : y + 27, 11, 'var(--ink-faint)'))
   }
   const shown = preview ? start - preview.distance : closed
   parts.push(numeral(Math.max(0, shown), 0, -4, 22, preview && shown > closed ? 'var(--lit)' : preview && shown < closed ? 'var(--warn)' : 'var(--ink)'))

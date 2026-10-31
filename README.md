@@ -4,11 +4,11 @@ A roguelike deckbuilder of runes and alchemy, built from Circumgician's world. T
 
 ## Prototype: DSP (newest)
 
-One fight, Mud, on the Circuits moon dial. A material is a spectrum of twelve lines, three to an element, and Mud hands you a raw spectrum 20 from its chord; bring it within 2 to win. Attacks are kernels, rows of taps like −1 +3 −1 or ×⅓ ×⅓ ×⅓, that you line up on the spectrum. Drains take instability out of the pool before it flares and bank it as charge of that element; powers stay in play and draw on that charge, going quiet when it runs out. Each line is a note, so a rough spectrum sounds rough and a matched one sounds like the material.
+Six commissions on the Circuits moon dial, from Brine (easy) to the Stone (virtually impossible). A material is a spectrum of lines, three to five to an element, and each commission hands you a raw spectrum to bring within 2 of its chord. Attacks are kernels, rows of taps like −1 +3 −1 or ×⅓ ×⅓ ×⅓, that you line up on the spectrum; a line that matches the chord locks. Drains take instability out of the pool before it flares and bank it as charge; powers draw on that charge. Each line is a note, so a rough spectrum sounds rough and a matched one sounds like the material.
 
 ```sh
 npm run dev                                  # then open /dsp.html
-npx tsx scripts/dsp-sim.ts --games 1000      # Mud with three strategies
+npx tsx scripts/dsp-sim.ts --games 1000 --ahead 0   # every commission, greedy and planner
 ```
 
 ## Prototype: Circuits (new direction)
